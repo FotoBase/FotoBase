@@ -1,3 +1,6 @@
 # Python
 tools/.venv/
 __pycache__/
+
+# macOS
+.DS_Store
