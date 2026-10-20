@@ -1,0 +1,18 @@
+[
+  { "name": "empty", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [] } },
+  { "name": "crop", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "crop", "params": { "x": 0.1, "y": 0.1, "w": 0.8, "h": 0.8 } } ] } },
+  { "name": "straighten", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "straighten", "params": { "angle": -2.5, "auto_fill": true } } ] } },
+  { "name": "im_feeling_lucky", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "auto_color" }, { "type": "auto_contrast" } ] } },
+  { "name": "fill_light", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "fill_light", "params": { "amount": 0.4 } } ] } },
+  { "name": "temperature_tint", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "temperature", "params": { "kelvin_shift": -0.2 } }, { "type": "tint", "params": { "green_magenta": 0.1 } } ] } },
+  { "name": "saturation_brightness", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "saturation", "params": { "amount": 0.15 } }, { "type": "brightness", "params": { "amount": 0.05 } } ] } },
+  { "name": "highlight_shadow_recovery", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "highlight_recovery", "params": { "amount": 0.6 } }, { "type": "shadow_recovery", "params": { "amount": 0.3 } } ] } },
+  { "name": "sepia", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "sepia", "params": { "amount": 0.7 } } ] } },
+  { "name": "warm_cool_colors", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "warm_colors", "params": { "amount": 0.3 } }, { "type": "cool_colors", "params": { "amount": 0.2 } } ] } },
+  { "name": "red_eye", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "red_eye", "params": { "regions": [ { "x": 0.31, "y": 0.22, "r": 0.02 } ] } } ] } },
+  { "name": "text", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "text", "params": { "text": "Summer 2026", "x": 0.05, "y": 0.9, "size": 0.05, "color": "#ffffff", "font": "sans", "rotation": 0 } } ] } },
+  { "name": "retouch", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "retouch", "params": { "strokes": [ { "points": [[0.4, 0.4], [0.42, 0.41]], "radius": 0.01 } ] } } ] } },
+  { "name": "grayscale_sharpen", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "grayscale", "params": { "enabled": true } }, { "type": "sharpen", "params": { "amount": 0.3 } } ] } },
+  { "name": "undo_all", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "undo_all" } ] } },
+  { "name": "full_pipeline", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "crop", "params": { "x": 0.05, "y": 0.0, "w": 0.9, "h": 1.0 } }, { "type": "auto_color" }, { "type": "fill_light", "params": { "amount": 0.3 } }, { "type": "temperature", "params": { "kelvin_shift": 0.1 } }, { "type": "sepia", "params": { "amount": 0.2 } }, { "type": "sharpen", "params": { "amount": 0.2 } } ] } }
+]

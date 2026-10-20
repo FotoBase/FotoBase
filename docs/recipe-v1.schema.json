@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fotobase.github.io/ns/recipe-v1.schema.json",
+  "title": "Fotobase Edit Recipe v1",
+  "type": "object",
+  "required": ["spec", "version", "ops"],
+  "additionalProperties": false,
+  "properties": {
+    "spec": { "const": "fotobase.recipe" },
+    "version": { "type": "integer", "minimum": 1 },
+    "ops": { "type": "array", "items": { "$ref": "#/$defs/op" } }
+  },
+  "$defs": {
+    "op": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "$ref": "#/$defs/opType" },
+        "params": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "opType": {
+      "enum": [
+        "crop", "straighten", "auto_color", "auto_contrast", "fill_light",
+        "temperature", "tint", "saturation", "brightness",
+        "highlight_recovery", "shadow_recovery", "sepia",
+        "warm_colors", "cool_colors", "red_eye", "text", "retouch",
+        "grayscale", "sharpen", "undo_all"
+      ]
+    }
+  }
+}
