@@ -1,5 +1,5 @@
 ---
-applyTo: '**'
+applyTo: "**"
 ---
 
 # Fotobase — ground rules for agents
@@ -47,16 +47,16 @@ Before touching anything that writes metadata, read `docs/sidecar-merge-on-write
 
 ## Normative docs map
 
-| Doc | Governs |
-|---|---|
-| `docs/PLAN.md` | Phases, budgets, architecture, acceptance criteria |
-| `docs/adr/adr-0001…0012` | Accepted decisions (ADR-0010: GitHub Releases only; ADR-0012: versioning & releases) |
-| `docs/edit-recipe-spec-v1.md` + `recipe-v1.schema.json` | Edit recipe JSON (versioned, unknown-op-skip) |
-| `docs/sidecar-merge-on-write.md` | All XMP sidecar writes |
-| `docs/webkitgtk-perf-protocol.md` | Perf runs, `perf-report.json` schema, DOM-vs-canvas decision |
-| `docs/workflows/release-checklist.md` | Per-release steps |
-| `docs/workflows/lint-format.md` | Lint/format/commit policy |
-| `docs/workflows/dependency-tracking.md` | Upstream dependency watch (exiv2, LibRaw, WebKitGTK…) |
+| Doc                                                     | Governs                                                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `docs/PLAN.md`                                          | Phases, budgets, architecture, acceptance criteria                                   |
+| `docs/adr/adr-0001…0012`                                | Accepted decisions (ADR-0010: GitHub Releases only; ADR-0012: versioning & releases) |
+| `docs/edit-recipe-spec-v1.md` + `recipe-v1.schema.json` | Edit recipe JSON (versioned, unknown-op-skip)                                        |
+| `docs/sidecar-merge-on-write.md`                        | All XMP sidecar writes                                                               |
+| `docs/webkitgtk-perf-protocol.md`                       | Perf runs, `perf-report.json` schema, DOM-vs-canvas decision                         |
+| `docs/workflows/release-checklist.md`                   | Per-release steps                                                                    |
+| `docs/workflows/lint-format.md`                         | Lint/format/commit policy                                                            |
+| `docs/workflows/dependency-tracking.md`                 | Upstream dependency watch (exiv2, LibRaw, WebKitGTK…)                                |
 
 ## Repo hygiene
 

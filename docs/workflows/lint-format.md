@@ -4,12 +4,12 @@
 
 ## Tools
 
-| Layer | Check | Config |
-|---|---|---|
-| Rust (all crates) | `cargo fmt --check` | `rustfmt.toml` at workspace root |
-| Rust (all crates) | `cargo clippy --workspace --all-targets -- -D warnings` | lints in workspace `Cargo.toml` |
-| Frontend (`app/src`) | eslint + prettier | `eslint.config.*`, `.prettierrc` in `app/` |
-| Frontend | `svelte-check` type check | part of the Vite build |
+| Layer                | Check                                                   | Config                                     |
+| -------------------- | ------------------------------------------------------- | ------------------------------------------ |
+| Rust (all crates)    | `cargo fmt --check`                                     | `rustfmt.toml` at workspace root           |
+| Rust (all crates)    | `cargo clippy --workspace --all-targets -- -D warnings` | lints in workspace `Cargo.toml`            |
+| Frontend (`app/src`) | eslint + prettier                                       | `eslint.config.*`, `.prettierrc` in `app/` |
+| Frontend             | `svelte-check` type check                               | part of the Vite build                     |
 
 Config files land with the EPIC-01 scaffold (TASK-01-001/002) and CI runs the table above on every PR. Red CI blocks merge.
 

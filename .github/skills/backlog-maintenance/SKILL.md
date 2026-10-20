@@ -9,7 +9,7 @@ description: Keep the backlog and docs in sync after merged PRs, and run a perio
 
 1. Confirm the task's checkbox is checked in BOTH places (they mirror 1:1):
    - the epic file `backlog/EPIC NN/EPIC-0N.md`
-   - the FEAT file `backlog/EPIC NN/FEAT-NN-MM-name/FEAT-*.md` (both the inline `- [ ] \`NN-MMM\`` line and the `## Tasks` list entry)
+   - the FEAT file `backlog/EPIC NN/FEAT-NN-MM-name/FEAT-*.md` (both the inline `- [ ] \`NN-MMM\``line and the`## Tasks` list entry)
 2. Update the TASK file's `**Status:**` line (todo → done).
 3. Confirm the branch/PR task ID maps to a real TASK file — no orphan references.
 

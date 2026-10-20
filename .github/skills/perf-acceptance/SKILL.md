@@ -28,12 +28,12 @@ Schema (protocol §report): `protocol: 1`, `fixture {count, seed}`, `runner {os,
 
 ## 4. Compare against the bars
 
-| Bar | Budget |
-|---|---|
-| `time_to_first_thumbnail_s` | < 2 s |
-| `scroll_fps_median` | ≥ 60 fps |
-| `idle_ram_mb` | < 150 MB |
-| `ui_jank_events` | 0 |
+| Bar                         | Budget   |
+| --------------------------- | -------- |
+| `time_to_first_thumbnail_s` | < 2 s    |
+| `scroll_fps_median`         | ≥ 60 fps |
+| `idle_ram_mb`               | < 150 MB |
+| `ui_jank_events`            | 0        |
 
 `full_scan_duration_s` is reported, no hard bar. Installer size (< 20 MB) is checked once per release build, not by this harness.
 
