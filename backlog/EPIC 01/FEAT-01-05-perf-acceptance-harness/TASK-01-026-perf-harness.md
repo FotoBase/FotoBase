@@ -11,6 +11,7 @@ Build the perf harness on the 00-013 fixture (PLAN §9 Performance row, §10 Web
 - Results comparable across runs: same fixture seed, same metrics, stable environment notes recorded.
 
 ## Technical specs
+- CI smoke wired into `.github/workflows/perf-smoke.yml` (1k fixture on ubuntu-latest; asserts schema-valid `perf-report.json`, per the 00-012 protocol — full 50k decision runs stay manual/local).
 - Driven by the 00-012 protocol's metric definitions; consumes the 00-013 fixture one-liner (1k in CI, 50k for full runs).
 - E2E via WebdriverIO + tauri-driver (§4); fps via rAF timing in the page; RAM from OS process metrics.
 - Output: JSON results file committed per release for trend comparison.

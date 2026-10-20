@@ -1,0 +1,26 @@
+name: fixture-smoke
+
+on:
+  pull_request:
+    paths:
+      - "tools/fixture_gen.py"
+      - "tools/fixture-samples/**"
+  push:
+    branches: [main]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: pip install pillow
+      - name: Generate 100-photo fixture (deterministic)
+        run: |
+          python3 tools/fixture_gen.py --count 100 --seed 42 --out /tmp/lib
+          test -f /tmp/lib/fixture-manifest.sha256
+          # Determinism: same (seed, count) => identical manifest
+          python3 tools/fixture_gen.py --count 100 --seed 42 --out /tmp/lib2
+          diff /tmp/lib/fixture-manifest.sha256 /tmp/lib2/fixture-manifest.sha256

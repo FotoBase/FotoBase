@@ -10,7 +10,7 @@
 - `CONTRIBUTING.md`, code of conduct, and GPL-3.0 license file exist in the repo; CI license-manifest scaffold runs green.
 
 - [x] `00-005` (S) Check GitHub org, crates.io, npm for "fotobase" collisions; claim handles. Descoped per ADR-0010 — crates.io/npm not needed (GitHub Releases only); create the `fotobase` repo at first public commit.
-- [ ] `00-006` (S) Check domain availability (`fotobase.app` / `.dev` / `.io`); register chosen domain. Checked per ADR-0010; **registration deferred** until a website exists.
+- [ ] `00-006` (S) Check domain availability (`fotobase.app` / `.dev` / `.io`); register chosen domain. Availability checked 2026-10-20 (ADR-0010: `.app` taken, `.dev`/`.io` free); registration **deferred** until a website exists — not a pre-commit blocker.
 - [x] `00-007` (S) Search trademark registries (EUIPO, USPTO, DPMA at minimum); record result in ADR. Clean — go ([ADR-0011](../../../docs/adr/adr-0011-trademark-search.md)).
 - [x] `00-008` (S) Draft `CONTRIBUTING.md` + code of conduct (needed at public launch, cheap to do early). Done 2026-10-20.
 - [x] `00-009` (S) Choose GPL-3.0 headers + license file; add CI license-manifest scaffolding (per-model license checks arrive with EPIC-05/07). License done; CI scaffold folds into 01-002.

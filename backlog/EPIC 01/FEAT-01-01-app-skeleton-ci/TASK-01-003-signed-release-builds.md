@@ -10,6 +10,7 @@ Release packaging per PLAN §4 (Tauri bundler): MSI/NSIS on Windows, notarized D
 - Updater: app checks for updates and only installs artifacts with valid signatures.
 
 ## Technical specs
+- Implemented as `.github/workflows/release.yml`, triggered by `v*` tags (versioning per ADR-0012); steps follow `docs/workflows/release-checklist.md`.
 - Tauri v2 bundler + updater plugin (signed, §4); macOS notarization via CI secrets; Windows signing per Tauri docs.
 - Secrets (signing keys, Apple credentials) held in GitHub Actions secrets, never in repo.
 

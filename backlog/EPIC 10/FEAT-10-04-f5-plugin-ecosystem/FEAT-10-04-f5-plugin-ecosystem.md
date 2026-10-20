@@ -7,6 +7,10 @@
 - Third-party plugins load from a manifest with sandboxing; a broken plugin can't crash or corrupt the catalog.
 - At least one external plugin (importer, preset pack, or gallery theme) loads and runs from outside the tree as proof of the API.
 
+- [ ] `F5-001` (M) Plugin manifest + loading trait (importer, preset pack, gallery theme).
+- [ ] `F5-002` (M) Plugin sandboxing with fault isolation — broken plugin can't crash or corrupt the catalog.
+- [ ] `F5-003` (M) At least one external plugin loads and runs from outside the tree as proof of the API.
+
 Trait + manifest + sandboxing; metadata importers (Lightroom, Apple Photos), effect preset packs (home of the cut Picasa novelty effects), gallery themes.
 
 ## Tasks

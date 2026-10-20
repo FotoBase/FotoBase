@@ -31,3 +31,6 @@
 ## F5 — Plugin ecosystem
 
 - Starts only when ≥2 real plugins exist (EPIC-08 ships several): trait + manifest + sandboxing; metadata importers (Lightroom, Apple Photos), effect preset packs (home of the cut Picasa novelty effects), gallery themes.
+- [ ] `F5-001` (M) Plugin manifest + loading trait (importer, preset pack, gallery theme).
+- [ ] `F5-002` (M) Plugin sandboxing with fault isolation — broken plugin can't crash or corrupt the catalog.
+- [ ] `F5-003` (M) At least one external plugin loads and runs from outside the tree as proof of the API.
