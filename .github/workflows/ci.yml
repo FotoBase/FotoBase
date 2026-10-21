@@ -58,6 +58,9 @@ jobs:
 
       - name: Install Linux system deps (Tauri/WebKitGTK build deps)
         if: runner.os == 'Linux'
+        # TASK-01-012: libde265-dev (HEIC/HEVC decode) + libdav1d-dev
+        # (AVIF/AV1 decode) are the codec plugins the embedded libheif
+        # links against.
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -70,8 +73,6 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            # TASK-01-012: codec plugins the embedded libheif links against
-            # (libde265 = HEIC/HEVC decode, dav1d = AVIF/AV1 decode).
             libde265-dev \
             libdav1d-dev
 
