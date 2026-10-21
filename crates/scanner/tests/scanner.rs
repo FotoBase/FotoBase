@@ -8,7 +8,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, SystemTime};
 
 use fotobase_catalog::Catalog;
-use fotobase_scanner::scan_folder;
+use fotobase_scanner::{scan_folder, scan_folder_with, ScanOptions, ScanProgress};
 
 fn open_catalog(dir: &Path) -> Catalog {
     Catalog::open(dir.join("catalog.db")).expect("open catalog")
@@ -185,4 +185,78 @@ fn one_thousand_file_fixture_scans_and_rescans() {
     let report = scan_folder(&mut cat, tmp.path(), &AtomicBool::new(false)).unwrap();
     assert_eq!(report.skipped, 1000, "rescan re-reads nothing");
     assert_eq!(report.added + report.updated + report.removed, 0);
+}
+
+// --- TASK-01-023: full-scan mode + progress (rebuild catalog) ---------------
+
+#[test]
+fn full_rescan_reprocesses_unchanged_files() {
+    let tmp = tempfile::tempdir().unwrap();
+    make_library(tmp.path());
+
+    let mut cat = open_catalog(tmp.path());
+    scan_folder(&mut cat, tmp.path(), &AtomicBool::new(false)).unwrap();
+
+    // Incremental rescan skips everything; a full rebuild must not.
+    let report = scan_folder_with(
+        &mut cat,
+        tmp.path(),
+        &AtomicBool::new(false),
+        &ScanOptions { full: true },
+        &|_| {},
+    )
+    .unwrap();
+    assert_eq!(report.skipped, 0, "full mode ignores the (mtime, size) skip");
+    assert_eq!(report.added, 0, "nothing is new the second time");
+    assert_eq!(report.updated, 5, "every media file is repopulated: {report:?}");
+    assert_eq!(report.removed, 0);
+    assert_eq!(count_files(&cat), 5, "rows are upserted, never duplicated");
+}
+
+#[test]
+fn progress_reports_cumulative_dirs_and_files() {
+    let tmp = tempfile::tempdir().unwrap();
+    make_library(tmp.path());
+
+    let mut cat = open_catalog(tmp.path());
+    let reports = std::cell::RefCell::new(Vec::<ScanProgress>::new());
+    scan_folder_with(
+        &mut cat,
+        tmp.path(),
+        &AtomicBool::new(false),
+        &ScanOptions::default(),
+        &|p| reports.borrow_mut().push(p),
+    )
+    .unwrap();
+    let reports = reports.into_inner();
+
+    assert!(!reports.is_empty(), "at least the root directory is reported");
+    // Counts are cumulative and monotonic.
+    for pair in reports.windows(2) {
+        assert!(pair[0].dirs_seen <= pair[1].dirs_seen);
+        assert!(pair[0].files_seen <= pair[1].files_seen);
+    }
+    let last = reports.last().unwrap();
+    // root, 2024, 2024/summer, 2025 — every directory walked is reported.
+    assert_eq!(last.dirs_seen, 4);
+    assert_eq!(last.files_seen, 5, "media files only: {last:?}");
+}
+
+#[test]
+fn incremental_scan_emits_progress_too() {
+    let tmp = tempfile::tempdir().unwrap();
+    make_library(tmp.path());
+
+    let mut cat = open_catalog(tmp.path());
+    let calls = std::cell::Cell::new(0usize);
+    scan_folder(&mut cat, tmp.path(), &AtomicBool::new(false)).unwrap();
+    scan_folder_with(
+        &mut cat,
+        tmp.path(),
+        &AtomicBool::new(false),
+        &ScanOptions::default(),
+        &|_| calls.set(calls.get() + 1),
+    )
+    .unwrap();
+    assert!(calls.get() > 0, "default scan folder reports progress as well");
 }
