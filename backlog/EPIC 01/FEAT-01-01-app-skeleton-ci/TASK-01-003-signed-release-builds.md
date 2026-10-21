@@ -1,6 +1,6 @@
 # task: produce signed release builds with updater wiring
 
-**Feature:** [FEAT-01-01-app-skeleton-ci](FEAT-01-01-app-skeleton-ci.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-01-app-skeleton-ci](FEAT-01-01-app-skeleton-ci.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-21)
 
 ## Description
 
@@ -23,4 +23,4 @@ Release packaging per PLAN §4 (Tauri bundler): MSI/NSIS on Windows, notarized D
 
 ## Acceptance criteria
 
-- [ ] 01-003: Signed MSI/NSIS, notarized DMG, AppImage/deb/rpm artifacts produced by CI; signed updater wired.
+- [x] 01-003: Signed MSI/NSIS, notarized DMG, AppImage/deb/rpm artifacts produced by CI; signed updater wired.
