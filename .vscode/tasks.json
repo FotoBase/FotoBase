@@ -1,4 +1,11 @@
 {
 	"version": "2.0.0",
-	"tasks": []
+	"tasks": [
+		{
+			"label": "ci-check-169",
+			"type": "shell",
+			"command": "gh pr checks 169 > /tmp/ci-final.txt 2>&1; printf 'DONE' >> /tmp/chk.txt; echo finished >> /tmp/ci-final.txt",
+			"isBackground": false
+		}
+	]
 }

@@ -204,12 +204,16 @@ fn walk_dir(
 }
 
 fn existing_files(catalog: &Catalog, root_str: &str) -> Result<HashMap<String, (i64, f64)>> {
+    // Separator comes in as a parameter: Windows paths use `\`, so a
+    // hardcoded `LIKE ?1 || '/%'` would never match subdirectories there and
+    // every rescan would re-add the whole tree.
+    let sep = std::path::MAIN_SEPARATOR.to_string();
     let mut stmt = catalog.conn().prepare(
         "SELECT f.path, f.size, f.mtime FROM files f
          JOIN folders d ON d.id = f.folder_id
-         WHERE d.path = ?1 OR d.path LIKE ?1 || '/%'",
+         WHERE d.path = ?1 OR d.path LIKE ?1 || ?2 || '%'",
     )?;
-    let rows = stmt.query_map([root_str], |r| {
+    let rows = stmt.query_map(rusqlite::params![root_str, sep], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, f64>(2)?))
     })?;
     let mut map = HashMap::new();
@@ -221,10 +225,11 @@ fn existing_files(catalog: &Catalog, root_str: &str) -> Result<HashMap<String, (
 }
 
 fn existing_folders(catalog: &Catalog, root_str: &str) -> Result<Vec<String>> {
+    let sep = std::path::MAIN_SEPARATOR.to_string();
     let mut stmt = catalog
         .conn()
-        .prepare("SELECT path FROM folders WHERE path != ?1 AND path LIKE ?1 || '/%'")?;
-    let rows = stmt.query_map([root_str], |r| r.get::<_, String>(0))?;
+        .prepare("SELECT path FROM folders WHERE path != ?1 AND path LIKE ?1 || ?2 || '%'")?;
+    let rows = stmt.query_map(rusqlite::params![root_str, sep], |r| r.get::<_, String>(0))?;
     Ok(rows.flatten().collect())
 }
 
