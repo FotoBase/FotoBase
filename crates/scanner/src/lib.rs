@@ -16,6 +16,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use fotobase_catalog::{Catalog, Result};
 
+mod watcher;
+pub use watcher::{Watcher, WatcherError, DEFAULT_DEBOUNCE};
+
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase-scanner";
 
