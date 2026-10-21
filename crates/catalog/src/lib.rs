@@ -45,6 +45,18 @@ pub struct FileInfo {
     pub hash: Option<String>,
 }
 
+/// One Folders-view entry (TASK-01-015, PLAN §2B): a real on-disk folder
+/// plus the year it groups under. The year is derived from the newest dated
+/// file inside the folder — `taken_at` when present, else `mtime` — and is
+/// `None` when the folder holds no dated files (it renders in a trailing
+/// "unknown year" group).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct FolderInfo {
+    pub id: i64,
+    pub path: String,
+    pub year: Option<i64>,
+}
+
 #[derive(Debug)]
 pub struct Catalog {
     conn: Connection,
@@ -255,6 +267,45 @@ impl Catalog {
             .conn
             .prepare_cached("SELECT id, filename, hash FROM files ORDER BY path LIMIT ?1")?;
         let rows = stmt.query_map([limit as i64], |r| {
+            Ok(FileInfo { id: r.get(0)?, filename: r.get(1)?, hash: r.get(2)? })
+        })?;
+        Ok(rows.flatten().collect())
+    }
+
+    /// All folders in the catalog, path-ordered, each with the year its
+    /// newest file falls in (TASK-01-015, PLAN §2B). `LEFT JOIN` keeps empty
+    /// folders listed — they group under "unknown year" in the tree.
+    pub fn list_folders(&self) -> Result<Vec<FolderInfo>> {
+        let sql = "SELECT f.id, f.path, MAX(COALESCE( \
+                   CASE WHEN length(fi.taken_at) >= 4 \
+                        THEN CAST(substr(fi.taken_at, 1, 4) AS INTEGER) END, \
+                        CAST(strftime('%Y', fi.mtime, 'unixepoch') AS INTEGER))) \
+                   FROM folders f LEFT JOIN files fi ON fi.folder_id = f.id \
+                   GROUP BY f.id, f.path ORDER BY f.path";
+        let mut stmt = self.conn.prepare_cached(sql)?;
+        let rows = stmt.query_map([], |r| {
+            Ok(FolderInfo { id: r.get(0)?, path: r.get(1)?, year: r.get(2)? })
+        })?;
+        Ok(rows.flatten().collect())
+    }
+
+    /// The grid's items restricted to the selected folders (TASK-01-015):
+    /// multi-select folder filtering runs in SQL so a 50k-photo library never
+    /// ships every row over IPC just to hide most of it. An empty selection
+    /// filters everything out — never an unbounded `IN ()` query.
+    pub fn list_files_in_folders(&self, folder_ids: &[i64], limit: usize) -> Result<Vec<FileInfo>> {
+        if folder_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = "?,".repeat(folder_ids.len()).trim_end_matches(',').to_string();
+        let sql = format!(
+            "SELECT id, filename, hash FROM files WHERE folder_id IN ({placeholders}) ORDER BY path LIMIT ?{}",
+            folder_ids.len() + 1
+        );
+        let mut stmt = self.conn.prepare_cached(&sql)?;
+        let params =
+            folder_ids.iter().copied().chain(std::iter::once(limit as i64)).collect::<Vec<i64>>();
+        let rows = stmt.query_map(rusqlite::params_from_iter(params), |r| {
             Ok(FileInfo { id: r.get(0)?, filename: r.get(1)?, hash: r.get(2)? })
         })?;
         Ok(rows.flatten().collect())

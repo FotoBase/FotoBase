@@ -75,12 +75,27 @@ fn search_files(
 /// The library grid's items (TASK-01-013, PLAN §4): id + filename + content
 /// hash. The hash is what the grid turns into a `thumb://` URI — pixels are
 /// fetched by the WebView from the disk cache through the scheme handler,
-/// never over IPC.
+/// never over IPC. An optional folder-id list (TASK-01-015) restricts the
+/// result to the folders selected in the Folders view.
 #[tauri::command]
 fn list_files(
+    folders: Option<Vec<i64>>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<fotobase_catalog::FileInfo>, String> {
-    with_catalog(&state, |cat| cat.list_files(usize::MAX))
+    with_catalog(&state, |cat| match folders {
+        None => cat.list_files(usize::MAX),
+        Some(ids) => cat.list_files_in_folders(&ids, usize::MAX),
+    })
+}
+
+/// The Folders-view tree data (TASK-01-015, PLAN §2B): every catalog folder
+/// with the year its newest file falls in. Ids + paths only — no image
+/// bytes, and the UI derives display names from the paths.
+#[tauri::command]
+fn list_folders(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::FolderInfo>, String> {
+    with_catalog(&state, |cat| cat.list_folders())
 }
 
 /// Visible-range reporting (TASK-01-013, PLAN §3 rule 4): the grid sends the
@@ -320,6 +335,7 @@ pub fn run() {
             ping,
             search_files,
             list_files,
+            list_folders,
             prioritize_visible,
             get_settings,
             set_settings,
