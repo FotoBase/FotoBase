@@ -1,0 +1,121 @@
+name: release
+
+# TASK-01-003: signed release builds with updater wiring (PLAN §4, ADR-0012).
+# Triggered by `v*` tags; versioning per ADR-0012; publishes a GitHub Release
+# (ADR-0010: GitHub Releases only). Steps follow docs/workflows/release-checklist.md
+# §3–§4: signed Windows MSI/NSIS, notarized macOS DMG, Linux AppImage/deb/rpm,
+# plus signed updater artifacts (.sig + latest.json feed) via the Tauri updater
+# plugin.
+#
+# Secrets (GitHub Actions secrets only — never in the repo; the *public* updater
+# key is committed in app/src-tauri/tauri.conf.json):
+#   TAURI_SIGNING_PRIVATE_KEY            updater signing key (path or content)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD   its password (empty string if none)
+#   APPLE_CERTIFICATE                    Developer ID Application cert (P12, base64)
+#   APPLE_CERTIFICATE_PASSWORD
+#   APPLE_SIGNING_IDENTITY
+#   APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID   macOS notarization
+#   WINDOWS_PFX_BASE64 / WINDOWS_PFX_PASSWORD   Authenticode cert (optional —
+#     see the import step below; macOS notarization and Windows Authenticode
+#     additionally require the org's certificates to exist)
+
+"on":
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 00-003 floors (ADR-0005): Win 10 22H2+, macOS 12+, Ubuntu 22.04+.
+          # Same runner set as ci.yml; macOS 12/13 floors are enforced at
+          # bundler level (bundle.macOS.minimumSystemVersion in tauri.conf.json).
+          - os: windows-latest
+          - os: macos-15 # arm64
+          - os: macos-15-intel # x64
+          - os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system deps (Tauri/WebKitGTK build deps)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: npm ci (frontend for beforeBuildCommand)
+        working-directory: app
+        run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Import Windows Authenticode certificate (no-op unless secret set)
+        if: runner.os == 'Windows'
+        env:
+          WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+          WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
+        shell: pwsh
+        run: |
+          if (-not $env:WINDOWS_PFX_BASE64) {
+            Write-Host "WINDOWS_PFX_BASE64 not set — skipping Authenticode import (unsigned MSI/NSIS)"
+            exit 0
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP "fotobase.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+          Import-PfxCertificate -FilePath $pfxPath `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password (ConvertTo-SecureString -String $env:WINDOWS_PFX_PASSWORD -AsPlainText -Force) | Out-Null
+          Write-Host "Authenticode certificate imported into CurrentUser\My"
+
+      - name: Build, sign and publish release artifacts
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing (minisign): tauri bundler produces *.sig next to
+          # each updater artifact; tauri-action assembles the latest.json feed.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS codesigning + notarization.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: app
+          tagName: ${{ github.ref_name }}
+          releaseName: "Fotobase ${{ github.ref_name }}"
+          releaseBody: "Installers for Windows (MSI/NSIS), macOS (DMG) and Linux (AppImage/deb/rpm). The updater feed is latest.json in these assets."
+          releaseDraft: false
+          prerelease: false

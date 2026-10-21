@@ -16,8 +16,16 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-updater = "2"
+# Direct dep: tauri::generate_context! expands to `::serde_json` paths.
+serde_json = "1"
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+# Same verifier tauri-plugin-updater uses — tests exercise the real path.
+base64 = "0.22"
+minisign-verify = "0.2"
 
 [lints]
 workspace = true

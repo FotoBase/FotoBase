@@ -22,6 +22,10 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
+        // TASK-01-003: signed updater (PLAN §4). Signature verification of
+        // downloaded artifacts is done by the plugin itself (minisign against
+        // the pubkey pinned in tauri.conf.json) and cannot be disabled.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![ping])
         .run(tauri::generate_context!())
         .expect("error while running fotobase");

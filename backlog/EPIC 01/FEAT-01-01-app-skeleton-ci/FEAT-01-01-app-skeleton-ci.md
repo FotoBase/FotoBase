@@ -11,7 +11,7 @@
 
 - [x] `01-001` (M) Cargo workspace + Tauri v2 + Svelte 5 + Vite skeleton per §3 module layout (crates: core, catalog, scanner, metadata, render, jobs first).
 - [x] `01-002` (M) GitHub Actions matrix: windows-latest, macos-latest (arm64 + x64), ubuntu-latest; build + test on all.
-- [ ] `01-003` (M) Signed release builds for 3 OSes via Tauri bundler (MSI/NSIS, DMG notarized, AppImage/deb/rpm) + signed updater plugin wiring.
+- [x] `01-003` (M) Signed release builds for 3 OSes via Tauri bundler (MSI/NSIS, DMG notarized, AppImage/deb/rpm) + signed updater plugin wiring.
 - [ ] `01-004` (S) Run WebKitGTK benchmark (00-012 protocol); decide DOM vs canvas grid as Linux default; record ADR.
 
 ## Tasks
