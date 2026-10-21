@@ -127,6 +127,43 @@ pub fn enqueue_missing_thumbs(
         .collect()
 }
 
+/// "Clear cache files" (TASK-01-022, PLAN §2 General tab): empty the
+/// thumbnail cache safely.
+///
+/// Order matters. The queue is drained first — pending renders cancelled,
+/// the in-flight render cancelled and *waited out* — so no render can write
+/// a cache entry while (or after) the entries are deleted. Only then are
+/// `*.jpg` / `*.jpg.tmp` files removed; anything else in the directory is
+/// not ours to touch. Returns the number of removed files. The library and
+/// the catalog are never touched: this only deletes rebuildable cache data.
+///
+/// After a clear the pipeline keeps working: the next `thumb://` miss
+/// re-triggers a render job and repopulates the cache.
+pub async fn clear_thumbnail_cache(
+    cache_dir: &Path,
+    queue: &Queue<ThumbOutcome>,
+) -> std::io::Result<u64> {
+    queue.drain().await;
+    let mut removed = 0u64;
+    for entry in std::fs::read_dir(cache_dir)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.ends_with(".jpg") || name.ends_with(".jpg.tmp") {
+            match std::fs::remove_file(entry.path()) {
+                Ok(()) => removed += 1,
+                // A file that vanished between readdir and unlink (or is
+                // locked by a finished-but-still-open writer) is not an
+                // error: the goal is an empty cache, and a later clear or a
+                // re-render converges there.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e),
+            }
+        }
+    }
+    Ok(removed)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

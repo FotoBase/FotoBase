@@ -1,0 +1,71 @@
+// Minimal i18n scaffold (TASK-01-022: "language selection changes UI
+// language; i18n scaffold at minimum; full translations can follow").
+// A `.svelte.ts` module so the current locale is a rune-backed reactive
+// value; components re-render when it changes. `t()` falls back to English,
+// then to the key itself — a missing translation must never render empty.
+
+type Dict = Record<string, string>;
+
+const messages: Record<string, Dict> = {
+  en: {
+    "app.title": "Fotobase",
+    "app.tagline": "Local-first photo organizer — skeleton.",
+    "app.ping": "Ping backend",
+    "app.ping.tooltip": "Sends a trivial IPC round-trip to the Rust core",
+    "app.backendSays": "Backend says:",
+    "app.backendMissing": "no backend (browser dev)",
+    "app.options": "Options",
+    "options.title": "Options",
+    "options.tab.general": "General",
+    "options.language": "Language",
+    "options.updates": "Automatic updates",
+    "options.updates.auto": "Install updates automatically",
+    "options.updates.checkButAsk": "Check for updates, ask before installing",
+    "options.updates.off": "Never check for updates",
+    "options.clearCache": "Clear cache files",
+    "options.clearCache.done": "Removed {n} cached files",
+    "options.clearCache.failed": "Clearing the cache failed: {error}",
+    "options.showTooltips": "Show tooltips",
+    "options.close": "Close",
+  },
+  de: {
+    "app.title": "Fotobase",
+    "app.tagline": "Lokaler Foto-Organizer — Grundgerüst.",
+    "app.ping": "Backend anpingen",
+    "app.ping.tooltip": "Sendet einen einfachen IPC-Rundtrip an den Rust-Kern",
+    "app.backendSays": "Backend antwortet:",
+    "app.backendMissing": "kein Backend (Browser-Entwicklung)",
+    "app.options": "Optionen",
+    "options.title": "Optionen",
+    "options.tab.general": "Allgemein",
+    "options.language": "Sprache",
+    "options.updates": "Automatische Updates",
+    "options.updates.auto": "Updates automatisch installieren",
+    "options.updates.checkButAsk": "Nach Updates suchen, vor Installation fragen",
+    "options.updates.off": "Nie nach Updates suchen",
+    "options.clearCache": "Cache-Dateien löschen",
+    "options.clearCache.done": "{n} Cache-Dateien entfernt",
+    "options.clearCache.failed": "Leeren des Caches fehlgeschlagen: {error}",
+    "options.showTooltips": "Tooltips anzeigen",
+    "options.close": "Schließen",
+  },
+};
+
+let current = $state("en");
+
+export const locales: string[] = Object.keys(messages);
+
+export function locale(): string {
+  return current;
+}
+
+export function setLocale(tag: string): void {
+  if (messages[tag] !== undefined) current = tag;
+}
+
+/** Translate `key` in the current locale (English fallback, then the key). */
+export function t(key: string, vars?: Record<string, string | number>): string {
+  const raw = messages[current]?.[key] ?? messages.en[key] ?? key;
+  if (vars === undefined) return raw;
+  return raw.replace(/\{(\w+)\}/g, (_, name) => String(vars[name] ?? `{${name}}`));
+}

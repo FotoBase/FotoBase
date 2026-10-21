@@ -1,6 +1,6 @@
 # task: build options dialog (general tab)
 
-**Feature:** [FEAT-01-04-options-platform-polish](FEAT-01-04-options-platform-polish.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-04-options-platform-polish](FEAT-01-04-options-platform-polish.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-21)
 
 ## Description
 Implement the Options dialog General tab per PLAN §2 Options inventory / §6 P1 deliverables: language, automatic updates (auto / check-but-ask / off), clear cache files, show tooltips. All settings persist.
@@ -20,4 +20,4 @@ Implement the Options dialog General tab per PLAN §2 Options inventory / §6 P1
 - Integration: clear-cache while a render job is in flight ⇒ cache ends empty, no partial files, no crash.
 
 ## Acceptance criteria
-- [ ] 01-022: Options dialog (General) with language, update modes, clear cache, tooltips — all persisted.
+- [x] 01-022: Options dialog (General) with language, update modes, clear cache, tooltips — all persisted.
