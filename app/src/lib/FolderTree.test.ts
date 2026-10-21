@@ -8,7 +8,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import FolderTree from "./FolderTree.svelte";
 import type { FolderInfo } from "./folder-tree";
 
-const f = (id: number, path: string, year: number | null): FolderInfo => ({ id, path, year });
+const f = (
+  id: number,
+  path: string,
+  year: number | null,
+): FolderInfo => ({ id, path, year, scan_mode: "once" });
 
 afterEach(() => cleanup());
 

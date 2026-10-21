@@ -45,6 +45,19 @@ const messages: Record<string, Dict> = {
     "menu.locateOnDisk": "Locate on disk",
     "menu.removeFromFotobase": "Remove from Fotobase",
     "menu.addToAlbum": "Add to album",
+    "app.folderManager": "Folder Manager",
+    "folderManager.title": "Folder Manager",
+    "folderManager.hint":
+      "The library mirrors your real folders — nothing is copied or moved.",
+    "folderManager.mode.once": "Scan once",
+    "folderManager.mode.always": "Scan always (watched)",
+    "folderManager.remove": "Remove from Fotobase",
+    "folderManager.remove.confirm": "Remove this folder from the catalog? Files stay on disk.",
+    "folderManager.remove.confirmYes": "Remove",
+    "folderManager.remove.confirmNo": "Keep",
+    "folderManager.face": "Face detection",
+    "folderManager.face.placeholder": "Face detection is not available yet",
+    "folderManager.error": "Folder Manager: {error}",
   },
   de: {
     "app.title": "Fotobase",
@@ -85,6 +98,20 @@ const messages: Record<string, Dict> = {
     "menu.locateOnDisk": "Auf Festplatte zeigen",
     "menu.removeFromFotobase": "Aus Fotobase entfernen",
     "menu.addToAlbum": "Zum Album hinzufügen",
+    "app.folderManager": "Ordnerverwaltung",
+    "folderManager.title": "Ordnerverwaltung",
+    "folderManager.hint":
+      "Die Bibliothek spiegelt deine echten Ordner — nichts wird kopiert oder verschoben.",
+    "folderManager.mode.once": "Einmal scannen",
+    "folderManager.mode.always": "Immer scannen (überwacht)",
+    "folderManager.remove": "Aus Fotobase entfernen",
+    "folderManager.remove.confirm":
+      "Diesen Ordner aus dem Katalog entfernen? Dateien bleiben auf dem Datenträger.",
+    "folderManager.remove.confirmYes": "Entfernen",
+    "folderManager.remove.confirmNo": "Behalten",
+    "folderManager.face": "Gesichtserkennung",
+    "folderManager.face.placeholder": "Gesichtserkennung ist noch nicht verfügbar",
+    "folderManager.error": "Ordnerverwaltung: {error}",
   },
 };
 
