@@ -42,11 +42,18 @@ pub enum WatcherError {
     Setup(#[from] notify::Error),
     #[error("could not resolve watched path: {0}")]
     Path(#[from] io::Error),
+    #[error("watcher has been stopped")]
+    Stopped,
 }
 
 enum Cmd {
-    Add(PathBuf),
-    Remove(PathBuf),
+    /// `Add` carries a reply channel so `add_root` returns only after the
+    /// root is watched (and its closing incremental scan is enqueued).
+    Add(PathBuf, Sender<()>),
+    /// `Remove` carries a reply channel so `remove_root` returns only after
+    /// the root's watcher is dropped — otherwise a file written immediately
+    /// after the call could still be picked up by the not-yet-removed watch.
+    Remove(PathBuf, Sender<()>),
 }
 
 /// Canonicalize an event path; for vanished files fall back to
@@ -123,44 +130,54 @@ impl Watcher {
             threads.push(thread::Builder::new().name("fb-watch".into()).spawn(move || {
                 for cmd in cmd_rx {
                     match cmd {
-                        Cmd::Add(given) => match fs::canonicalize(&given) {
-                            Ok(canon) => match make_root_watcher(
-                                canon.clone(),
-                                given.clone(),
-                                event_tx.clone(),
-                            ) {
-                                Ok(mut w) => {
-                                    if w.watch(&canon, notify::RecursiveMode::Recursive).is_ok() {
-                                        watchers.insert(canon, w);
-                                        // Watcher arming is asynchronous on some
-                                        // backends (FSEvents schedules its runloop
-                                        // off-thread), so events in the arming gap
-                                        // can be missed. An immediate incremental
-                                        // scan through the debounce pipeline closes
-                                        // that gap; it is a fast no-op when nothing
-                                        // changed.
-                                        let _ = event_tx.send(given);
-                                    } else {
-                                        tracing::warn!(path = %given.display(), "cannot watch folder");
+                        Cmd::Add(given, reply) => {
+                            match fs::canonicalize(&given) {
+                                Ok(canon) => match make_root_watcher(
+                                    canon.clone(),
+                                    given.clone(),
+                                    event_tx.clone(),
+                                ) {
+                                    Ok(mut w) => {
+                                        if w.watch(&canon, notify::RecursiveMode::Recursive).is_ok()
+                                        {
+                                            watchers.insert(canon, w);
+                                            // Watcher arming is asynchronous on some
+                                            // backends (FSEvents schedules its runloop
+                                            // off-thread), so events in the arming gap
+                                            // can be missed. An immediate incremental
+                                            // scan through the debounce pipeline closes
+                                            // that gap; it is a fast no-op when nothing
+                                            // changed.
+                                            let _ = event_tx.send(given);
+                                        } else {
+                                            tracing::warn!(path = %given.display(), "cannot watch folder");
+                                        }
                                     }
-                                }
+                                    Err(e) => tracing::warn!(
+                                        path = %given.display(),
+                                        error = %e,
+                                        "cannot watch folder"
+                                    ),
+                                },
                                 Err(e) => tracing::warn!(
                                     path = %given.display(),
                                     error = %e,
                                     "cannot watch folder"
                                 ),
-                            },
-                            Err(e) => tracing::warn!(
-                                path = %given.display(),
-                                error = %e,
-                                "cannot watch folder"
-                            ),
-                        },
-                        Cmd::Remove(given) => {
+                            }
+                            // Ack after the watcher is armed (or failed): the
+                            // caller may rely on the root being watched, and on
+                            // the closing incremental scan being enqueued.
+                            let _ = reply.send(());
+                        }
+                        Cmd::Remove(given, reply) => {
                             if let Ok(canon) = fs::canonicalize(&given) {
                                 // Dropping the watcher stops its stream.
                                 watchers.remove(&canon);
                             }
+                            // Ack after the watcher is dropped: past this point
+                            // no further events for the root can be captured.
+                            let _ = reply.send(());
                         }
                     }
                 }
@@ -263,20 +280,41 @@ impl Watcher {
     }
 
     /// Start watching another folder (Folder Manager "Scan Always").
+    ///
+    /// Blocks until the root is armed and its closing incremental scan is
+    /// enqueued, so the caller can rely on the root being watched on return.
     pub fn add_root(&self, root: &Path) -> Result<(), WatcherError> {
         // Canonicalize here so failures surface to the caller.
         fs::canonicalize(root)?;
-        self.cmd_tx.as_ref().expect("watcher not stopped").send(Cmd::Add(root.to_path_buf())).ok();
+        let (reply_tx, reply_rx) = mpsc::channel();
+        self.cmd_tx
+            .as_ref()
+            .expect("watcher not stopped")
+            .send(Cmd::Add(root.to_path_buf(), reply_tx))
+            .map_err(|_| WatcherError::Stopped)?;
+        // If the watch thread is gone the ack never arrives; fail instead of
+        // hanging.
+        reply_rx.recv().map_err(|_| WatcherError::Stopped)?;
         Ok(())
     }
 
     /// Stop watching a folder (Folder Manager unchecks "Scan Always").
+    ///
+    /// Blocks until the root's watcher is dropped: after this returns, no
+    /// further events for the root can reach the scan pipeline.
     pub fn remove_root(&self, root: &Path) {
-        self.cmd_tx
+        let (reply_tx, reply_rx) = mpsc::channel();
+        if self
+            .cmd_tx
             .as_ref()
             .expect("watcher not stopped")
-            .send(Cmd::Remove(root.to_path_buf()))
-            .ok();
+            .send(Cmd::Remove(root.to_path_buf(), reply_tx))
+            .is_ok()
+        {
+            // Best effort: if the watch thread is already gone, the watcher
+            // died with it and there is nothing left to wait for.
+            let _ = reply_rx.recv();
+        }
     }
 
     /// Shut down and wait for all watcher threads to exit.
