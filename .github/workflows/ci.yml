@@ -34,10 +34,15 @@ jobs:
         include:
           # 00-003 floors (ADR-0005): Win 10 22H2+, macOS 12+, Ubuntu 22.04+.
           # ubuntu-22.04 = the floor (WebKitGTK 2.40 era; the perf protocol
-          # pins the same runner). No macOS 12/13 or Win10 client runner exists;
-          # use the oldest GA images and enforce client floors at bundler level
-          # (TASK-01-003). macos-15-intel = native x64 leg.
+          # pins the same runner); ubuntu-24.04 = current WebKitGTK, since the
+          # distro pins it and newer breakage is otherwise invisible to the
+          # floor leg. Windows: WebView2 is evergreen on user machines, so one
+          # leg covers it. macOS: no 12/13 runner exists and WKWebView is
+          # always newer on runners — floors enforced at bundler level
+          # (TASK-01-003); the WKWebView 12 floor gap is noted in ADR-0005.
           - os: ubuntu-22.04
+          - os: ubuntu-24.04
+          - os: ubuntu-26.04
           - os: windows-latest
           - os: macos-15  # arm64
           - os: macos-15-intel  # x64
