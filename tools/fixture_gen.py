@@ -29,8 +29,18 @@ except ImportError:  # pragma: no cover
     sys.exit("Pillow is required: pip install Pillow")
 
 SAMPLES_DIR = Path(__file__).parent / "fixture-samples"
-FORMATS = ["jpeg", "jpeg", "jpeg", "png", "webp", "tiff", "heic"]  # weighted like real libraries
-EXTENSIONS = {"jpeg": "jpg", "png": "png", "webp": "webp", "tiff": "tif", "heic": "heic"}
+# TASK-01-012: one entry per supported format (JPEG weighted like real
+# libraries). AVIF needs the optional pillow-avif-plugin at generation time;
+# the format is dropped (with a warning) when the plugin is missing.
+FORMATS = ["jpeg", "jpeg", "jpeg", "png", "webp", "tiff", "heic", "gif", "bmp", "avif"]
+EXTENSIONS = {
+    "jpeg": "jpg", "png": "png", "webp": "webp", "tiff": "tif", "heic": "heic",
+    "gif": "gif", "bmp": "bmp", "avif": "avif",
+}
+SAVE_FORMATS = {
+    "jpeg": "JPEG", "png": "PNG", "webp": "WEBP", "tiff": "TIFF",
+    "gif": "GIF", "bmp": "BMP", "avif": "AVIF",
+}
 SIZES = [(160, 120), (640, 480), (1280, 960), (2048, 1536)]  # sprinkle thumbnail..full-res
 START = datetime(2005, 1, 1, 0, 0, 0)
 DATE_SPAN_DAYS = 20 * 365  # spread over ~20 years
@@ -54,9 +64,16 @@ def gen(count: int, seed: int, out: Path) -> None:
     heic_samples = sorted(SAMPLES_DIR.glob("*.heic"))
     if not heic_samples:
         sys.exit(f"No HEIC samples in {SAMPLES_DIR} (see tools/fixture-samples/README.md)")
+    avif_samples = sorted(SAMPLES_DIR.glob("*.avif"))
+    formats = list(FORMATS)
+    if not avif_samples:
+        # AVIF sample generation needs pillow-avif-plugin (not a hard dep);
+        # without a committed sample the format cannot be duplicated.
+        formats = [f for f in formats if f != "avif"]
+        print("warning: no AVIF samples — AVIF dropped from fixture mix", file=sys.stderr)
 
     for i in range(count):
-        fmt = rng.choice(FORMATS)
+        fmt = rng.choice(formats)
         taken = START + timedelta(
             days=rng.randrange(DATE_SPAN_DAYS),
             seconds=rng.randrange(86400),
@@ -74,12 +91,13 @@ def gen(count: int, seed: int, out: Path) -> None:
         if fmt == "heic":
             src = heic_samples[rng.randrange(len(heic_samples))]
             shutil.copyfile(src, dest)
+        elif fmt == "avif":
+            src = avif_samples[rng.randrange(len(avif_samples))]
+            shutil.copyfile(src, dest)
         else:
             img = make_image(rng)
-            save_kw = {"jpeg": {}, "png": {}, "webp": {}, "tiff": {}}[fmt]
-            if fmt == "jpeg":
-                save_kw = {"quality": 85}
-            img.save(dest, format={"jpeg": "JPEG", "png": "PNG", "webp": "WEBP", "tiff": "TIFF"}[fmt], **save_kw)
+            save_kw = {"jpeg": {"quality": 85}}.get(fmt, {})
+            img.save(dest, format=SAVE_FORMATS[fmt], **save_kw)
 
         digest = hashlib.sha256(dest.read_bytes()).hexdigest()
         manifest_lines.append(f"{digest}  {dest.relative_to(out).as_posix()}")

@@ -5,7 +5,13 @@
 //! the bounded job queue, and an on-disk cache keyed by content hash so
 //! re-scans never re-render (§5: derived data, never written to sidecars).
 //!
-//! Deviation from the task text (recorded in TASK-01-010): resize uses
+//! TASK-01-012 scope: GIF/BMP/TIFF/WebP via `image`, HEIC/AVIF via
+//! `libheif-rs` (behind the default-on `heif` cargo feature; the dependency
+//! is target-gated to non-Windows until a vcpkg-based packaging leg exists).
+//! PSD stays deferred to P2 (task spec: "only if cheap") — it is recognized
+//! in the sniff table and reported as unsupported.
+//!
+//! Deviation from the TASK-01-010 text (recorded in TASK-01-010): resize uses
 //! `fast_image_resize` alone. The workspace denies `unsafe_code`, which rules
 //! out libvips FFI bindings, and libvips would add a system dependency to
 //! every CI platform. Resizing is only a re-encode of the decoded buffer
@@ -13,6 +19,11 @@
 
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase-render";
+
+/// Whether the libheif-backed HEIC/AVIF decode path is compiled in.
+/// False when the `heif` feature is off or on platforms without the
+/// libheif-rs dependency (Windows, until a vcpkg packaging leg lands).
+pub const HEIF_AVAILABLE: bool = cfg!(all(feature = "heif", not(target_os = "windows")));
 
 use std::path::{Path, PathBuf};
 
@@ -61,7 +72,14 @@ pub struct Thumbnail {
 enum Sniffed {
     Jpeg,
     Png,
-    /// Recognized container the fast path does not handle yet (01-012).
+    Gif,
+    Bmp,
+    Tiff,
+    Webp,
+    /// HEIF container (HEIC/HEVC brands and AVIF/AV1 brands alike); decoded
+    /// through libheif-rs when the `heif` feature is compiled in.
+    Heif,
+    /// Recognized but deferred: PSD thumbnails land with P2 (RAW/JXL).
     Unsupported(&'static str),
     /// No magic we know — treated as a decode failure, not a format gap.
     Unknown,
@@ -73,7 +91,20 @@ fn sniff(b: &[u8]) -> Sniffed {
     } else if b.starts_with(&[0x89, b'P', b'N', b'G']) {
         Sniffed::Png
     } else if b.starts_with(b"GIF8") {
-        Sniffed::Unsupported("GIF")
+        Sniffed::Gif
+    } else if b.starts_with(b"BM") && b.len() > 2 {
+        Sniffed::Bmp
+    } else if b.starts_with(&[0x49, 0x49, 0x2A, 0x00]) || b.starts_with(&[0x4D, 0x4D, 0x00, 0x2A]) {
+        Sniffed::Tiff
+    } else if b.len() > 12 && b.starts_with(b"RIFF") && &b[8..12] == b"WEBP" {
+        Sniffed::Webp
+    } else if b.len() > 12 && &b[4..8] == b"ftyp" {
+        // ISOBMFF: the major brand at [8..12] covers heic/heix/hevc/mif1
+        // (HEIF family) and avif/avis (AVIF). Distinguishing brands is not
+        // needed — libheif parses the container itself.
+        Sniffed::Heif
+    } else if b.starts_with(b"8BPS") {
+        Sniffed::Unsupported("PSD")
     } else {
         Sniffed::Unknown
     }
@@ -133,17 +164,15 @@ fn decode(bytes: &[u8], src: &Path) -> Result<(Vec<u8>, u32, u32), RenderError> 
             Ok(out) => Ok(out),
             Err(detail) => Err(RenderError::Decode { path: src.to_path_buf(), detail }),
         },
-        Sniffed::Png => match image::ImageReader::new(std::io::Cursor::new(bytes))
-            .with_guessed_format()
-            .map_err(|e| format!("{e}"))
-            .and_then(|r| r.decode().map_err(|e| e.to_string()))
-        {
-            Ok(img) => {
-                use image::GenericImageView;
-                let (w, h) = img.dimensions();
-                let rgb = img.to_rgb8().into_raw();
-                Ok((rgb, w, h))
+        // GIF/BMP/TIFF/WebP (and PNG fallback) through the `image` crate.
+        Sniffed::Png | Sniffed::Gif | Sniffed::Bmp | Sniffed::Tiff | Sniffed::Webp => {
+            match decode_with_image(bytes) {
+                Ok(out) => Ok(out),
+                Err(detail) => Err(RenderError::Decode { path: src.to_path_buf(), detail }),
             }
+        }
+        Sniffed::Heif => match heif::decode_heif(bytes) {
+            Ok(out) => Ok(out),
             Err(detail) => Err(RenderError::Decode { path: src.to_path_buf(), detail }),
         },
         Sniffed::Unsupported(fmt) => Err(RenderError::UnsupportedFormat(fmt.into())),
@@ -152,6 +181,17 @@ fn decode(bytes: &[u8], src: &Path) -> Result<(Vec<u8>, u32, u32), RenderError> 
             detail: "unrecognized image format".into(),
         }),
     }
+}
+
+fn decode_with_image(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
+    use image::GenericImageView;
+    let img = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| format!("{e}"))?
+        .decode()
+        .map_err(|e| e.to_string())?;
+    let (w, h) = img.dimensions();
+    Ok((img.to_rgb8().into_raw(), w, h))
 }
 
 fn zune_jpeg_decode(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
@@ -163,6 +203,58 @@ fn zune_jpeg_decode(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
     let (w, h) = (info.width as u32, info.height as u32);
     let pixels = decoder.decode().map_err(|e| format!("{e}"))?;
     Ok((pixels, w, h))
+}
+
+/// HEIC/AVIF decode through libheif-rs (PLAN §4).
+#[cfg(all(feature = "heif", not(target_os = "windows")))]
+mod heif {
+    use libheif_rs::{ColorSpace, HeifContext, LibHeif, RgbChroma};
+
+    /// Decode the primary image of a HEIF/AVIF container into packed RGB8.
+    pub(super) fn decode_heif(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
+        let ctx = HeifContext::read_from_bytes(bytes).map_err(|e| format!("{e}"))?;
+        let handle = ctx.primary_image_handle().map_err(|e| format!("{e}"))?;
+        let (w, h) = (handle.width(), handle.height());
+        if w == 0 || h == 0 {
+            return Err("empty heif image".into());
+        }
+        let lib = LibHeif::new();
+        let img = lib
+            .decode(&handle, ColorSpace::Rgb(RgbChroma::Rgb), None)
+            .map_err(|e| format!("{e}"))?;
+        let plane = img
+            .planes()
+            .interleaved
+            .ok_or_else(|| "heif image has no interleaved plane".to_string())?;
+        if plane.width != w || plane.height != h {
+            return Err(format!(
+                "heif plane {}×{} differs from handle {w}×{h}",
+                plane.width, plane.height
+            ));
+        }
+        // libheif returns row-strided buffers; repack into packed RGB.
+        let stride = plane.stride;
+        let row_len = w as usize * 3;
+        let mut rgb = Vec::with_capacity(row_len * h as usize);
+        for y in 0..h as usize {
+            let row = plane
+                .data
+                .get(y * stride..y * stride + row_len)
+                .ok_or_else(|| "heif plane data shorter than stride implies".to_string())?;
+            rgb.extend_from_slice(row);
+        }
+        Ok((rgb, w, h))
+    }
+}
+
+/// Stub for targets without the libheif dependency (Windows for now): the
+/// sniff table still recognizes the container and reports it as unsupported
+/// instead of misreading it as corrupt.
+#[cfg(any(not(feature = "heif"), target_os = "windows"))]
+mod heif {
+    pub(super) fn decode_heif(_bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
+        Err("HEIC/AVIF support is not compiled in for this platform".into())
+    }
 }
 
 /// Fit inside `max_edge × max_edge`, never upscaling.
@@ -242,7 +334,19 @@ mod tests {
     fn sniff_detects_known_magics() {
         assert!(matches!(sniff(&[0xFF, 0xD8, 0xFF, 0xE0]), Sniffed::Jpeg));
         assert!(matches!(sniff(&[0x89, b'P', b'N', b'G', 0x0D]), Sniffed::Png));
-        assert!(matches!(sniff(b"GIF89a"), Sniffed::Unsupported("GIF")));
+        assert!(matches!(sniff(b"GIF89a"), Sniffed::Gif));
+        assert!(matches!(sniff(b"BM\x36\x00"), Sniffed::Bmp));
+        assert!(matches!(sniff(&[0x49, 0x49, 0x2A, 0x00, 0x08]), Sniffed::Tiff));
+        assert!(matches!(sniff(&[0x4D, 0x4D, 0x00, 0x2A, 0x00]), Sniffed::Tiff));
+        assert!(matches!(sniff(b"RIFFxxxxWEBPVP8 "), Sniffed::Webp));
+        assert!(matches!(sniff(b"xxxxftypheicxxxx"), Sniffed::Heif));
+        assert!(matches!(sniff(b"xxxxftypavifxxxx"), Sniffed::Heif));
+        assert!(matches!(sniff(b"8BPS\x00\x01"), Sniffed::Unsupported("PSD")));
         assert!(matches!(sniff(b"plain text"), Sniffed::Unknown));
+    }
+
+    #[test]
+    fn heif_availability_flag_matches_cfg() {
+        assert_eq!(HEIF_AVAILABLE, cfg!(all(feature = "heif", not(target_os = "windows"))));
     }
 }

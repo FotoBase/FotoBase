@@ -26,7 +26,7 @@
 - [x] `01-009` (M) `jobs` crate: bounded priority queue (visible-first, background-last), throttling hook (battery later), cancellation.
 - [x] `01-010` (L) `render` crate: decode via zune-jpeg/image/libvips bindings; thumbnail pipeline; on-disk cache keyed by content hash.
 - [x] `01-011` (M) `thumb://` Tauri URI scheme handler serving from cache; no image bytes over IPC.
-- [ ] `01-012` (M) Format support: JPEG, PNG, GIF, BMP, TIFF, WebP, HEIC, AVIF (libheif-rs); PSD thumbnail if cheap.
+- [x] `01-012` (M) Format support: JPEG, PNG, GIF, BMP, TIFF, WebP, HEIC, AVIF (libheif-rs); PSD thumbnail if cheap.
 
 ## feat: UI — library
 

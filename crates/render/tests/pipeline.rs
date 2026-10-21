@@ -106,15 +106,27 @@ fn malformed_file_errors_without_crashing_and_writes_no_cache_entry() {
 }
 
 #[test]
-fn unknown_format_is_reported_as_unsupported() {
+fn unrecognized_header_is_a_decode_error() {
     let tmp = TempDir::new().unwrap();
     let cache = tmp.path().join("thumbs");
-    // GIF is 01-012 scope; today the fast path covers JPEG/PNG only.
+    let p = tmp.path().join("bad.bin");
+    std::fs::write(&p, b"plain text, no image magic").unwrap();
+
+    let err = thumbnail(&p, &cache, ThumbOptions::default()).unwrap_err();
+    assert!(matches!(err, fotobase_render::RenderError::Decode { .. }));
+}
+
+#[test]
+fn gif_header_without_image_data_is_a_decode_error_not_unsupported() {
+    // GIF is supported since 01-012; a header-only file is corrupt, not a
+    // format gap.
+    let tmp = TempDir::new().unwrap();
+    let cache = tmp.path().join("thumbs");
     let p = tmp.path().join("anim.gif");
     std::fs::write(&p, b"GIF89a\x01\x00\x01\x00\x00\x00\x00;").unwrap();
 
     let err = thumbnail(&p, &cache, ThumbOptions::default()).unwrap_err();
-    assert!(matches!(err, fotobase_render::RenderError::UnsupportedFormat(ref f) if f == "GIF"));
+    assert!(matches!(err, fotobase_render::RenderError::Decode { .. }));
 }
 
 #[test]

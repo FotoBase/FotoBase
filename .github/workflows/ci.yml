@@ -50,8 +50,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # TASK-01-012: libde265 (HEIC/HEVC) + dav1d (AVIF/AV1) for the embedded
+      # libheif build in fotobase-render. Bottles, so this is fast.
+      - name: Install HEIC/AVIF codec deps
+        if: runner.os == 'macOS'
+        run: brew install libde265 dav1d
+
       - name: Install Linux system deps (Tauri/WebKitGTK build deps)
         if: runner.os == 'Linux'
+        # TASK-01-012: libde265-dev (HEIC/HEVC decode) + libaom-dev
+        # (AVIF/AV1 decode) are the codec plugins the embedded libheif
+        # links against. AVIF goes through libaom here because ubuntu-22.04
+        # ships dav1d 0.9, whose API is incompatible with the dav1d plugin
+        # of embedded libheif 1.23 (needs dav1d >= 1.0); macOS gets dav1d
+        # via brew, which is new enough.
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -63,7 +75,9 @@ jobs:
             libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            libde265-dev \
+            libaom-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:

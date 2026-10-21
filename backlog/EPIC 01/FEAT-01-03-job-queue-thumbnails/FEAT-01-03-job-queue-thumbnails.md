@@ -12,11 +12,11 @@
 - [x] `01-009` (M) `jobs` crate: bounded priority queue (visible-first, background-last), throttling hook (battery later), cancellation.
 - [x] `01-010` (L) `render` crate: decode via zune-jpeg/image/libvips bindings; thumbnail pipeline; on-disk cache keyed by content hash.
 - [x] `01-011` (M) `thumb://` Tauri URI scheme handler serving from cache; no image bytes over IPC.
-- [ ] `01-012` (M) Format support: JPEG, PNG, GIF, BMP, TIFF, WebP, HEIC, AVIF (libheif-rs); PSD thumbnail if cheap.
+- [x] `01-012` (M) Format support: JPEG, PNG, GIF, BMP, TIFF, WebP, HEIC, AVIF (libheif-rs); PSD thumbnail if cheap.
 
 ## Tasks
 
 - [x] [TASK-01-009-jobs-queue.md](TASK-01-009-jobs-queue.md) — build jobs crate — bounded priority queue with cancellation
 - [x] [TASK-01-010-render-pipeline.md](TASK-01-010-render-pipeline.md) — build render crate — decode + thumbnail pipeline + cache
 - [x] [TASK-01-011-thumb-uri-scheme.md](TASK-01-011-thumb-uri-scheme.md) — implement thumb:// uri scheme handler
-- [ ] [TASK-01-012-format-support.md](TASK-01-012-format-support.md) — support JPEG/PNG/GIF/BMP/TIFF/WebP/HEIC/AVIF decoders
+- [x] [TASK-01-012-format-support.md](TASK-01-012-format-support.md) — support JPEG/PNG/GIF/BMP/TIFF/WebP/HEIC/AVIF decoders
