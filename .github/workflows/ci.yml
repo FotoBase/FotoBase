@@ -1,0 +1,93 @@
+name: ci
+
+# TASK-01-002: code CI matrix per PLAN §4 and ADR-0005 OS floors.
+# Red CI blocks merge (docs/workflows/lint-format.md).
+
+"on":
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    # Format is platform-independent; one leg is enough.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: cargo fmt --check
+        run: cargo fmt --check --all
+
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 00-003 floors (ADR-0005): Win 10 22H2+, macOS 12+, Ubuntu 22.04+.
+          # ubuntu-22.04 = the floor (WebKitGTK 2.40 era; the perf protocol
+          # pins the same runner); ubuntu-24.04 = current WebKitGTK, since the
+          # distro pins it and newer breakage is otherwise invisible to the
+          # floor leg. Windows: WebView2 is evergreen on user machines, so one
+          # leg covers it. macOS: no 12/13 runner exists and WKWebView is
+          # always newer on runners — floors enforced at bundler level
+          # (TASK-01-003); the WKWebView 12 floor gap is noted in ADR-0005.
+          - os: ubuntu-22.04
+          - os: ubuntu-24.04
+          - os: ubuntu-26.04
+          - os: windows-latest
+          - os: macos-15  # arm64
+          - os: macos-15-intel  # x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system deps (Tauri/WebKitGTK build deps)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo clippy (warnings are errors)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: npm ci + build (Vitest joins when FEAT-01-06 lands)
+        working-directory: app
+        run: |
+          npm ci
+          npm run build
