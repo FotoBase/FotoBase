@@ -7,8 +7,13 @@ repository.workspace = true
 description = "Bounded priority job queue with throttling"
 
 [dependencies]
+tokio = { version = "1", features = ["rt", "sync", "time"] }
 tracing.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 
 [lints]
 workspace = true

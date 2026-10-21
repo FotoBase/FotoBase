@@ -1,6 +1,6 @@
 # task: build jobs crate — bounded priority queue with cancellation
 
-**Feature:** [FEAT-01-03-job-queue-thumbnails](FEAT-01-03-job-queue-thumbnails.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-03-job-queue-thumbnails](FEAT-01-03-job-queue-thumbnails.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement the `jobs` crate per PLAN §3 rule 4: all heavy work (thumbnailing, metadata extraction) runs in a bounded priority queue — visible items first, background last — with cancellation and a throttling hook (battery throttling arrives later).
@@ -20,4 +20,4 @@ Implement the `jobs` crate per PLAN §3 rule 4: all heavy work (thumbnailing, me
 - Unit: cancel a running job ⇒ its partial cache entry is removed/ignored; re-enqueue of the same key coalesces with the in-flight job.
 
 ## Acceptance criteria
-- [ ] 01-009: `jobs` crate with bounded priority queue, cancellation, coalescing, and throttling hook.
+- [x] 01-009: `jobs` crate with bounded priority queue, cancellation, coalescing, and throttling hook.
