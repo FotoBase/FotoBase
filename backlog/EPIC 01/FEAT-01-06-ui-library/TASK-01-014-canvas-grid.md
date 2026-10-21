@@ -1,6 +1,6 @@
 # task: build canvas-grid renderer fallback
 
-**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement the canvas-grid renderer (PLAN §6 P1: canvas grid is a planned deliverable, not a contingency): draws thumbnails to a canvas instead of DOM nodes. Linux default if the 01-004 ADR says so; available as fallback on every OS.
@@ -18,4 +18,4 @@ Implement the canvas-grid renderer (PLAN §6 P1: canvas grid is a planned delive
 - E2E: canvas grid renders the 1k fixture; zoom slider and selection work; fps harness run on Linux passes the §6 bar with the chosen default.
 
 ## Acceptance criteria
-- [ ] 01-014: Canvas-grid renderer with zoom/selection parity; Linux default per the 01-004 ADR; available as fallback everywhere.
+- [x] 01-014: Canvas-grid renderer with zoom/selection parity; Linux default per the 01-004 ADR; available as fallback everywhere.
