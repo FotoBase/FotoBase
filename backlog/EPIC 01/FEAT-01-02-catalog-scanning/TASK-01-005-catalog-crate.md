@@ -1,6 +1,6 @@
 # task: build catalog crate — schema, migrations, robustness
 
-**Feature:** [FEAT-01-02-catalog-scanning](FEAT-01-02-catalog-scanning.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-02-catalog-scanning](FEAT-01-02-catalog-scanning.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement the `catalog` crate per PLAN §5: the SQLite schema (P1 subset — no AI tables), forward-only migrations, WAL mode, startup `integrity_check`, and automatic rolling backups. The catalog is a rebuildable cache; sidecars remain the source of truth for user data.
@@ -21,4 +21,4 @@ Implement the `catalog` crate per PLAN §5: the SQLite schema (P1 subset — no 
 - Integration: kill -9 mid-transaction ⇒ reopen succeeds, `integrity_check` passes.
 
 ## Acceptance criteria
-- [ ] 01-005: `catalog` crate with §5-minus-AI schema, tested forward-only migrations, WAL, startup `integrity_check`, rolling backups.
+- [x] 01-005: `catalog` crate with §5-minus-AI schema, tested forward-only migrations, WAL, startup `integrity_check`, rolling backups.
