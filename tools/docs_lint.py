@@ -5,6 +5,8 @@ Checks (per .github/skills/backlog-maintenance):
   1. Epic vs FEAT checkbox lines mirror 1:1 (task ID, size, wording).
   2. ADR files are sequential adr-NNNN-* and use the standard sections.
   3. Relative markdown links resolve to existing files.
+  4. Every resolved PLAN.md §11 question links to an existing ADR file;
+     docs/adr/TEMPLATE.md exists (TASK-00-004).
 
 Exit 0 = clean, 1 = problems found. Deterministic, stdlib only.
 """
@@ -103,10 +105,43 @@ def check_links() -> None:
                     err(f"{md}:{i}: broken link `{target}`")
 
 
+def check_plan11_adr_links() -> None:
+    """TASK-00-004: PLAN §11 resolved questions must cite existing ADRs."""
+    adr_dir = ROOT / "docs" / "adr"
+    if not (adr_dir / "TEMPLATE.md").exists():
+        err("docs/adr/TEMPLATE.md: missing ADR template")
+    plan = ROOT / "docs" / "PLAN.md"
+    if not plan.exists():
+        err("docs/PLAN.md: missing")
+        return
+    lines = plan.read_text(encoding="utf-8").splitlines()
+    start = next((i for i, l in enumerate(lines) if re.match(r"^## 11\. Open questions", l)), None)
+    if start is None:
+        err("docs/PLAN.md: no '## 11. Open questions' section")
+        return
+    end = next((i for i in range(start + 1, len(lines)) if re.match(r"^## \d+\.", lines[i])), len(lines))
+    for i in range(start + 1, end):
+        line = lines[i]
+        if not re.match(r"^\d+\.\s+~~", line):  # resolved questions have struck-through titles
+            continue
+        adr_links = [
+            t.split("#")[0]
+            for t in LINK_RE.findall(line)
+            if re.search(r"adr-\d{4}-.+\.md$", t.split("#")[0])
+        ]
+        if not adr_links:
+            err(f"docs/PLAN.md:{i + 1}: resolved §11 question has no ADR link")
+            continue
+        for t in adr_links:
+            if not (plan.parent / t).exists():
+                err(f"docs/PLAN.md:{i + 1}: broken ADR link `{t}`")
+
+
 def main() -> int:
     check_backlog_mirror()
     check_adrs()
     check_links()
+    check_plan11_adr_links()
     if problems:
         print(f"docs-lint: {len(problems)} problem(s)")
         for p in problems:

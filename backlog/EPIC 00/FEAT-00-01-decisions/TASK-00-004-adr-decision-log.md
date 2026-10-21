@@ -19,5 +19,5 @@ Establish the decision-log format (ADR-style) in `docs/adr/` and seed it with th
 
 ## Acceptance criteria
 - [x] 00-004: `docs/adr/` exists with ADR template + seeded ADRs for 00-001..00-003 (and the name decision from §11 Q3). Seeded through Q8: adr-0001…0009.
-- [ ] PLAN.md §11 links each decision to its ADR.
-- [ ] New decisions can be written up from the template alone.
+- [x] PLAN.md §11 links each decision to its ADR. Done 2026-10-21: Q1–Q8 each link their ADR (adr-0002…0009); enforced by `tools/docs_lint.py`.
+- [x] New decisions can be written up from the template alone. Done 2026-10-21: [docs/adr/TEMPLATE.md](../../../docs/adr/TEMPLATE.md) with how-to notes; template existence + §11 links are docs-lint checks (TDD: check added first, watched fail, then fixed).
