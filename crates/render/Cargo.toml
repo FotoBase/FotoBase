@@ -6,15 +6,28 @@ license.workspace = true
 repository.workspace = true
 description = "Decode, recipe ops, thumbnail pipeline"
 
+[features]
+# HEIC/AVIF via libheif-rs (PLAN §4). Default-on; on Windows the dependency
+# is target-gated out until a vcpkg-based CI/packaging leg lands (recorded in
+# TASK-01-012) — the dispatch table then reports HEIC/AVIF as unsupported.
+default = ["heif"]
+heif = ["dep:libheif-rs"]
+
 [dependencies]
 fotobase-jobs = { path = "../jobs" }
 tracing.workspace = true
 thiserror.workspace = true
 zune-jpeg = "0.4"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "tiff", "webp"] }
 fast_image_resize = "5"
 sha2 = "0.10"
 tokio = { version = "1", features = ["rt"] }
+
+# libheif-rs builds an embedded libheif (static) on non-Windows targets, so
+# decode needs no system libheif — only the codec plugins it links against
+# (libde265 for HEIC/HEVC, dav1d/aom for AVIF) must be installed.
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+libheif-rs = { version = "3", default-features = false, features = ["embedded-libheif", "v1_17"], optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
