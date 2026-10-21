@@ -1,6 +1,6 @@
 # task: support JPEG/PNG/GIF/BMP/TIFF/WebP/HEIC/AVIF decoders
 
-**Feature:** [FEAT-01-03-job-queue-thumbnails](FEAT-01-03-job-queue-thumbnails.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-21)
+**Feature:** [FEAT-01-03-job-queue-thumbnails](FEAT-01-03-job-queue-thumbnails.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Wire format support per PLAN §2A/§4: JPEG, PNG, GIF, BMP, TIFF, WebP decoded via zune-jpeg/`image`; HEIC and AVIF via `libheif-rs`; PSD thumbnails only if cheap. All produce correct thumbnails through the 01-010 pipeline.
