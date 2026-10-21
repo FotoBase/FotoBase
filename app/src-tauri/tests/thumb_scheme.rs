@@ -139,12 +139,13 @@ fn unreadable_cache_entry_degrades_to_placeholder() {
     thumbnail(&src, &cache, ThumbOptions::default()).unwrap();
     let hash = cache_key(&src);
 
-    // Make the cached file unreadable to exercise the IO-error path.
+    // Make the cached entry present but unreadable, portably: a directory
+    // where the file belongs. `fs::read` then fails on every OS (EISDIR on
+    // Unix, ERROR_ACCESS_DENIED on Windows) — the IO-error path, not the
+    // plain miss path.
     let entry = cache.join(format!("{hash}.jpg"));
-    let mut perms = std::fs::metadata(&entry).unwrap().permissions();
-    use std::os::unix::fs::PermissionsExt;
-    perms.set_mode(0o000);
-    std::fs::set_permissions(&entry, perms).unwrap();
+    std::fs::remove_file(&entry).unwrap();
+    std::fs::create_dir(&entry).unwrap();
 
     let reply = resolve_thumb(&hash, &cache);
     assert_eq!(reply.status, 200);
