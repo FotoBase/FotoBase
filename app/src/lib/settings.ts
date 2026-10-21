@@ -41,3 +41,35 @@ export async function clearCache(): Promise<number> {
   const { invoke } = await import("@tauri-apps/api/core");
   return await invoke<number>("clear_cache");
 }
+
+// Rebuild catalog (TASK-01-023, PLAN §5): explicit full re-scan of every
+// watched folder. Progress streams on the `rebuild-progress` event while
+// the command runs in the background job queue; the invoke promise resolves
+// with the final report.
+export interface RebuildProgress {
+  folders_done: number;
+  folders_total: number;
+  files_done: number;
+  current_folder: string;
+}
+
+export interface RebuildReport {
+  added: number;
+  updated: number;
+  skipped: number;
+  removed: number;
+  cancelled: boolean;
+}
+
+export async function rebuildCatalog(): Promise<RebuildReport> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return await invoke<RebuildReport>("rebuild_catalog");
+}
+
+/** Subscribe to rebuild progress; returns the unlisten function. */
+export async function onRebuildProgress(
+  cb: (p: RebuildProgress) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return await listen<RebuildProgress>("rebuild-progress", (e) => cb(e.payload));
+}

@@ -25,6 +25,12 @@ const messages: Record<string, Dict> = {
     "options.clearCache": "Clear cache files",
     "options.clearCache.done": "Removed {n} cached files",
     "options.clearCache.failed": "Clearing the cache failed: {error}",
+    "options.rebuildCatalog": "Rebuild catalog",
+    "options.rebuildCatalog.running":
+      "Rebuilding… folder {done}/{total} — {files} files",
+    "options.rebuildCatalog.done":
+      "Rebuilt: {added} added, {updated} updated, {removed} removed",
+    "options.rebuildCatalog.failed": "Rebuilding the catalog failed: {error}",
     "options.showTooltips": "Show tooltips",
     "options.close": "Close",
   },
@@ -46,6 +52,13 @@ const messages: Record<string, Dict> = {
     "options.clearCache": "Cache-Dateien löschen",
     "options.clearCache.done": "{n} Cache-Dateien entfernt",
     "options.clearCache.failed": "Leeren des Caches fehlgeschlagen: {error}",
+    "options.rebuildCatalog": "Katalog neu aufbauen",
+    "options.rebuildCatalog.running":
+      "Neuaufbau… Ordner {done}/{total} — {files} Dateien",
+    "options.rebuildCatalog.done":
+      "Neu aufgebaut: {added} neu, {updated} aktualisiert, {removed} entfernt",
+    "options.rebuildCatalog.failed":
+      "Neuaufbau des Katalogs fehlgeschlagen: {error}",
     "options.showTooltips": "Tooltips anzeigen",
     "options.close": "Schließen",
   },

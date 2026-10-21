@@ -46,7 +46,7 @@
 ## feat: options & platform polish
 
 - [x] `01-022` (M) Options dialog (General): language, automatic updates (auto/check-but-ask/off), clear cache files, show tooltips.
-- [ ] `01-023` (M) Rebuild catalog command (from watched folders; progress-reported).
+- [x] `01-023` (M) Rebuild catalog command (from watched folders; progress-reported).
 - [ ] `01-024` (M) Dark mode + HiDPI on all three OSes; keyboard shortcuts for core flows.
 - [ ] `01-025` (S) File-association option: register as default viewer for image types (P1 scope: registration only, viewer exists via 01-019).
 

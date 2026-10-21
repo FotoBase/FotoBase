@@ -34,6 +34,26 @@ pub struct ScanReport {
     pub cancelled: bool,
 }
 
+/// Walk position reported through the [`scan_folder_with`] progress
+/// callback (TASK-01-023). Counts are cumulative for the current scan call.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ScanProgress {
+    pub dirs_seen: usize,
+    pub files_seen: usize,
+}
+
+/// Scan behavior knobs.
+///
+/// Default is the incremental scan (PLAN §5): files whose (mtime, size) is
+/// unchanged are skipped without being re-read. `full: true` disables that
+/// skip — the explicit, progress-reported rebuild path (PLAN §5: "a full
+/// rebuild is an explicit, progress-reported maintenance action"); every
+/// media file is re-upserted so derived columns are repopulated.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ScanOptions {
+    pub full: bool,
+}
+
 /// Extensions the scanner catalogues. Everything else (sidecars, txt…) is
 /// ignored; media_type is `image` or `video` per the catalog schema.
 const IMAGE_EXTS: &[&str] = &[
@@ -69,6 +89,18 @@ struct WalkedFile {
 /// files and directories that vanished, and stamps `last_scan_at` on the root.
 /// All writes happen in one transaction: a crash mid-scan rolls back cleanly.
 pub fn scan_folder(catalog: &mut Catalog, root: &Path, cancel: &AtomicBool) -> Result<ScanReport> {
+    scan_folder_with(catalog, root, cancel, &ScanOptions::default(), &|_| {})
+}
+
+/// [`scan_folder`] with explicit options and a progress callback. The
+/// callback fires once per directory entered, with cumulative counts.
+pub fn scan_folder_with(
+    catalog: &mut Catalog,
+    root: &Path,
+    cancel: &AtomicBool,
+    options: &ScanOptions,
+    progress: &dyn Fn(ScanProgress),
+) -> Result<ScanReport> {
     if cancel.load(Ordering::Relaxed) {
         return Ok(ScanReport { cancelled: true, ..ScanReport::default() });
     }
@@ -77,10 +109,16 @@ pub fn scan_folder(catalog: &mut Catalog, root: &Path, cancel: &AtomicBool) -> R
     let mut dirs = Vec::new();
     let mut files = Vec::new();
     let mut cancelled = false;
-    walk_dir(root, &mut dirs, &mut files, cancel, &mut cancelled);
+    walk_dir(root, &mut dirs, &mut files, cancel, &mut cancelled, progress);
+    // Per-directory callbacks fire on entry, before that directory's files
+    // are pushed; close with the final walk totals so the last report is
+    // complete.
+    if !cancelled {
+        progress(ScanProgress { dirs_seen: dirs.len(), files_seen: files.len() });
+    }
 
     catalog.begin_uncommitted_batch()?;
-    let result = scan_inner(catalog, root, &dirs, &files);
+    let result = scan_inner(catalog, root, &dirs, &files, options.full);
     match result {
         Ok(report) => {
             catalog.commit_batch()?;
@@ -98,6 +136,7 @@ fn scan_inner(
     root: &Path,
     dirs: &[PathBuf],
     files: &[WalkedFile],
+    full: bool,
 ) -> Result<ScanReport> {
     let root_str = root.to_string_lossy().into_owned();
     catalog.seed_folder(&root_str)?;
@@ -113,7 +152,9 @@ fn scan_inner(
 
     for f in files {
         match existing.get(f.path.as_str()) {
-            Some((size, mtime)) if *size == f.size && *mtime == f.mtime => report.skipped += 1,
+            Some((size, mtime)) if !full && *size == f.size && *mtime == f.mtime => {
+                report.skipped += 1
+            }
             Some(_) => {
                 upsert_file(catalog, f)?;
                 report.updated += 1;
@@ -153,12 +194,14 @@ fn walk_dir(
     files: &mut Vec<WalkedFile>,
     cancel: &AtomicBool,
     cancelled: &mut bool,
+    progress: &dyn Fn(ScanProgress),
 ) {
     if *cancelled || cancel.load(Ordering::Relaxed) {
         *cancelled = true;
         return;
     }
     dirs.push(dir.to_path_buf());
+    progress(ScanProgress { dirs_seen: dirs.len(), files_seen: files.len() });
 
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
@@ -199,7 +242,7 @@ fn walk_dir(
     }
 
     for sub in subdirs {
-        walk_dir(&sub, dirs, files, cancel, cancelled);
+        walk_dir(&sub, dirs, files, cancel, cancelled, progress);
     }
 }
 

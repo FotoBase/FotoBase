@@ -978,6 +978,7 @@ dependencies = [
  "fotobase-catalog",
  "fotobase-jobs",
  "fotobase-render",
+ "fotobase-scanner",
  "image",
  "minisign-verify 0.2.5",
  "rusqlite",

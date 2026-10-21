@@ -12,6 +12,7 @@ use serde::Serialize;
 use tauri::Manager;
 use tauri_plugin_updater::UpdaterExt;
 
+pub mod rebuild;
 pub mod settings;
 pub mod thumb;
 
@@ -20,6 +21,10 @@ pub const CRATE_NAME: &str = "fotobase";
 
 /// Capacity of the thumbnail render queue: bounded, per PLAN §3 rule 4.
 const THUMB_QUEUE_CAPACITY: usize = 64;
+
+/// Capacity of the rebuild queue: bounded, per PLAN §3 rule 4. Rebuilds
+/// coalesce on one key, so capacity 2 covers a queued + a running rebuild.
+const REBUILD_QUEUE_CAPACITY: usize = 2;
 
 /// Lazily-opened catalog shared by IPC commands (TASK-01-008). The catalog is
 /// a rebuildable cache (PLAN §5); nothing here writes user data.
@@ -32,6 +37,9 @@ struct AppState {
     cache_dir: PathBuf,
     /// Bounded queue for cache-miss thumbnail renders (TASK-01-011).
     thumbs: fotobase_jobs::Queue<thumb::ThumbOutcome>,
+    /// Bounded queue for the rebuild-catalog job (TASK-01-023); one key,
+    /// so concurrent requests coalesce onto the running rebuild.
+    rebuilds: fotobase_jobs::Queue<rebuild::RebuildReport>,
     /// Options-dialog settings (TASK-01-022); mirrored in settings.json.
     settings: Mutex<settings::Settings>,
     /// Update feed artifact found by the last check, awaiting the user's
@@ -116,6 +124,44 @@ async fn clear_cache(state: tauri::State<'_, AppState>) -> Result<u64, String> {
     let cache_dir = state.cache_dir.clone();
     let queue = state.thumbs.clone();
     thumb::clear_thumbnail_cache(&cache_dir, &queue).await.map_err(|e| format!("clear cache: {e}"))
+}
+
+/// "Rebuild catalog" (TASK-01-023, PLAN §2L, §5): full re-scan of every
+/// watched folder with the incremental skip disabled, repopulating derived
+/// rows. Heavy work runs in the bounded job queue (§3 rule 4) on a blocking
+/// thread, so the UI stays responsive; progress streams on the
+/// `rebuild-progress` event. Concurrent requests coalesce onto the running
+/// rebuild instead of stacking a second one.
+#[tauri::command]
+async fn rebuild_catalog(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<rebuild::RebuildReport, String> {
+    let queue = state.rebuilds.clone();
+    let job_app = app.clone();
+    let handle = queue
+        .try_enqueue(
+            "rebuild",
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |_ctx| {
+                let app = job_app.clone();
+                async move {
+                    let joined =
+                        tauri::async_runtime::spawn_blocking(move || rebuild::run(&app)).await;
+                    match joined {
+                        Ok(Ok(report)) => fotobase_jobs::Outcome::Done(report),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("rebuild task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue rebuild: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("rebuild cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
 }
 
 /// What an update check reports back to the UI.
@@ -231,6 +277,9 @@ pub fn run() {
             let thumbs = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(THUMB_QUEUE_CAPACITY)
             });
+            let rebuilds = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(REBUILD_QUEUE_CAPACITY)
+            });
             let persisted = settings::Settings::load(&data_dir);
             app.manage(AppState {
                 data_dir: data_dir.clone(),
@@ -238,6 +287,7 @@ pub fn run() {
                 catalog: Mutex::new(None),
                 cache_dir,
                 thumbs,
+                rebuilds,
                 settings: Mutex::new(persisted),
                 pending_update: Mutex::new(None),
             });
@@ -249,6 +299,7 @@ pub fn run() {
             get_settings,
             set_settings,
             clear_cache,
+            rebuild_catalog,
             check_for_updates,
             install_pending_update
         ])

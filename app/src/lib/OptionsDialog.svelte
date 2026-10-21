@@ -3,7 +3,14 @@
   // persisted immediately through `set_settings`; the language change also
   // flips the i18n locale live.
   import { t, setLocale, locales } from "./i18n.svelte.js";
-  import { clearCache, saveSettings, UPDATE_MODES, type Settings } from "./settings";
+  import {
+    clearCache,
+    onRebuildProgress,
+    rebuildCatalog,
+    saveSettings,
+    UPDATE_MODES,
+    type Settings,
+  } from "./settings";
 
   let {
     open = $bindable(false),
@@ -40,6 +47,41 @@
       clearResult = t("options.clearCache.done", { n: removed });
     } catch (e) {
       clearResult = t("options.clearCache.failed", { error: String(e) });
+    }
+  }
+
+  // Rebuild catalog (TASK-01-023): the command runs in the background job
+  // queue; progress arrives as `rebuild-progress` events. Subscribe before
+  // invoking so no early event is missed, and unsubscribe when done.
+  let rebuilding = $state(false);
+  let rebuildProgress = $state<string | null>(null);
+  let rebuildResult = $state<string | null>(null);
+
+  async function onRebuildCatalog(): Promise<void> {
+    rebuildResult = null;
+    rebuildProgress = null;
+    rebuilding = true;
+    let unlisten: (() => void) | null = null;
+    try {
+      unlisten = await onRebuildProgress((p) => {
+        rebuildProgress = t("options.rebuildCatalog.running", {
+          done: p.folders_done,
+          total: p.folders_total,
+          files: p.files_done,
+        });
+      });
+      const report = await rebuildCatalog();
+      rebuildResult = t("options.rebuildCatalog.done", {
+        added: report.added,
+        updated: report.updated,
+        removed: report.removed,
+      });
+    } catch (e) {
+      rebuildResult = t("options.rebuildCatalog.failed", { error: String(e) });
+    } finally {
+      unlisten?.();
+      rebuilding = false;
+      rebuildProgress = null;
     }
   }
 </script>
@@ -88,6 +130,23 @@
           </button>
           {#if clearResult}
             <span class="clear-result" data-testid="clear-cache-result">{clearResult}</span>
+          {/if}
+        </div>
+
+        <div class="options-row">
+          <button
+            type="button"
+            onclick={onRebuildCatalog}
+            disabled={rebuilding}
+            data-testid="rebuild-catalog"
+          >
+            {t("options.rebuildCatalog")}
+          </button>
+          {#if rebuildProgress}
+            <span class="clear-result" data-testid="rebuild-progress">{rebuildProgress}</span>
+          {/if}
+          {#if rebuildResult}
+            <span class="clear-result" data-testid="rebuild-result">{rebuildResult}</span>
           {/if}
         </div>
 
