@@ -1,6 +1,6 @@
 # task: implement thumb:// uri scheme handler
 
-**Feature:** [FEAT-01-03-job-queue-thumbnails](FEAT-01-03-job-queue-thumbnails.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-21)
+**Feature:** [FEAT-01-03-job-queue-thumbnails](FEAT-01-03-job-queue-thumbnails.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement the custom Tauri URI scheme (PLAN §3 rule 3): `thumb://` serves cached thumbnails to the WebView directly from disk — zero image bytes cross IPC.
