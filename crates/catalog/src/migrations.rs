@@ -6,7 +6,7 @@
 //! rejected (`CatalogError::NewerSchema`) — we never downgrade.
 
 /// Ordered migration SQL. Index 0 upgrades a version-0 database to version 1.
-pub const MIGRATIONS: &[&str] = &[MIGRATION_V1];
+pub const MIGRATIONS: &[&str] = &[MIGRATION_V1, MIGRATION_V2];
 
 const MIGRATION_V1: &str = "
 CREATE TABLE folders (
@@ -77,6 +77,28 @@ CREATE TABLE album_files (
 );
 
 CREATE VIRTUAL TABLE files_fts USING fts5(filename, folder);
+";
+
+/// TASK-01-008: keep `files_fts` in sync with `files` via triggers (rowid =
+/// files.id), and backfill the index for rows that pre-date this migration.
+const MIGRATION_V2: &str = "
+CREATE TRIGGER files_fts_insert AFTER INSERT ON files BEGIN
+    INSERT INTO files_fts(rowid, filename, folder)
+    VALUES (NEW.id, NEW.filename, (SELECT path FROM folders WHERE id = NEW.folder_id));
+END;
+
+CREATE TRIGGER files_fts_delete AFTER DELETE ON files BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.id;
+END;
+
+CREATE TRIGGER files_fts_update AFTER UPDATE ON files BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.id;
+    INSERT INTO files_fts(rowid, filename, folder)
+    VALUES (NEW.id, NEW.filename, (SELECT path FROM folders WHERE id = NEW.folder_id));
+END;
+
+INSERT INTO files_fts(rowid, filename, folder)
+    SELECT f.id, f.filename, d.path FROM files f JOIN folders d ON d.id = f.folder_id;
 ";
 
 use rusqlite::Connection;

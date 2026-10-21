@@ -1,6 +1,6 @@
 # task: add FTS5 live search over filenames and folders
 
-**Feature:** [FEAT-01-02-catalog-scanning](FEAT-01-02-catalog-scanning.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-02-catalog-scanning](FEAT-01-02-catalog-scanning.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement FTS5 full-text search over filename + folder name (PLAN §5 `files_fts`, P1 scope per §2C: live search filters filenames/folders; metadata search arrives in P2) with a query API the UI can call as you type.
@@ -19,4 +19,4 @@ Implement FTS5 full-text search over filename + folder name (PLAN §5 `files_fts
 - Integration: scan a new file ⇒ it is immediately searchable.
 
 ## Acceptance criteria
-- [ ] 01-008: FTS5 over filename + folder name with a live query API, kept in sync with scans.
+- [x] 01-008: FTS5 over filename + folder name with a live query API, kept in sync with scans.
