@@ -1,6 +1,6 @@
 ---
 name: implement-task
-description: Implement a backlog task (TASK-NN-MMM) test-first, following its spec sections, PLAN refs, and ADRs, then sync the backlog checkboxes and the GitHub issue status (in progress → in review). Use when asked to implement, start, or complete a specific backlog task, task ID, or GitHub task URL.
+description: Implement a backlog task (TASK-NN-MMM) test-first, following its spec sections, PLAN refs, and ADRs, then sync the backlog checkboxes, set the GitHub issue status (in progress → in review), and link the opened PR to the task issue. Use when asked to implement, start, or complete a specific backlog task, task ID, or GitHub task URL.
 ---
 
 # Implement a backlog task
@@ -22,16 +22,16 @@ If `--ff-only` fails (local main has diverged), stop and report instead of mergi
 - From a task ID (`NN-MMM`): locate `backlog/EPIC NN/FEAT-NN-MM-name/TASK-NN-MMM-slug.md` directly. Find the mirrored issue with `gh issue list --search "<NN-MMM>" --json number,title` (JSON output only, same pager rule); if there is no matching issue, skip the issue syncs in steps 2 and 6 and say so.
 - Read the TASK file completely. Note the `Feature`/`Epic` links and every PLAN §ref and ADR citation; read those sections before writing code.
 
-## 2. Set status: in progress
+## 2. Set the GitHub issue status to `in progress`
 
-The TASK file is the source of truth; the issue body is its mirror (links flattened + import footer). Never hand-edit an issue body — regenerate it:
+Starting work on a task means its GitHub issue shows `in progress` before any code is written. The TASK file is the source of truth; the issue body is its mirror (links flattened + import footer). Never hand-edit an issue body — regenerate it:
 
 ```
 python3 tools/issue_body.py "<repo-relative task path>" > /tmp/issue-body.md
 gh issue edit <n> --body-file /tmp/issue-body.md
 ```
 
-- Edit the task's `**Status:**` line to `in progress (<today's date>)`, then run the two commands above.
+- Edit the task's `**Status:**` line to `in progress (<today's date>)`, then run the two commands above. This is what actually publishes the status to GitHub — editing the TASK file alone does nothing to the issue.
 - Completion criterion: `python3 tools/issues_sync_check.py` reports `0 stale` (this also confirms the regenerated body is byte-exact), and the issue body's Status line reads `in progress`.
 
 ## 3. Pre-flight
@@ -54,9 +54,11 @@ gh issue edit <n> --body-file /tmp/issue-body.md
 - Check every bullet in the task's **Acceptance criteria** section against what was built; report each as met/not met with evidence.
 - If the task has perf implications, note that the `perf-acceptance` skill applies.
 
-## 6. Close the loop: in review
+## 6. Close the loop: open the PR, then set `in review`
 
 - Check off the task's checkbox in BOTH the epic file and the FEAT file (they are mirrored 1:1), and the task's own acceptance-criteria boxes.
+- Open the PR from the branch created in step 3 (`feat/<task-id>-slug`) FIRST, so the status flip lands on an issue that already shows the PR:
+  - Conventional commit title with the task ID, link the task file path, `Task: NN-MMM` footer in the commit message.
+  - The PR body MUST contain `Closes #<n>` — that closing keyword is what makes GitHub link the PR to the task issue (Development section + issue timeline). A bare `Refs #<n>` does NOT create that link. Merging the PR then closes the issue and sets `done` in one step; don't try to link the PR after the fact with issue edits.
 - Set the `**Status:**` line to `in review (<today's date>)` and resync the issue with the two step-2 commands. `done` is set at PR merge, not here.
-- Open the PR from the branch created in step 3 (`feat/<task-id>-slug`): link the task file and `Refs #<n>` (leave `Closes #<n>` for the merge), conventional commit with `Task: NN-MMM` footer.
 - If you had to make a spec-level decision not covered by PLAN or an ADR, say so in the PR and suggest whether it warrants an ADR.
