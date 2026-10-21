@@ -32,11 +32,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # 00-003 floors (ADR-0005): Win 10 22H2+, macOS 12+, Ubuntu 22.04+.
+          # ubuntu-22.04 = the floor (WebKitGTK 2.40 era; the perf protocol
+          # pins the same runner). No macOS 12/13 or Win10 client runner exists;
+          # use the oldest GA images and enforce client floors at bundler level
+          # (TASK-01-003). macos-15-intel = native x64 leg.
+          - os: ubuntu-22.04
           - os: windows-latest
-          - os: macos-latest  # arm64 (Apple Silicon floor, ADR-0005)
-          - os: macos-latest  # x64 (Intel floor): cross + Rosetta
-            target: x86_64-apple-darwin
+          - os: macos-15  # arm64
+          - os: macos-15-intel  # x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -59,20 +63,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-          targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target || 'default' }}
 
       - name: cargo clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: cargo test
-        run: >
-          cargo test --workspace
-          ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
-        shell: bash
+        run: cargo test --workspace
 
   frontend:
     runs-on: ubuntu-latest
