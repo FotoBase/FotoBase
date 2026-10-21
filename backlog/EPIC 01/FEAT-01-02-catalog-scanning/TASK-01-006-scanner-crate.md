@@ -1,6 +1,6 @@
 # task: build scanner crate — walk, change detection, initial scan
 
-**Feature:** [FEAT-01-02-catalog-scanning](FEAT-01-02-catalog-scanning.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-02-catalog-scanning](FEAT-01-02-catalog-scanning.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement the `scanner` crate per PLAN §3/§5: folder walk over watched folders, mtime+size change detection, initial scan populating the catalog, incremental by default (§5: full rebuilds are explicit maintenance actions).
@@ -19,4 +19,4 @@ Implement the `scanner` crate per PLAN §3/§5: folder walk over watched folders
 - Integration: touch/modify/delete a file between scans ⇒ exactly that file is updated/removed.
 
 ## Acceptance criteria
-- [ ] 01-006: `scanner` crate walks folders, detects changes by mtime+size, populates catalog on initial scan, incremental by default.
+- [x] 01-006: `scanner` crate walks folders, detects changes by mtime+size, populates catalog on initial scan, incremental by default.
