@@ -72,12 +72,35 @@ fn search_files(
     with_catalog(&state, |cat| cat.search_files(&query, limit.unwrap_or(200)))
 }
 
+/// The library grid's items (TASK-01-013, PLAN §4): id + filename + content
+/// hash. The hash is what the grid turns into a `thumb://` URI — pixels are
+/// fetched by the WebView from the disk cache through the scheme handler,
+/// never over IPC.
+#[tauri::command]
+fn list_files(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::FileInfo>, String> {
+    with_catalog(&state, |cat| cat.list_files(usize::MAX))
+}
+
+/// Visible-range reporting (TASK-01-013, PLAN §3 rule 4): the grid sends the
+/// hashes currently on screen (debounced); those thumbnails' queued render
+/// jobs are bumped to visible-first priority. Malformed hashes are ignored —
+/// they can never name a cache entry. Returns how many queued jobs moved.
+#[tauri::command]
+fn prioritize_visible(hashes: Vec<String>, state: tauri::State<'_, AppState>) -> usize {
+    hashes
+        .iter()
+        .filter(|h| thumb::is_cache_key(h))
+        .filter(|h| state.thumbs.reprioritize(h.as_str(), fotobase_jobs::Priority::Visible))
+        .count()
+}
+
 /// `thumb://` scheme handler (TASK-01-011, PLAN §3 rule 3): serves cached
 /// thumbnails from the disk cache to the WebView — zero image bytes cross
 /// IPC. A cache miss returns the placeholder image and triggers a render job
 /// in the bounded queue; it is never an error dialog.
 const THUMB_PROTOCOL: &str = "thumb";
-
 fn thumb_response(reply: thumb::ThumbReply) -> tauri::http::Response<Vec<u8>> {
     tauri::http::Response::builder()
         .status(reply.status)
@@ -296,6 +319,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ping,
             search_files,
+            list_files,
+            prioritize_visible,
             get_settings,
             set_settings,
             clear_cache,

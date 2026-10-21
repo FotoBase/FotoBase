@@ -33,6 +33,7 @@ const messages: Record<string, Dict> = {
     "options.rebuildCatalog.failed": "Rebuilding the catalog failed: {error}",
     "options.showTooltips": "Show tooltips",
     "options.close": "Close",
+    "grid.zoom": "Thumbnail size",
   },
   de: {
     "app.title": "Fotobase",
@@ -61,6 +62,7 @@ const messages: Record<string, Dict> = {
       "Neuaufbau des Katalogs fehlgeschlagen: {error}",
     "options.showTooltips": "Tooltips anzeigen",
     "options.close": "Schließen",
+    "grid.zoom": "Vorschaugröße",
   },
 };
 

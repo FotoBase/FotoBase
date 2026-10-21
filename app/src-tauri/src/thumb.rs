@@ -63,8 +63,9 @@ pub fn hash_from_uri(uri: &Uri) -> Option<String> {
     is_cache_key(candidate).then(|| candidate.to_string())
 }
 
-/// A well-formed cache key: exactly 32 lowercase hex chars.
-fn is_cache_key(s: &str) -> bool {
+/// A well-formed cache key: exactly 32 lowercase hex chars. Public so the
+/// IPC commands can apply the same guard before touching the queue.
+pub fn is_cache_key(s: &str) -> bool {
     s.len() == 32 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
@@ -170,5 +171,15 @@ mod tests {
     fn placeholder_is_a_nonempty_png() {
         assert!(super::PLACEHOLDER_PNG.starts_with(&[0x89, b'P', b'N', b'G']));
         assert!(!super::PLACEHOLDER_PNG.is_empty());
+    }
+
+    #[test]
+    fn cache_key_shape_is_strict() {
+        let valid = "a".repeat(32);
+        assert!(super::is_cache_key(&valid));
+        assert!(!super::is_cache_key(&valid.to_uppercase()));
+        assert!(!super::is_cache_key("../etc/passwd"));
+        assert!(!super::is_cache_key(&"a".repeat(31)));
+        assert!(!super::is_cache_key(&"a".repeat(33)));
     }
 }

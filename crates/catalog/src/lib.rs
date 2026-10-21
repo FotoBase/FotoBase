@@ -36,6 +36,15 @@ pub enum CatalogError {
 
 pub type Result<T> = std::result::Result<T, CatalogError>;
 
+/// One library-grid item (TASK-01-013): stable id, display name and the
+/// content hash backing the `thumb://` URI (`None` until computed).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct FileInfo {
+    pub id: i64,
+    pub filename: String,
+    pub hash: Option<String>,
+}
+
 #[derive(Debug)]
 pub struct Catalog {
     conn: Connection,
@@ -234,6 +243,21 @@ impl Catalog {
         )?;
         let ids = stmt.query_map(rusqlite::params![expr, limit as i64], |r| r.get(0))?;
         Ok(ids.flatten().collect())
+    }
+
+    /// The library grid's item list (TASK-01-013, PLAN §4): id, filename and
+    /// content hash, path-ordered. The hash is the `thumb://` cache key; a
+    /// `None` hash (not yet computed) still lists, so the UI shows the
+    /// placeholder instead of dropping the photo. No image bytes here — the
+    /// grid fetches pixels through the URI scheme, never over IPC.
+    pub fn list_files(&self, limit: usize) -> Result<Vec<FileInfo>> {
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT id, filename, hash FROM files ORDER BY path LIMIT ?1")?;
+        let rows = stmt.query_map([limit as i64], |r| {
+            Ok(FileInfo { id: r.get(0)?, filename: r.get(1)?, hash: r.get(2)? })
+        })?;
+        Ok(rows.flatten().collect())
     }
 }
 

@@ -10,6 +10,7 @@ description = "SQLite catalog: schema, migrations, queries, FTS (rebuildable cac
 rusqlite = { version = "0.32", features = ["bundled"] }
 tracing.workspace = true
 thiserror.workspace = true
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3"
