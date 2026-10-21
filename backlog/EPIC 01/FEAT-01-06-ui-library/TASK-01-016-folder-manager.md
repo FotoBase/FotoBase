@@ -1,6 +1,6 @@
 # task: build folder manager dialog
 
-**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-21)
+**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement the Folder Manager dialog per PLAN §2A (Picasa's Folder Manager): per folder Scan Once / Scan Always / Remove from catalog, driving the scanner (01-006) and watcher (01-007). The library mirrors real disk folders; nothing is copied.
