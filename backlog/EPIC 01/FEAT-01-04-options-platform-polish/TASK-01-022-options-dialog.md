@@ -1,6 +1,6 @@
 # task: build options dialog (general tab)
 
-**Feature:** [FEAT-01-04-options-platform-polish](FEAT-01-04-options-platform-polish.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-21)
+**Feature:** [FEAT-01-04-options-platform-polish](FEAT-01-04-options-platform-polish.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement the Options dialog General tab per PLAN §2 Options inventory / §6 P1 deliverables: language, automatic updates (auto / check-but-ask / off), clear cache files, show tooltips. All settings persist.
