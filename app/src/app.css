@@ -78,3 +78,95 @@ main {
   height: 100%;
   background: repeating-linear-gradient(45deg, #2a2a2a, #2a2a2a 8px, #303030 8px, #303030 16px);
 }
+
+/* Folders view + grid (TASK-01-015) */
+.library {
+  display: flex;
+  align-items: stretch;
+  gap: 1rem;
+  min-height: 0;
+}
+
+.folder-tree {
+  flex: 0 0 14rem;
+  max-height: 80vh;
+  overflow: auto;
+  text-align: left;
+  border-right: 1px solid #333;
+  padding-right: 0.75rem;
+}
+
+.folder-tree h3 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.85rem;
+  color: #9a9a9a;
+}
+
+.folder-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.folder-tree button {
+  display: block;
+  width: 100%;
+  padding: 0.2rem 0.4rem;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.folder-tree button:hover {
+  background: #2a2a2a;
+}
+
+.folder-tree button[aria-pressed="true"] {
+  background: var(--fb-accent);
+  color: #101010;
+}
+
+.grid-area {
+  flex: 1;
+  min-width: 0;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  min-width: 12rem;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 0.35rem 0.75rem;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu button:hover:not(:disabled) {
+  background: #3a3a3a;
+}
+
+.context-menu button:disabled {
+  color: #777;
+  cursor: default;
+}

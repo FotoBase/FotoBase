@@ -1,6 +1,6 @@
 # task: build folder tree with selection and context menu
 
-**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement the library folder tree per PLAN §2B ("Folders view: real on-disk folder tree, grouped by year") with working selection state and a context-menu skeleton that P2 commands will fill in.
@@ -19,4 +19,4 @@ Implement the library folder tree per PLAN §2B ("Folders view: real on-disk fol
 - E2E: click a folder ⇒ grid shows only its photos; context menu opens with the P1 commands enabled.
 
 ## Acceptance criteria
-- [ ] 01-015: Folder tree grouped by year, selection filters the grid, context-menu skeleton with P1 commands.
+- [x] 01-015: Folder tree grouped by year, selection filters the grid, context-menu skeleton with P1 commands.
