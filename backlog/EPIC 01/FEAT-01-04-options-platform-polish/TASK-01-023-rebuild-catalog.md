@@ -1,6 +1,6 @@
 # task: add rebuild catalog command with progress
 
-**Feature:** [FEAT-01-04-options-platform-polish](FEAT-01-04-options-platform-polish.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-21)
+**Feature:** [FEAT-01-04-options-platform-polish](FEAT-01-04-options-platform-polish.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement the Rebuild catalog command (PLAN §2L "Rebuild cache/database", §5 corruption recovery): re-scan watched folders and repopulate the catalog, with a progress indicator and a responsive UI throughout. The catalog is a rebuildable cache — user data lives in sidecars.
