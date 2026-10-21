@@ -1,6 +1,6 @@
 # task: add notify watcher for scan-always folders
 
-**Feature:** [FEAT-01-02-catalog-scanning](FEAT-01-02-catalog-scanning.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-21)
+**Feature:** [FEAT-01-02-catalog-scanning](FEAT-01-02-catalog-scanning.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement the `notify`-based watcher (PLAN §4) for "Scan Always" folders (§2A): file events are debounced and fed into the job queue so new/changed/deleted files are picked up live. Local folders only in P1 — network paths get a polling watcher in P1.5 (§4).
