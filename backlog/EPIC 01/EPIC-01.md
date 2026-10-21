@@ -19,7 +19,7 @@
 - [x] `01-005` (M) `catalog` crate: SQLite schema (§5 tables minus AI ones), migrations, WAL, startup `integrity_check`, rolling backups.
 - [x] `01-006` (M) `scanner` crate: folder walk, mtime+size change detection, initial scan populating catalog; incremental by default.
 - [x] `01-007` (M) `notify` watcher for "Scan Always" folders; watcher events debounced into the job queue.
-- [ ] `01-008` (M) FTS5 over filename + folder name; live search query API.
+- [x] `01-008` (M) FTS5 over filename + folder name; live search query API.
 
 ## feat: job queue & thumbnails
 

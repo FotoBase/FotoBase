@@ -900,6 +900,7 @@ name = "fotobase"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "fotobase-catalog",
  "minisign-verify 0.2.5",
  "serde_json",
  "tauri",

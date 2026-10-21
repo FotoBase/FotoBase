@@ -201,6 +201,40 @@ impl Catalog {
     pub fn folder_count(&self) -> Result<i64> {
         Ok(self.conn.query_row("SELECT COUNT(*) FROM folders", [], |r| r.get(0))?)
     }
+
+    /// Live full-text search over filename + folder (PLAN §5 `files_fts`,
+    /// TASK-01-008). Returns matching file ids, best matches first, at most
+    /// `limit` of them.
+    ///
+    /// Whitespace-separated tokens are AND-combined and prefix-matched so the
+    /// UI can call this on every keystroke. Typed text is always treated as
+    /// literal search terms, never as FTS5 query syntax.
+    pub fn search_files(&self, query: &str, limit: usize) -> Result<Vec<i64>> {
+        let expr = fts_match_expr(query);
+        if expr.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT f.id FROM files_fts
+             JOIN files f ON f.id = files_fts.rowid
+             WHERE files_fts MATCH ?1
+             ORDER BY rank
+             LIMIT ?2",
+        )?;
+        let ids = stmt.query_map(rusqlite::params![expr, limit as i64], |r| r.get(0))?;
+        Ok(ids.flatten().collect())
+    }
+}
+
+/// Build an FTS5 MATCH expression from user-typed text: each whitespace
+/// token becomes a quoted prefix term (`"bea"*`), combined with implicit
+/// AND. Quoting defeats FTS5 syntax characters (`(`, `"`, `*`, colons…).
+fn fts_match_expr(query: &str) -> String {
+    query
+        .split_whitespace()
+        .map(|token| format!("\"{}\"*", token.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Map a rusqlite error that happened while opening/configuring to
