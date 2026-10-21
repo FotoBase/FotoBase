@@ -1,0 +1,14 @@
+[package]
+name = "fotobase-jobs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Bounded priority job queue with throttling"
+
+[dependencies]
+tracing.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

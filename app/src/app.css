@@ -1,0 +1,20 @@
+/* Plain CSS / CSS variables only — no CSS framework (PLAN §4). */
+:root {
+  --fb-bg: #1e1e1e;
+  --fb-fg: #eaeaea;
+  --fb-accent: #4a9eff;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--fb-bg);
+  color: var(--fb-fg);
+}
+
+main {
+  display: grid;
+  place-content: center;
+  min-height: 100vh;
+  text-align: center;
+}
