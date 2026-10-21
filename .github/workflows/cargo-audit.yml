@@ -1,0 +1,18 @@
+name: cargo-audit
+
+# TASK-01-002: weekly Rust dependency advisory scan, per
+# docs/workflows/dependency-tracking.md ("cargo audit once CI exists").
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

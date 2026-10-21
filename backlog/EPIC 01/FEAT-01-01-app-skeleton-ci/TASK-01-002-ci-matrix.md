@@ -1,6 +1,6 @@
 # task: set up github actions CI matrix
 
-**Feature:** [FEAT-01-01-app-skeleton-ci](FEAT-01-01-app-skeleton-ci.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-01-app-skeleton-ci](FEAT-01-01-app-skeleton-ci.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 
@@ -23,4 +23,4 @@ GitHub Actions matrix per PLAN §4: windows-latest, macos-latest (arm64 + x64), 
 
 ## Acceptance criteria
 
-- [ ] 01-002: CI matrix (windows-latest, macos-latest arm64+x64, ubuntu-latest) builds + tests green on every PR.
+- [x] 01-002: CI matrix (windows-latest, macos-latest arm64+x64, ubuntu-latest) builds + tests green on every PR.
