@@ -122,6 +122,33 @@ fn integrity_check_detects_a_corrupted_catalog() {
     }
 }
 
+// TASK-01-011: the thumb:// scheme handler resolves a content hash back to
+// source paths so a cache miss can trigger a render job.
+#[test]
+fn paths_for_hash_maps_content_hash_to_source_paths() {
+    let dir = TempDir::new().unwrap();
+    let mut cat = open_in(&dir);
+    let folder = cat.seed_folder("/photos").unwrap();
+    let insert = |path: &str, hash: Option<&str>| {
+        cat.conn()
+            .execute(
+                "INSERT INTO files(folder_id, path, filename, size, mtime, hash, media_type)
+                 VALUES (?1, ?2, ?3, 1, 0.0, ?4, 'image')",
+                rusqlite::params![folder, path, "unused", hash],
+            )
+            .unwrap();
+    };
+    insert("/photos/a.jpg", Some("h1"));
+    insert("/photos/b.jpg", Some("h1"));
+    insert("/photos/c.jpg", None);
+
+    let mut paths = cat.paths_for_hash("h1").unwrap();
+    paths.sort();
+    assert_eq!(paths, vec!["/photos/a.jpg", "/photos/b.jpg"]);
+    assert!(cat.paths_for_hash("unknown").unwrap().is_empty(), "unknown hash → no paths");
+    assert!(cat.paths_for_hash("h1").unwrap().len() == 2, "hash shared by duplicates");
+}
+
 #[test]
 fn daily_backups_roll_and_keep_n() {
     let dir = TempDir::new().unwrap();

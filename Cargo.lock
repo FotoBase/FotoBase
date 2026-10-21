@@ -928,11 +928,18 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "fotobase-catalog",
+ "fotobase-jobs",
+ "fotobase-render",
+ "image",
  "minisign-verify 0.2.5",
+ "rusqlite",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-updater",
+ "tempfile",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]

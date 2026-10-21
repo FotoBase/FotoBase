@@ -202,6 +202,17 @@ impl Catalog {
         Ok(self.conn.query_row("SELECT COUNT(*) FROM folders", [], |r| r.get(0))?)
     }
 
+    /// Source paths whose content hash matches (TASK-01-011): the `thumb://`
+    /// handler uses this to trigger a render job when a thumbnail is not yet
+    /// cached. Duplicates legitimately share a hash. `NULL` hashes (not yet
+    /// computed) match nothing.
+    pub fn paths_for_hash(&self, hash: &str) -> Result<Vec<String>> {
+        let mut stmt =
+            self.conn.prepare_cached("SELECT path FROM files WHERE hash = ?1 ORDER BY path")?;
+        let paths = stmt.query_map([hash], |r| r.get(0))?;
+        Ok(paths.flatten().collect())
+    }
+
     /// Live full-text search over filename + folder (PLAN §5 `files_fts`,
     /// TASK-01-008). Returns matching file ids, best matches first, at most
     /// `limit` of them.

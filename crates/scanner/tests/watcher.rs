@@ -14,8 +14,14 @@ use std::time::{Duration, Instant};
 use fotobase_catalog::Catalog;
 use fotobase_scanner::{scan_folder, Watcher};
 
-const DEBOUNCE: Duration = Duration::from_millis(50);
-const SETTLE: Duration = Duration::from_millis(250);
+// Debounce windows must dwarf CI scheduling stalls: the two adjacent writes
+// in the coalescing test can land a scheduler quantum apart on a loaded
+// runner, and a window smaller than that gap legally produces two scans (one
+// per quiet window — the debouncer is trailing-edge, not a bug). 300 ms makes
+// such a straddle effectively impossible; SETTLE scales with it. Seen as a
+// 1-in-N failure on ubuntu-22.04 CI (PR #173 run 39604151754).
+const DEBOUNCE: Duration = Duration::from_millis(300);
+const SETTLE: Duration = Duration::from_millis(900);
 
 fn write_jpg(path: &Path, len: usize) {
     fs::write(path, vec![0xff; len]).unwrap();
