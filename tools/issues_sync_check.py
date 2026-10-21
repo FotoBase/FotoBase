@@ -16,15 +16,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from issue_body import expected_body, flatten
+
 ROOT = Path(__file__).resolve().parent.parent
 
 import_note_re = re.compile(r"^Imported from `(.+)`$")
-
-
-def flatten(text: str) -> str:
-    """Flatten ALL [text](target) links to text on both sides — link formatting
-    differed between imports, so only the *text* is meaningful for staleness."""
-    return re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1", text)
 
 
 def main() -> int:
@@ -51,8 +47,7 @@ def main() -> int:
             stale += 1
             continue
         # Reconstruct expected body: task file, links flattened, footer re-added.
-        body = flatten(task_file.read_text(encoding="utf-8")).rstrip("\n")
-        expected = body + f"\n\n---\n*Imported from `{src}`*"
+        expected = expected_body(task_file.read_text(encoding="utf-8"), src)
         norm = lambda s: [re.sub(r"\s+", " ", l.strip()) for l in flatten(s).splitlines() if l.strip()]
         if norm(expected) != norm(issue["body"]):
             stale += 1
