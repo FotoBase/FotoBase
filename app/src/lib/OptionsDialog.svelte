@@ -1,0 +1,170 @@
+<script lang="ts">
+  // Options dialog — General tab (TASK-01-022, PLAN §2). Every change is
+  // persisted immediately through `set_settings`; the language change also
+  // flips the i18n locale live.
+  import { t, setLocale, locales } from "./i18n.svelte.js";
+  import { clearCache, saveSettings, UPDATE_MODES, type Settings } from "./settings";
+
+  let {
+    open = $bindable(false),
+    settings,
+    onchange,
+  }: { open?: boolean; settings: Settings; onchange: (s: Settings) => void } = $props();
+
+  let clearResult = $state<string | null>(null);
+
+  function apply(next: Settings): void {
+    onchange(next);
+    void saveSettings(next).catch(() => {
+      // Browser dev has no backend; the in-memory change still applies.
+    });
+  }
+
+  function setLanguage(lang: string): void {
+    setLocale(lang);
+    apply({ ...settings, language: lang });
+  }
+
+  function setUpdateMode(mode: Settings["update_mode"]): void {
+    apply({ ...settings, update_mode: mode });
+  }
+
+  function setShowTooltips(show: boolean): void {
+    apply({ ...settings, show_tooltips: show });
+  }
+
+  async function onClearCache(): Promise<void> {
+    clearResult = null;
+    try {
+      const removed = await clearCache();
+      clearResult = t("options.clearCache.done", { n: removed });
+    } catch (e) {
+      clearResult = t("options.clearCache.failed", { error: String(e) });
+    }
+  }
+</script>
+
+{#if open}
+  <div class="options-backdrop" data-testid="options-backdrop">
+    <div class="options-dialog" role="dialog" aria-label={t("options.title")}>
+      <h2>{t("options.title")}</h2>
+      <nav class="options-tabs">
+        <button type="button" class="active">{t("options.tab.general")}</button>
+      </nav>
+
+      <div class="options-body">
+        <label class="options-row">
+          <span>{t("options.language")}</span>
+          <select
+            value={settings.language}
+            onchange={(e) => setLanguage(e.currentTarget.value)}
+            title={settings.show_tooltips ? t("options.language") : undefined}
+          >
+            {#each locales as lang (lang)}
+              <option value={lang}>{lang}</option>
+            {/each}
+          </select>
+        </label>
+
+        <fieldset class="options-row options-updates">
+          <legend>{t("options.updates")}</legend>
+          {#each UPDATE_MODES as mode (mode.value)}
+            <label>
+              <input
+                type="radio"
+                name="update-mode"
+                value={mode.value}
+                checked={settings.update_mode === mode.value}
+                onchange={() => setUpdateMode(mode.value)}
+              />
+              {t(mode.labelKey)}
+            </label>
+          {/each}
+        </fieldset>
+
+        <div class="options-row">
+          <button type="button" onclick={onClearCache} data-testid="clear-cache">
+            {t("options.clearCache")}
+          </button>
+          {#if clearResult}
+            <span class="clear-result" data-testid="clear-cache-result">{clearResult}</span>
+          {/if}
+        </div>
+
+        <label class="options-row options-check">
+          <input
+            type="checkbox"
+            checked={settings.show_tooltips}
+            onchange={(e) => setShowTooltips(e.currentTarget.checked)}
+          />
+          {t("options.showTooltips")}
+        </label>
+      </div>
+
+      <footer class="options-footer">
+        <button type="button" onclick={() => (open = false)}>{t("options.close")}</button>
+      </footer>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .options-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgb(0 0 0 / 40%);
+    display: grid;
+    place-items: center;
+  }
+  .options-dialog {
+    background: var(--fb-surface, #fff);
+    color: var(--fb-text, #111);
+    border-radius: 8px;
+    min-width: 22rem;
+    padding: 1rem 1.25rem;
+    box-shadow: 0 8px 32px rgb(0 0 0 / 30%);
+  }
+  .options-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0.5rem 0 1rem;
+  }
+  .options-tabs button {
+    border: none;
+    background: none;
+    padding: 0.25rem 0.75rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  .options-tabs button.active {
+    border-bottom-color: currentcolor;
+    font-weight: 600;
+  }
+  .options-body {
+    display: grid;
+    gap: 0.9rem;
+  }
+  .options-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .options-updates {
+    display: grid;
+    gap: 0.3rem;
+    border: 1px solid rgb(128 128 128 / 40%);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+  }
+  .options-check {
+    justify-content: start;
+  }
+  .options-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1rem;
+  }
+  .clear-result {
+    color: var(--fb-muted, #555);
+  }
+</style>

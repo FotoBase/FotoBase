@@ -60,6 +60,12 @@ impl From<&str> for JobKey {
     }
 }
 
+impl From<String> for JobKey {
+    fn from(s: String) -> Self {
+        Self(Arc::from(s))
+    }
+}
+
 impl std::fmt::Display for JobKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -223,6 +229,9 @@ struct State<T> {
     work: Arc<Notify>,
     /// Wakes `enqueue` waiters when space frees up.
     space: Arc<Notify>,
+    /// Wakes `drain` waiters when the queue becomes idle (nothing pending,
+    /// nothing running).
+    idle: Arc<Notify>,
 }
 
 struct Inner<T> {
@@ -234,9 +243,17 @@ struct Inner<T> {
 }
 
 /// Bounded priority job queue with a single worker.
-#[derive(Clone)]
+///
+/// `Clone` is implemented manually (not derived): a queue handle is clonable
+/// no matter what `T` is — the shared state lives behind an `Arc`.
 pub struct Queue<T> {
     inner: Arc<Inner<T>>,
+}
+
+impl<T> Clone for Queue<T> {
+    fn clone(&self) -> Self {
+        Self { inner: self.inner.clone() }
+    }
 }
 
 impl<T: Send + Sync + 'static> Queue<T> {
@@ -259,6 +276,7 @@ impl<T: Send + Sync + 'static> Queue<T> {
                 next_seq: 0,
                 work: Arc::new(Notify::new()),
                 space: Arc::new(Notify::new()),
+                idle: Arc::new(Notify::new()),
             }),
         });
         tokio::spawn(worker_loop(inner.clone()));
@@ -339,6 +357,70 @@ impl<T: Send + Sync + 'static> Queue<T> {
         state.pending.push(entry.clone());
         state.work.notify_one();
         Ok(JobHandle { shared: entry.shared.clone(), queue: Arc::downgrade(&self.inner), key })
+    }
+
+    /// Cancel everything queued or running and wait until the queue is idle:
+    /// no pending entries, no in-flight job.
+    ///
+    /// Used by maintenance actions that must observe a quiet queue — e.g.
+    /// "clear cache files" (TASK-01-022) deletes cache entries only after
+    /// every render that could still write one has finished or cancelled.
+    /// Cancellation is cooperative: the in-flight job body keeps running
+    /// until it observes its token (so it can clean up partial output), but
+    /// its outcome is published as [`Outcome::Cancelled`] and a cancelled job
+    /// never publishes a success.
+    pub async fn drain(&self) {
+        loop {
+            let (pending_shared, idle) = self.drain_cancel_all();
+            for shared in pending_shared {
+                shared.publish(Arc::new(Outcome::Cancelled)).await;
+            }
+            let Some(idle) = idle else { return };
+            // Register the idle wakeup, then re-check idleness: a worker that
+            // finished before the wakeup was registered is caught by the
+            // re-check; one that finishes after it wakes us (same pattern
+            // as `enqueue`).
+            let notified = idle.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.queue_is_idle() {
+                return;
+            }
+            notified.await;
+            // Re-check from the top: another job may have started meanwhile.
+        }
+    }
+
+    /// One drain step, sync so the state `MutexGuard` never lives inside the
+    /// async body (an async fn must stay `Send`; `drain` is awaited from
+    /// Tauri command handlers). Cancels all pending entries and the
+    /// in-flight job; returns the pending entries' shared slots (their
+    /// handles must resolve to `Cancelled`) and, if a job was running, the
+    /// idle notification to wait on.
+    fn drain_cancel_all(&self) -> (Vec<Arc<Shared<T>>>, Option<Arc<Notify>>) {
+        let mut state = self.inner.state.lock().expect("job queue state poisoned");
+        let drained: Vec<Arc<Entry<T>>> = state.pending.drain().collect();
+        let shared = drained.iter().map(|e| e.shared.clone()).collect::<Vec<_>>();
+        for entry in &drained {
+            entry.token.cancel();
+            state.map.remove(&entry.key);
+        }
+        state.space.notify_waiters();
+        // Ask the in-flight job (if any) to stop. Cancellation is
+        // cooperative: the job body keeps running until it observes its
+        // token (so it can clean up partial output), and a cancelled job
+        // never publishes a success.
+        if let Some(running) = state.running.as_ref() {
+            running.token.cancel();
+        }
+        let idle = if state.running.is_none() { None } else { Some(state.idle.clone()) };
+        (shared, idle)
+    }
+
+    /// True when nothing is pending and nothing is running.
+    fn queue_is_idle(&self) -> bool {
+        let state = self.inner.state.lock().expect("job queue state poisoned");
+        state.pending.is_empty() && state.running.is_none()
     }
 
     /// Close the queue: pending entries are dropped (their handles get
@@ -474,6 +556,8 @@ async fn worker_loop<T: Send + Sync + 'static>(inner: Arc<Inner<T>>) {
         let mut state = inner.state.lock().expect("job queue state poisoned");
         if state.running.as_ref().is_some_and(|r| Arc::ptr_eq(r, &entry)) {
             state.running = None;
+            // Wake `drain` waiters: the queue is idle again.
+            state.idle.notify_waiters();
         }
         state.map.remove(&entry.key);
         state.space.notify_waiters();

@@ -8,8 +8,11 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use fotobase_catalog::Catalog;
+use serde::Serialize;
 use tauri::Manager;
+use tauri_plugin_updater::UpdaterExt;
 
+pub mod settings;
 pub mod thumb;
 
 /// Crate identity, used by the workspace smoke test.
@@ -21,12 +24,19 @@ const THUMB_QUEUE_CAPACITY: usize = 64;
 /// Lazily-opened catalog shared by IPC commands (TASK-01-008). The catalog is
 /// a rebuildable cache (PLAN §5); nothing here writes user data.
 struct AppState {
+    /// App data dir: settings.json lives here.
+    data_dir: PathBuf,
     catalog_path: PathBuf,
     catalog: Mutex<Option<Catalog>>,
     /// Thumbnail cache directory backing the `thumb://` scheme.
     cache_dir: PathBuf,
     /// Bounded queue for cache-miss thumbnail renders (TASK-01-011).
     thumbs: fotobase_jobs::Queue<thumb::ThumbOutcome>,
+    /// Options-dialog settings (TASK-01-022); mirrored in settings.json.
+    settings: Mutex<settings::Settings>,
+    /// Update feed artifact found by the last check, awaiting the user's
+    /// install decision (check-but-ask) or immediate install (auto).
+    pending_update: Mutex<Option<tauri_plugin_updater::Update>>,
 }
 
 /// Lock-and-open the shared catalog; commands and the scheme handler share
@@ -76,6 +86,109 @@ fn ping() -> &'static str {
     "pong"
 }
 
+// --- Options dialog (TASK-01-022, PLAN §2 General tab) ----------------------
+
+/// Current settings. The frontend reads these when opening the dialog.
+#[tauri::command]
+fn get_settings(state: tauri::State<'_, AppState>) -> Result<settings::Settings, String> {
+    let guard = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
+    Ok(guard.clone())
+}
+
+/// Persist new settings atomically, then swap them into the shared state.
+/// The file write happens first: if it fails, the in-memory state is not
+/// left diverging from disk.
+#[tauri::command]
+fn set_settings(new: settings::Settings, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    new.save(&state.data_dir).map_err(|e| format!("save settings: {e}"))?;
+    let mut guard = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
+    *guard = new;
+    Ok(())
+}
+
+/// "Clear cache files": drain the render queue, then empty the thumbnail
+/// cache. Heavy work, so it runs as an async command; the library and the
+/// catalog are never touched.
+#[tauri::command]
+async fn clear_cache(state: tauri::State<'_, AppState>) -> Result<u64, String> {
+    // Clone before the await: a borrow derived from `State` must not be
+    // held across an await point (the command future has to stay Send).
+    let cache_dir = state.cache_dir.clone();
+    let queue = state.thumbs.clone();
+    thumb::clear_thumbnail_cache(&cache_dir, &queue).await.map_err(|e| format!("clear cache: {e}"))
+}
+
+/// What an update check reports back to the UI.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct UpdateCheck {
+    /// `false` when the mode is Off: nothing was contacted, ever.
+    pub checked: bool,
+    pub available: bool,
+    pub version: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// Check the update feed, honoring the user's update mode (TASK-01-022):
+/// `off` returns without any network access — §1 allows update checks only
+/// when the user has not disabled them. A found artifact is held in state
+/// for [`install_pending_update`]; it is never downloaded before then.
+#[tauri::command]
+async fn check_for_updates(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<UpdateCheck, String> {
+    let mode = {
+        let guard = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
+        guard.update_mode
+    };
+    if !mode.phones_home() {
+        return Ok(UpdateCheck { checked: false, available: false, version: None, notes: None });
+    }
+    let update = app
+        .updater()
+        .map_err(|e| format!("updater unavailable: {e}"))?
+        .check()
+        .await
+        .map_err(|e| format!("update check failed: {e}"))?;
+    match update {
+        Some(update) => {
+            let check = UpdateCheck {
+                checked: true,
+                available: true,
+                version: Some(update.version.clone()),
+                notes: update.body.clone(),
+            };
+            *state
+                .pending_update
+                .lock()
+                .map_err(|e| format!("pending update mutex poisoned: {e}"))? = Some(update);
+            Ok(check)
+        }
+        None => Ok(UpdateCheck { checked: true, available: false, version: None, notes: None }),
+    }
+}
+
+/// Download + install the update found by [`check_for_updates`]. The
+/// artifact is signature-verified by the updater plugin (minisign against
+/// the pinned public key) before it ever runs.
+#[tauri::command]
+async fn install_pending_update(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let update = state
+        .pending_update
+        .lock()
+        .map_err(|e| format!("pending update mutex poisoned: {e}"))?
+        .take();
+    let Some(update) = update else { return Ok(()) };
+    update
+        .download_and_install(
+            |_chunk, _total| {},
+            || tracing::info!("update downloaded; restarting to install"),
+        )
+        .await
+        .map_err(|e| format!("update install failed: {e}"))?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_subscriber::fmt()
@@ -118,15 +231,27 @@ pub fn run() {
             let thumbs = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(THUMB_QUEUE_CAPACITY)
             });
+            let persisted = settings::Settings::load(&data_dir);
             app.manage(AppState {
+                data_dir: data_dir.clone(),
                 catalog_path: data_dir.join("catalog.db"),
                 catalog: Mutex::new(None),
                 cache_dir,
                 thumbs,
+                settings: Mutex::new(persisted),
+                pending_update: Mutex::new(None),
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![ping, search_files])
+        .invoke_handler(tauri::generate_handler![
+            ping,
+            search_files,
+            get_settings,
+            set_settings,
+            clear_cache,
+            check_for_updates,
+            install_pending_update
+        ])
         .run(tauri::generate_context!())
         .expect("error while running fotobase");
 }
