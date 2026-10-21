@@ -4,3 +4,10 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+# Rust
+/target/
+
+# Frontend
+node_modules/
+app/dist/
