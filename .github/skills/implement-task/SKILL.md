@@ -5,6 +5,17 @@ description: Implement a backlog task (TASK-NN-MMM) test-first, following its sp
 
 # Implement a backlog task
 
+## 0. Sync main
+
+Before anything else, get the latest main — the TASK file, issue body, and predecessor checkboxes must be read from current state, not a stale checkout:
+
+```
+git switch main
+git pull --ff-only origin main
+```
+
+If `--ff-only` fails (local main has diverged), stop and report instead of merging on your own.
+
 ## 1. Open the task
 
 - From a GitHub task URL or issue number (`https://github.com/FotoBase/FotoBase/issues/<n>`): run `gh issue view <n> --json body` — never a bare `gh issue view`, it opens a pager and wedges the terminal. Parse the trailing `*Imported from \`backlog/...\`*` footer; that repo-relative path is the TASK file. No footer → stop and report (not an imported task).
@@ -28,6 +39,7 @@ gh issue edit <n> --body-file /tmp/issue-body.md
 - Read `.github/copilot-instructions.md` — architecture invariants and stack pins are non-negotiable.
 - Check the epic (`backlog/EPIC NN/EPIC-0N.md`) and FEAT files: if predecessor tasks this task depends on are unchecked, stop and report instead of implementing out of order.
 - If the task would contradict an accepted ADR, stop: per CONTRIBUTING.md and ADR-0001, the ADR must first be superseded by a new one.
+- Pre-flight passed: create the task branch **from the freshly pulled main before any further edits** (uncommitted step-2 status changes carry over cleanly): `git switch -c feat/<task-id>-slug` or `fix/<task-id>-slug`.
 
 ## 4. Work test-first
 
@@ -46,5 +58,5 @@ gh issue edit <n> --body-file /tmp/issue-body.md
 
 - Check off the task's checkbox in BOTH the epic file and the FEAT file (they are mirrored 1:1), and the task's own acceptance-criteria boxes.
 - Set the `**Status:**` line to `in review (<today's date>)` and resync the issue with the two step-2 commands. `done` is set at PR merge, not here.
-- Open the PR: branch `feat/<task-id>-slug`, link the task file and `Refs #<n>` (leave `Closes #<n>` for the merge), conventional commit with `Task: NN-MMM` footer.
+- Open the PR from the branch created in step 3 (`feat/<task-id>-slug`): link the task file and `Refs #<n>` (leave `Closes #<n>` for the merge), conventional commit with `Task: NN-MMM` footer.
 - If you had to make a spec-level decision not covered by PLAN or an ADR, say so in the PR and suggest whether it warrants an ADR.
