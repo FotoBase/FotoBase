@@ -9,6 +9,7 @@ description = "Folder walk, notify watcher, import"
 [dependencies]
 fotobase-catalog = { path = "../catalog" }
 rusqlite = { version = "0.32", features = ["bundled"] }
+notify = "6"
 tracing.workspace = true
 thiserror.workspace = true
 

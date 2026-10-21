@@ -3,7 +3,7 @@
 //! Walk, mtime+size change detection, initial scan, incremental rescan.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, SystemTime};
 
@@ -23,6 +23,9 @@ fn count_folders(cat: &Catalog) -> i64 {
 }
 
 fn file_row(cat: &Catalog, path: &Path) -> (i64, f64, String) {
+    // Normalize separators: `root.join("2024/summer/c.jpg")` yields mixed
+    // separators on Windows, while the scanner stores native-separator paths.
+    let path = path.components().collect::<PathBuf>();
     cat.conn()
         .query_row(
             "SELECT size, mtime, media_type FROM files WHERE path = ?1",
@@ -123,7 +126,7 @@ fn incremental_detects_add_modify_touch_delete() {
         cat.conn()
             .query_row(
                 "SELECT 1 FROM files WHERE path = ?1",
-                [tmp.path().join("2024/summer/c.jpg").to_string_lossy().as_ref()],
+                [tmp.path().join("2024").join("summer").join("c.jpg").to_string_lossy().as_ref()],
                 |r| r.get::<_, i64>(0)
             )
             .is_err(),

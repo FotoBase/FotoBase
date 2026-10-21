@@ -48,13 +48,17 @@ gh issue edit <n> --body-file /tmp/issue-body.md
 - Then implement per the **Functional specs** and **Technical specs** sections, respecting the invariants (originals read-only, sidecars source of truth, no image bytes over IPC, job queue for heavy work, one recipe engine).
 - If the task touches metadata writes, follow `docs/sidecar-merge-on-write.md` exactly — this is the highest data-loss-risk area.
 
-## 5. Verify
+## 5. Verify — full local test gate before any PR
 
 - Run the task's tests plus the layer's lint/format checks (`docs/workflows/lint-format.md`).
+- **Gate**: run the full local test suite for every layer the PR touches (`cargo test --workspace` for Rust; `npm test`/Vitest if `app/` changed) and fix every failure before proceeding. A red suite blocks step 6 — no PR may be opened from a locally failing tree. "The task's own tests pass" is not enough: CI runs the whole workspace on three OSes, and a cross-platform failure caught locally saves a round trip. Run the suite more than once for timing-sensitive code (watchers, debouncers) — a test that passes 5× locally is still not a guarantee, but a test that fails 1-in-5 locally will fail in CI.
+- Local pass ≠ CI pass: the matrix covers Windows/macOS/Linux, so path separators, line endings, and backend-specific behavior (e.g. FSEvents vs inotify) can still differ. Prefer portable constructs when writing tests in step 4; if a platform-specific failure does land in CI, fix it the same way and re-run the gate.
 - Check every bullet in the task's **Acceptance criteria** section against what was built; report each as met/not met with evidence.
 - If the task has perf implications, note that the `perf-acceptance` skill applies.
 
 ## 6. Close the loop: open the PR, then set `in review`
+
+Prerequisite: the step-5 gate is green (full local suite passes, all failures fixed). If it is not, go back — do not open the PR.
 
 - Check off the task's checkbox in BOTH the epic file and the FEAT file (they are mirrored 1:1), and the task's own acceptance-criteria boxes.
 - Open the PR from the branch created in step 3 (`feat/<task-id>-slug`) FIRST, so the status flip lands on an issue that already shows the PR:
