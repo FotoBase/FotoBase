@@ -4,13 +4,16 @@
   // startup, the dialog persists every change, and the update-mode policy
   // runs once on startup.
   import OptionsDialog from "./lib/OptionsDialog.svelte";
+  import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadSettings, type Settings } from "./lib/settings";
   import { runUpdateFlow } from "./lib/updates";
+  import { debounce, type GridItem } from "./lib/grid";
 
   let pong = $state<string | null>(null);
   let optionsOpen = $state(false);
   let settings = $state<Settings | null>(null);
+  let photos = $state<GridItem[]>([]);
 
   async function ping(): Promise<void> {
     try {
@@ -21,6 +24,21 @@
     }
   }
 
+  // Scrolling reprioritizes render jobs (01-013): the grid reports the
+  // hashes on screen (already debounced), the backend bumps them to
+  // visible-first priority (PLAN §3 rule 4). Best-effort — a missing or
+  // failing backend must never break the grid.
+  const prioritizeVisible = debounce((hashes: string[]) => {
+    void (async () => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("prioritize_visible", { hashes });
+      } catch {
+        // Browser dev / backend down: nothing to prioritize.
+      }
+    })();
+  }, 150);
+
   $effect(() => {
     // Startup: load persisted settings, apply the language, then honor the
     // update policy (auto installs, check-but-ask prompts, off does
@@ -30,6 +48,13 @@
       settings = s;
       setLocale(s.language);
       await runUpdateFlow(s.update_mode);
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        photos = await invoke<GridItem[]>("list_files");
+      } catch {
+        // Browser dev: no backend, empty grid.
+        photos = [];
+      }
     })();
   });
 </script>
@@ -60,4 +85,5 @@
       }}
     />
   {/if}
+  <ThumbnailGrid items={photos} onvisible={prioritizeVisible} />
 </main>

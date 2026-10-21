@@ -1,6 +1,6 @@
 # task: build virtualized DOM thumbnail grid with zoom slider
 
-**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-21)
 
 ## Description
 Implement the DOM virtualized thumbnail grid per PLAN §4 (TanStack Virtual): renders only visible thumbnails, handles 100k+ items, with a live zoom slider (§2A "Zoomable grid with size slider").
@@ -19,4 +19,4 @@ Implement the DOM virtualized thumbnail grid per PLAN §4 (TanStack Virtual): re
 - Perf: 50k-fixture scroll fps ≥ 60 on the harness (01-026) per OS.
 
 ## Acceptance criteria
-- [ ] 01-013: Virtualized DOM grid (TanStack Virtual) with live zoom slider; bounded DOM; 60 fps target.
+- [x] 01-013: Virtualized DOM grid (TanStack Virtual) with live zoom slider; bounded DOM; 60 fps target.

@@ -9,7 +9,7 @@
 - Folder Manager applies Scan Once / Scan Always / Remove and the library reflects the change immediately.
 - Import copies files with chosen destination naming; duplicates skipped when "exclude duplicates" is on (default); live search filters filenames/folders while typing.
 
-- [ ] `01-013` (M) Virtualized thumbnail grid (TanStack Virtual) with zoom slider; DOM implementation.
+- [x] `01-013` (M) Virtualized thumbnail grid (TanStack Virtual) with zoom slider; DOM implementation.
 - [ ] `01-014` (M) Canvas-grid renderer (Linux default if 01-004 says so; fallback everywhere).
 - [ ] `01-015` (M) Folder tree grouped by year; selection state; context menu skeleton.
 - [ ] `01-016` (M) Folder Manager dialog: Scan Once / Scan Always / Remove from catalog (per §2A).
@@ -18,7 +18,7 @@
 
 ## Tasks
 
-- [ ] [TASK-01-013-virtualized-grid.md](TASK-01-013-virtualized-grid.md) — build virtualized DOM thumbnail grid with zoom slider
+- [x] [TASK-01-013-virtualized-grid.md](TASK-01-013-virtualized-grid.md) — build virtualized DOM thumbnail grid with zoom slider
 - [ ] [TASK-01-014-canvas-grid.md](TASK-01-014-canvas-grid.md) — build canvas-grid renderer fallback
 - [ ] [TASK-01-015-folder-tree.md](TASK-01-015-folder-tree.md) — build folder tree with selection and context menu
 - [ ] [TASK-01-016-folder-manager.md](TASK-01-016-folder-manager.md) — build folder manager dialog

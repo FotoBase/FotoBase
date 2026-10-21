@@ -197,6 +197,20 @@ struct Entry<T> {
     shared: Arc<Shared<T>>,
 }
 
+// Cloned (never while running) when a queued entry is re-prioritized.
+impl<T> Clone for Entry<T> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            priority: self.priority,
+            seq: self.seq,
+            job: self.job.clone(),
+            token: self.token.clone(),
+            shared: self.shared.clone(),
+        }
+    }
+}
+
 // Max-heap: higher priority first, FIFO within a priority.
 impl<T> PartialEq for Entry<T> {
     fn eq(&self, other: &Self) -> bool {
@@ -325,6 +339,45 @@ impl<T: Send + Sync + 'static> Queue<T> {
         job: Job<T>,
     ) -> Result<JobHandle<T>, EnqueueError> {
         self.try_enqueue_inner(key.into(), priority, job)
+    }
+
+    /// Re-order a *queued* job: set its priority in the pending heap. Used
+    /// by the grid's visible-range reporting (TASK-01-013, PLAN §3 rule 4):
+    /// thumbnails that scrolled into view jump ahead of background work.
+    /// Returns `true` when the key names a queued job (now carrying the
+    /// requested priority, even if it already had it) and `false` when the
+    /// key is unknown or the job already runs — an in-flight job cannot be
+    /// re-ordered.
+    pub fn reprioritize(&self, key: impl Into<JobKey>, priority: Priority) -> bool {
+        let key = key.into();
+        let mut state = self.inner.state.lock().expect("job queue state poisoned");
+        if state.closed {
+            return false;
+        }
+        if state.running.as_ref().is_some_and(|e| e.key == key) {
+            return false;
+        }
+        if !state.map.contains_key(&key) {
+            return false;
+        }
+        // A BinaryHeap cannot update in place; capacity is bounded (tens),
+        // so a rebuild is cheap and simpler than an index heap.
+        let pending: Vec<Arc<Entry<T>>> = state.pending.drain().collect();
+        let mut changed = false;
+        for entry in pending {
+            if entry.key == key {
+                let mut updated = (*entry).clone();
+                updated.priority = priority;
+                state.pending.push(Arc::new(updated));
+                changed = true;
+            } else {
+                state.pending.push(entry);
+            }
+        }
+        if changed {
+            state.work.notify_one();
+        }
+        changed
     }
 
     fn try_enqueue_inner(

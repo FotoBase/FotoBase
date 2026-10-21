@@ -30,7 +30,7 @@
 
 ## feat: UI — library
 
-- [ ] `01-013` (M) Virtualized thumbnail grid (TanStack Virtual) with zoom slider; DOM implementation.
+- [x] `01-013` (M) Virtualized thumbnail grid (TanStack Virtual) with zoom slider; DOM implementation.
 - [ ] `01-014` (M) Canvas-grid renderer (Linux default if 01-004 says so; fallback everywhere).
 - [ ] `01-015` (M) Folder tree grouped by year; selection state; context menu skeleton.
 - [ ] `01-016` (M) Folder Manager dialog: Scan Once / Scan Always / Remove from catalog (per §2A).

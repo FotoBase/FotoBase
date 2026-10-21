@@ -189,3 +189,38 @@ fn backup_snapshot_is_a_valid_catalog() {
     let restored = Catalog::open(&backup).expect("backup is a valid catalog file");
     assert_eq!(user_version(restored.conn()), fotobase_catalog::MIGRATIONS.len() as i64);
 }
+
+// TASK-01-013: the virtualized grid loads its items from the catalog. The
+// list carries id + filename + hash (the `thumb://` cache key); files whose
+// hash is not computed yet still appear, with `hash: None` so the UI can
+// show the placeholder instead of a dead image.
+#[test]
+fn list_files_returns_grid_items_ordered_by_path() {
+    let dir = TempDir::new().unwrap();
+    let mut cat = open_in(&dir);
+    let folder = cat.seed_folder("/photos").unwrap();
+    let insert = |path: &str, filename: &str, hash: Option<&str>| {
+        cat.conn()
+            .execute(
+                "INSERT INTO files(folder_id, path, filename, size, mtime, hash, media_type)
+                 VALUES (?1, ?2, ?3, 1, 0.0, ?4, 'image')",
+                rusqlite::params![folder, path, filename, hash],
+            )
+            .unwrap();
+    };
+    insert("/photos/b.jpg", "b.jpg", Some("h2"));
+    insert("/photos/a.jpg", "a.jpg", Some("h1"));
+    insert("/photos/c.jpg", "c.jpg", None);
+
+    let files = cat.list_files(10).unwrap();
+    assert_eq!(
+        files.iter().map(|f| (f.id, f.filename.as_str(), f.hash.as_deref())).collect::<Vec<_>>(),
+        vec![(2, "a.jpg", Some("h1")), (1, "b.jpg", Some("h2")), (3, "c.jpg", None),],
+        "path order, stable ids, unhashed files included"
+    );
+
+    // The UI caps the payload: limit truncates, keeping path order.
+    assert_eq!(cat.list_files(2).unwrap().len(), 2);
+    let empty: Vec<fotobase_catalog::FileInfo> = cat.list_files(0).unwrap();
+    assert!(empty.is_empty());
+}

@@ -18,3 +18,63 @@ main {
   min-height: 100vh;
   text-align: center;
 }
+
+/* Virtualized thumbnail grid (TASK-01-013) */
+.grid-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.grid-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.grid-toolbar input[type="range"] {
+  flex: 0 1 16rem;
+}
+
+.grid-scroll {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Rows are absolutely positioned by the virtualizer; the spacer height
+   reserves the full scroll range of the (possibly 100k+) collection. */
+.grid-inner {
+  position: relative;
+  overflow: hidden;
+}
+
+.grid-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  gap: 8px;
+  align-content: center;
+}
+
+.grid-cell {
+  width: var(--thumb-size);
+  height: var(--thumb-size);
+  overflow: hidden;
+  border-radius: 4px;
+  background: #2a2a2a;
+}
+
+.grid-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.grid-cell-placeholder {
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(45deg, #2a2a2a, #2a2a2a 8px, #303030 8px, #303030 16px);
+}

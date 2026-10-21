@@ -295,3 +295,69 @@ async fn throttle_hook_gates_dequeueing() {
     handle.result().await;
     assert_eq!(*record.lock().await, vec!["a"]);
 }
+
+#[tokio::test]
+async fn reprioritize_bumps_a_queued_background_job_to_visible() {
+    let queue: Queue<&'static str> = Queue::new(16);
+    let gate: Gate = Arc::new(AtomicBool::new(false));
+    let record: Record = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+
+    // Occupy the single worker so the enqueued jobs sit in the pending heap.
+    let started = Arc::new(AtomicBool::new(false));
+    let first = queue
+        .enqueue(
+            "first",
+            Priority::Background,
+            blocking_job_with_started("first", started.clone(), gate.clone(), record.clone()),
+        )
+        .await
+        .expect("enqueue");
+    wait_until(&started).await;
+
+    for name in ["bg1", "bg2", "bg3"] {
+        queue
+            .enqueue(name, Priority::Background, blocking_job(name, gate.clone(), record.clone()))
+            .await
+            .expect("enqueue");
+    }
+
+    // The grid reports what is on screen (TASK-01-013): bump bg2 to visible.
+    assert!(queue.reprioritize("bg2", Priority::Visible));
+    // Idempotent: already visible.
+    assert!(queue.reprioritize("bg2", Priority::Visible));
+
+    gate.store(true, Ordering::SeqCst);
+    first.result().await;
+    let _ = queue.close().await;
+
+    let order = record.lock().await.clone();
+    assert_eq!(order.first(), Some(&"first"));
+    assert_eq!(order.get(1), Some(&"bg2"), "bumped job runs first among queued: {order:?}");
+}
+
+#[tokio::test]
+async fn reprioritize_is_a_noop_for_unknown_or_running_keys() {
+    let queue: Queue<&'static str> = Queue::new(16);
+    let gate: Gate = Arc::new(AtomicBool::new(false));
+    let record: Record = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+
+    let started = Arc::new(AtomicBool::new(false));
+    let first = queue
+        .enqueue(
+            "running",
+            Priority::Background,
+            blocking_job_with_started("running", started.clone(), gate.clone(), record.clone()),
+        )
+        .await
+        .expect("enqueue");
+    wait_until(&started).await;
+
+    // Unknown key: nothing to bump.
+    assert!(!queue.reprioritize("missing", Priority::Visible));
+    // The in-flight job cannot be re-ordered.
+    assert!(!queue.reprioritize("running", Priority::Visible));
+
+    gate.store(true, Ordering::SeqCst);
+    first.result().await;
+    assert_eq!(*record.lock().await, vec!["running"]);
+}
