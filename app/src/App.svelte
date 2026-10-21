@@ -5,9 +5,11 @@
   // runs once on startup.
   import OptionsDialog from "./lib/OptionsDialog.svelte";
   import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
+  import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadSettings, type Settings } from "./lib/settings";
   import { runUpdateFlow } from "./lib/updates";
+  import { pickRenderer } from "./lib/grid-state.svelte.js";
   import { debounce, type GridItem } from "./lib/grid";
 
   let pong = $state<string | null>(null);
@@ -85,5 +87,13 @@
       }}
     />
   {/if}
-  <ThumbnailGrid items={photos} onvisible={prioritizeVisible} />
+  <!-- Renderer switch (TASK-01-014): config-driven, user-overridable. DOM
+       stays the default everywhere; the canvas renderer is available on all
+       OSes. Both read the same shared store, so zoom/selection/scroll carry
+       across a switch. -->
+  {#if settings && pickRenderer(settings.grid_renderer) === "canvas"}
+    <CanvasThumbnailGrid items={photos} onvisible={prioritizeVisible} />
+  {:else}
+    <ThumbnailGrid items={photos} onvisible={prioritizeVisible} />
+  {/if}
 </main>

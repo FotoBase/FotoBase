@@ -40,6 +40,10 @@
     apply({ ...settings, show_tooltips: show });
   }
 
+  function setGridRenderer(renderer: Settings["grid_renderer"]): void {
+    apply({ ...settings, grid_renderer: renderer });
+  }
+
   async function onClearCache(): Promise<void> {
     clearResult = null;
     try {
@@ -105,6 +109,18 @@
             {#each locales as lang (lang)}
               <option value={lang}>{lang}</option>
             {/each}
+          </select>
+        </label>
+
+        <label class="options-row">
+          <span>{t("options.gridRenderer")}</span>
+          <select
+            value={settings.grid_renderer}
+            onchange={(e) => setGridRenderer(e.currentTarget.value as Settings["grid_renderer"])}
+            title={settings.show_tooltips ? t("options.gridRenderer") : undefined}
+          >
+            <option value="dom">{t("options.gridRenderer.dom")}</option>
+            <option value="canvas">{t("options.gridRenderer.canvas")}</option>
           </select>
         </label>
 

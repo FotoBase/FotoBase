@@ -17,26 +17,21 @@
     type VirtualItem,
   } from "@tanstack/virtual-core";
   import { t } from "./i18n.svelte.js";
+  import { untrack } from "svelte";
   import { columnCount, debounce, rowItems, thumbUri, visibleHashes, GRID_GAP, type GridItem } from "./grid";
+  import { gridState, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./grid-state.svelte.js";
 
   interface Props {
     items?: GridItem[];
-    /// Thumbnail edge in px; the zoom slider drives it live.
-    thumbSize?: number;
     overscan?: number;
     /// Called (debounced) with the unique hashes on screen.
     onvisible?: (hashes: string[]) => void;
   }
 
-  let { items = [], thumbSize = 160, overscan = 2, onvisible = () => {} }: Props = $props();
+  let { items = [], overscan = 2, onvisible = () => {} }: Props = $props();
 
-  /// Zoom range: 64 = wall of small tiles, 512 = near-preview.
-  const ZOOM_MIN = 64;
-  const ZOOM_MAX = 512;
-  const ZOOM_STEP = 8;
   const REPORT_DEBOUNCE_MS = 100;
 
-  let zoom = $state(thumbSize);
   let scrollEl = $state<HTMLDivElement | null>(null);
   let virtualRows = $state<VirtualItem[]>([]);
   let totalSize = $state(0);
@@ -44,22 +39,33 @@
 
   const reportVisible = debounce((hashes: string[]) => onvisible(hashes), REPORT_DEBOUNCE_MS);
 
+  // Resume where the last renderer (or session) left off. Mount-only: the
+  // store's scrollTop is read untracked — the virtualizer writes it on every
+  // scroll, and reading it reactively here would re-run this effect (and
+  // with it the whole virtualizer) on every scroll event.
+  $effect(() => {
+    const el = scrollEl;
+    if (!el) return;
+    el.scrollTop = untrack(() => gridState.scrollTop);
+  });
+
   $effect(() => {
     const el = scrollEl;
     if (!el) return;
     // Read every reactive input so the effect (and with it the virtualizer)
-    // rebuilds when the zoom level or the collection changes.
-    void zoom;
+    // rebuilds when the zoom level or the collection changes. Zoom lives in
+    // the shared grid store (TASK-01-014) so both renderers stay in sync.
+    const size = gridState.thumbSize;
     void items.length;
 
-    const cols = columnCount(el.clientWidth, zoom, GRID_GAP);
+    const cols = columnCount(el.clientWidth, size, GRID_GAP);
     columns = cols;
     const rowCount = Math.ceil(items.length / cols);
 
     const virtualizer = new Virtualizer({
       getScrollElement: () => el,
       count: rowCount,
-      estimateSize: () => zoom + GRID_GAP,
+      estimateSize: () => size + GRID_GAP,
       overscan,
       observeElementOffset,
       observeElementRect,
@@ -72,6 +78,7 @@
         const rows = inst.getVirtualItems();
         virtualRows = rows;
         totalSize = inst.getTotalSize();
+        gridState.scrollTop = inst.scrollOffset ?? 0;
         // Visible range moved (scroll, resize): feed the queue's
         // visible-first priority (PLAN §3 rule 4), debounced.
         reportVisible(visibleHashes(items, cols, rows.map((r) => r.index)));
@@ -100,7 +107,7 @@
       min={ZOOM_MIN}
       max={ZOOM_MAX}
       step={ZOOM_STEP}
-      bind:value={zoom}
+      bind:value={gridState.thumbSize}
     />
   </div>
   <div class="grid-scroll" data-testid="grid-scroll" bind:this={scrollEl}>
@@ -111,7 +118,7 @@
           style="transform: translateY({row.start}px); height: {row.size}px; grid-template-columns: repeat({columns}, var(--thumb-size))"
         >
           {#each rowItems(items, columns, row.index) as item (item.id)}
-            <div class="grid-cell" data-testid="grid-cell" style="--thumb-size: {zoom}px">
+            <div class="grid-cell" data-testid="grid-cell" style="--thumb-size: {gridState.thumbSize}px">
               {#if thumbUri(item.hash)}
                 <img
                   src={thumbUri(item.hash) ?? ""}

@@ -68,3 +68,26 @@ export function debounce<A extends unknown[]>(
     timer = setTimeout(() => fn(...args), ms);
   };
 }
+
+/// Canvas hit-testing (TASK-01-014): which item lives under a click at
+/// viewport-relative `offsetX`/`offsetY` when the grid is scrolled to
+/// `scrollTop`. Pure math so the canvas grid keeps its pointer handling
+/// unit-testable. Returns `null` for gutter/edge clicks and past-the-end
+/// positions — never a negative or out-of-range index.
+export function cellAt(
+  offsetX: number,
+  offsetY: number,
+  scrollTop: number,
+  thumbSize: number,
+  columns: number,
+  itemCount: number,
+): number | null {
+  const step = thumbSize + GRID_GAP;
+  const col = Math.floor(offsetX / step);
+  if (col < 0 || col >= columns) return null;
+  const row = Math.floor((offsetY + scrollTop) / step);
+  if (row < 0) return null;
+  const index = row * columns + col;
+  if (index >= itemCount) return null;
+  return index;
+}

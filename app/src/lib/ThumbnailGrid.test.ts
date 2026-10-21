@@ -34,7 +34,7 @@ afterEach(() => cleanup());
 
 describe("ThumbnailGrid", () => {
   it("mounts a bounded DOM for 1000 items (only visible rows exist)", () => {
-    render(ThumbnailGrid, { items: makeItems(1000), thumbSize: 160 });
+    render(ThumbnailGrid, { items: makeItems(1000) });
 
     const cells = document.querySelectorAll('[data-testid="grid-cell"]');
     expect(cells.length).toBeGreaterThan(0);
@@ -44,7 +44,7 @@ describe("ThumbnailGrid", () => {
   });
 
   it("stays bounded while scrolling fast through the whole list", () => {
-    render(ThumbnailGrid, { items: makeItems(1000), thumbSize: 160 });
+    render(ThumbnailGrid, { items: makeItems(1000) });
 
     for (let i = 0; i < 20; i++) scrollBy(4000);
 
@@ -61,13 +61,13 @@ describe("ThumbnailGrid", () => {
   it("shows the placeholder for files without a hash yet", () => {
     const items = makeItems(20);
     items[0] = { ...items[0], hash: null };
-    render(ThumbnailGrid, { items, thumbSize: 160 });
+    render(ThumbnailGrid, { items });
 
     expect(document.querySelector('[data-testid="grid-placeholder"]')).not.toBeNull();
   });
 
   it("zoom slider resizes thumbs live without re-fetching (srcs unchanged)", () => {
-    render(ThumbnailGrid, { items: makeItems(500), thumbSize: 160 });
+    render(ThumbnailGrid, { items: makeItems(500) });
 
     const srcsBefore = [...document.querySelectorAll('[data-testid="grid-cell"] img')].map(
       (img) => img.getAttribute("src"),
@@ -97,7 +97,6 @@ describe("ThumbnailGrid", () => {
     const onvisible = vi.fn();
     render(ThumbnailGrid, {
       items: makeItems(1000),
-      thumbSize: 160,
       onvisible,
     });
 

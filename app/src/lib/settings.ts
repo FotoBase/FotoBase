@@ -4,16 +4,22 @@
 
 export type UpdateMode = "auto" | "check-but-ask" | "off";
 
+/// Library grid renderer (TASK-01-014). Default DOM; canvas is an explicit
+/// user override — no accepted ADR has chosen canvas as an OS default.
+export type GridRendererSetting = "dom" | "canvas";
+
 export interface Settings {
   language: string;
   update_mode: UpdateMode;
   show_tooltips: boolean;
+  grid_renderer: GridRendererSetting;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   language: "en",
   update_mode: "check-but-ask",
   show_tooltips: true,
+  grid_renderer: "dom",
 };
 
 export const UPDATE_MODES: { value: UpdateMode; labelKey: string }[] = [

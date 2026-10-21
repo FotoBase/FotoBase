@@ -2,7 +2,15 @@
 // Unit-tested here so the Svelte component only wires state.
 
 import { describe, expect, it, vi } from "vitest";
-import { columnCount, debounce, rowItems, thumbUri, visibleHashes, type GridItem } from "./grid";
+import {
+  cellAt,
+  columnCount,
+  debounce,
+  rowItems,
+  thumbUri,
+  visibleHashes,
+  type GridItem,
+} from "./grid";
 
 describe("columnCount", () => {
   it("fits as many full thumb+gap columns as the width allows", () => {
@@ -65,6 +73,36 @@ describe("visibleHashes", () => {
 
   it("returns an empty list for an empty visible range", () => {
     expect(visibleHashes(items, 2, [])).toEqual([]);
+  });
+});
+
+describe("cellAt (canvas hit-testing, TASK-01-014)", () => {
+  // 160px thumbs + 8px gap: cells occupy [0,160), [168,328), ...
+  const size = 160;
+  const cols = 4;
+  const count = 9;
+
+  it("maps a click inside the first cell to index 0", () => {
+    expect(cellAt(10, 10, 0, size, cols, count)).toBe(0);
+    expect(cellAt(159, 159, 0, size, cols, count)).toBe(0);
+  });
+
+  it("maps clicks further right and down via the scroll offset", () => {
+    expect(cellAt(168, 10, 0, size, cols, count)).toBe(1);
+    // Row 1 starts at y=168; with the viewport scrolled 168px down, a click
+    // at viewport y=10 hits row 1.
+    expect(cellAt(10, 10, 168, size, cols, count)).toBe(4);
+  });
+
+  it("returns null for clicks past the last column or the last item", () => {
+    // 9 items over 4 columns = rows 0..2; row 2 holds only index 8 (col 0).
+    expect(cellAt(168, 336, 0, size, cols, count)).toBeNull(); // row 2, col 1: past the last item
+    expect(cellAt(10, 600, 0, size, cols, count)).toBeNull(); // row 3: empty
+    expect(cellAt(700, 10, 0, size, cols, count)).toBeNull(); // col 4 does not exist
+  });
+
+  it("never returns a negative index", () => {
+    expect(cellAt(10, 10, -168, size, cols, count)).toBeNull();
   });
 });
 
