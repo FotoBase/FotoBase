@@ -9,10 +9,11 @@ use std::sync::Mutex;
 
 use fotobase_catalog::Catalog;
 use serde::Serialize;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 pub mod folder_manager;
+pub mod import;
 pub mod rebuild;
 pub mod settings;
 pub mod thumb;
@@ -26,6 +27,14 @@ const THUMB_QUEUE_CAPACITY: usize = 64;
 /// Capacity of the rebuild queue: bounded, per PLAN §3 rule 4. Rebuilds
 /// coalesce on one key, so capacity 2 covers a queued + a running rebuild.
 const REBUILD_QUEUE_CAPACITY: usize = 2;
+
+/// Capacity of the import queue: bounded, per PLAN §3 rule 4. Imports do
+/// not coalesce (different sources/destinations are different work), so
+/// each request gets a unique key; the single worker serializes them.
+const IMPORT_QUEUE_CAPACITY: usize = 2;
+
+/// Sequence number for unique import job keys.
+static IMPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Lazily-opened catalog shared by IPC commands (TASK-01-008). The catalog is
 /// a rebuildable cache (PLAN §5); nothing here writes user data.
@@ -41,6 +50,12 @@ struct AppState {
     /// Bounded queue for the rebuild-catalog job (TASK-01-023); one key,
     /// so concurrent requests coalesce onto the running rebuild.
     rebuilds: fotobase_jobs::Queue<rebuild::RebuildReport>,
+    /// Bounded queue for import jobs (TASK-01-017); unique keys, the
+    /// worker serializes concurrent imports.
+    imports: fotobase_jobs::Queue<import::ImportReport>,
+    /// Cancel token of the most recently started import (TASK-01-017):
+    /// `cancel_import` trips it, the running job observes the flag.
+    import_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
     /// Options-dialog settings (TASK-01-022); mirrored in settings.json.
     settings: Mutex<settings::Settings>,
     /// Update feed artifact found by the last check, awaiting the user's
@@ -252,6 +267,111 @@ async fn rebuild_catalog(
     }
 }
 
+/// Import from folder / removable drive (TASK-01-017, PLAN §2A/§6 P1):
+/// copies files into the catalog location with date/custom destination
+/// naming, skipping cataloged duplicates when "exclude duplicates" is on
+/// (the default). Heavy work runs in the bounded job queue (§3 rule 4) on
+/// a blocking thread; progress streams on the `import-progress` event.
+/// `cancel_import` trips the cancel token the job observes — a cancelled
+/// import never leaves a half-copied file at the destination.
+#[tauri::command]
+async fn start_import(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    source: String,
+    destination: String,
+    naming: String,
+    custom_pattern: Option<String>,
+    exclude_duplicates: Option<bool>,
+) -> Result<import::ImportReport, String> {
+    let req =
+        import::parse_request(&source, &destination, &naming, custom_pattern, exclude_duplicates)
+            .ok_or_else(|| "invalid import request".to_string())?;
+
+    // A fresh token per import: cancel_import always targets the import
+    // the UI is currently looking at (the worker serializes imports).
+    let token = fotobase_jobs::CancelToken::default();
+    store_import_cancel(&state, token.clone())?;
+
+    let queue = state.imports.clone();
+    let job_app = app.clone();
+    let job_catalog_path = state.catalog_path.clone();
+    let seq = IMPORT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let handle = queue
+        .try_enqueue(
+            format!("import-{seq}"),
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |ctx| {
+                let app = job_app.clone();
+                let req = req.clone();
+                let catalog_path = job_catalog_path.clone();
+                let token = token.clone();
+                let ctx = ctx.clone();
+                async move {
+                    let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        let emit_flag = flag.clone();
+                        let emit = move |p: import::ImportProgress| {
+                            // Bridge the user's cancel token (and the
+                            // queue's own cancellation) onto the plain
+                            // flag the engine checks.
+                            import::sync_cancel(
+                                &emit_flag,
+                                token.is_cancelled() || ctx.is_cancelled(),
+                            );
+                            let _ = app.emit(import::IMPORT_EVENT, p);
+                        };
+                        import::run_import(
+                            &catalog_path,
+                            &req.source,
+                            &req.dest_root,
+                            &req.options,
+                            &flag,
+                            &emit,
+                        )
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(report)) => fotobase_jobs::Outcome::Done(report),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("import task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue import: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("import cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Publish the new import's cancel token. A sync helper on purpose: the
+/// `MutexGuard` must never exist inside the async command body, or the
+/// future stops being `Send`.
+fn store_import_cancel(state: &AppState, token: fotobase_jobs::CancelToken) -> Result<(), String> {
+    let mut guard =
+        state.import_cancel.lock().map_err(|e| format!("import cancel mutex poisoned: {e}"))?;
+    *guard = Some(token);
+    Ok(())
+}
+
+/// Cancel the import that is currently running or queued (TASK-01-017).
+/// Best-effort: with no import in flight it is a no-op.
+#[tauri::command]
+fn cancel_import(state: tauri::State<'_, AppState>) {
+    let token = state
+        .import_cancel
+        .lock()
+        .map_err(|e| format!("import cancel mutex poisoned: {e}"))
+        .ok()
+        .and_then(|guard| guard.clone());
+    if let Some(token) = token {
+        token.cancel();
+    }
+}
+
 /// What an update check reports back to the UI.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct UpdateCheck {
@@ -368,6 +488,9 @@ pub fn run() {
             let rebuilds = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(REBUILD_QUEUE_CAPACITY)
             });
+            let imports = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(IMPORT_QUEUE_CAPACITY)
+            });
             let persisted = settings::Settings::load(&data_dir);
             app.manage(AppState {
                 data_dir: data_dir.clone(),
@@ -376,6 +499,8 @@ pub fn run() {
                 cache_dir,
                 thumbs,
                 rebuilds,
+                imports,
+                import_cancel: Mutex::new(None),
                 settings: Mutex::new(persisted),
                 pending_update: Mutex::new(None),
                 folders: Mutex::new(None),
@@ -394,6 +519,8 @@ pub fn run() {
             rebuild_catalog,
             set_folder_mode,
             remove_folder,
+            start_import,
+            cancel_import,
             check_for_updates,
             install_pending_update
         ])

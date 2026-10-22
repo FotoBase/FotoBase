@@ -5,6 +5,7 @@
   // runs once on startup.
   import OptionsDialog from "./lib/OptionsDialog.svelte";
   import FolderManagerDialog from "./lib/FolderManagerDialog.svelte";
+  import ImportDialog from "./lib/ImportDialog.svelte";
   import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
   import FolderTree from "./lib/FolderTree.svelte";
@@ -19,6 +20,7 @@
   let pong = $state<string | null>(null);
   let optionsOpen = $state(false);
   let folderManagerOpen = $state(false);
+  let importOpen = $state(false);
   let settings = $state<Settings | null>(null);
   let photos = $state<GridItem[]>([]);
   let folders = $state<FolderInfo[]>([]);
@@ -153,6 +155,9 @@
   >
     {t("app.folderManager")}
   </button>
+  <button type="button" onclick={() => (importOpen = true)} data-testid="open-import">
+    {t("app.import")}
+  </button>
   {#if settings}
     <OptionsDialog
       bind:open={optionsOpen}
@@ -169,6 +174,7 @@
       folders={folders}
       onchanged={refreshLibrary}
     />
+    <ImportDialog bind:open={importOpen} onchanged={refreshLibrary} />
   {/if}
   <!-- Folders view + grid (TASK-01-015): the tree's multi-select is the
        grid's filter; both live in one flex row. -->
