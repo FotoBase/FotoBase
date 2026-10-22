@@ -73,6 +73,8 @@ const messages: Record<string, Dict> = {
     "import.report": "Copied {copied}, skipped {duplicates} duplicates, {failed} failed",
     "import.report.cancelled": "Cancelled: copied {copied}, skipped {duplicates} duplicates",
     "import.error": "Import failed: {error}",
+    "search.placeholder": "Search filenames and folders",
+    "search.clear": "Clear search",
   },
   de: {
     "app.title": "Fotobase",
@@ -142,6 +144,8 @@ const messages: Record<string, Dict> = {
     "import.report": "Kopiert: {copied}, Duplikate übersprungen: {duplicates}, fehlgeschlagen: {failed}",
     "import.report.cancelled": "Abgebrochen: kopiert {copied}, Duplikate übersprungen {duplicates}",
     "import.error": "Import fehlgeschlagen: {error}",
+    "search.placeholder": "Dateinamen und Ordner durchsuchen",
+    "search.clear": "Suche löschen",
   },
 };
 

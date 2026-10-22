@@ -101,15 +101,23 @@ fn with_folder_manager<T>(
     f(guard.as_ref().expect("folder manager just inserted"))
 }
 
-/// Live FTS search (TASK-01-008, PLAN §5): returns matching file ids; the UI
-/// renders them. No image bytes ever cross IPC.
+/// Live FTS search (TASK-01-008/01-018, PLAN §5): returns matching grid
+/// rows (id + filename + hash), best matches first; the UI renders them
+/// directly through the `thumb://` scheme. An optional folder-id list
+/// narrows the match to the Folders-view selection (TASK-01-015) — search
+/// and folder filter combine. No image bytes ever cross IPC.
 #[tauri::command]
 fn search_files(
     query: String,
+    folders: Option<Vec<i64>>,
     limit: Option<usize>,
     state: tauri::State<'_, AppState>,
-) -> Result<Vec<i64>, String> {
-    with_catalog(&state, |cat| cat.search_files(&query, limit.unwrap_or(200)))
+) -> Result<Vec<fotobase_catalog::FileInfo>, String> {
+    let limit = limit.unwrap_or(200);
+    with_catalog(&state, |cat| match folders {
+        None => cat.search_files_detailed(&query, None, limit),
+        Some(ids) => cat.search_files_detailed(&query, Some(&ids), limit),
+    })
 }
 
 /// The library grid's items (TASK-01-013, PLAN §4): id + filename + content

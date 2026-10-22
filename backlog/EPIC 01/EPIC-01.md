@@ -35,7 +35,7 @@
 - [x] `01-015` (M) Folder tree grouped by year; selection state; context menu skeleton.
 - [x] `01-016` (M) Folder Manager dialog: Scan Once / Scan Always / Remove from catalog (per §2A).
 - [x] `01-017` (M) Import from folder/removable drive: destination naming (date/custom), duplicate skip with "exclude duplicates" checkbox (default on).
-- [ ] `01-018` (M) Live search bar wired to FTS (filenames/folders).
+- [x] `01-018` (M) Live search bar wired to FTS (filenames/folders).
 
 ## feat: UI — viewer & info
 

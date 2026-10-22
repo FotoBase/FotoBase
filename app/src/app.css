@@ -137,6 +137,36 @@ main {
   min-width: 0;
 }
 
+.search-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+}
+
+.search-bar input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #1c1c1c;
+  color: inherit;
+}
+
+.search-bar button {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #2a2a2a;
+  color: inherit;
+  cursor: pointer;
+}
+
+.search-bar button:hover {
+  background: #333;
+}
+
 .context-menu {
   position: fixed;
   z-index: 100;
