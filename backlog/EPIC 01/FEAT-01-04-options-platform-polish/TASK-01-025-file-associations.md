@@ -1,6 +1,6 @@
 # task: add file-association registration option
 
-**Feature:** [FEAT-01-04-options-platform-polish](FEAT-01-04-options-platform-polish.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-22)
+**Feature:** [FEAT-01-04-options-platform-polish](FEAT-01-04-options-platform-polish.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-22)
 
 ## Description
 Implement the file-association option (PLAN §2M "File associations: default viewer for image types", P1): register Fotobase as a viewer for selected image types, and unregister cleanly. P1 scope is registration only — the viewer itself is 01-019.
