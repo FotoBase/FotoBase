@@ -1,6 +1,6 @@
 # task: wire live search bar to FTS
 
-**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-22)
 
 ## Description
 Implement the live search bar (PLAN §2C: "Live search bar filters while typing"), wired to the 01-008 FTS API over filenames and folder names. P1 scope is files/folders; metadata search arrives in P2.
@@ -19,4 +19,4 @@ Implement the live search bar (PLAN §2C: "Live search bar filters while typing"
 - E2E: folder selected + search term ⇒ intersection shown.
 
 ## Acceptance criteria
-- [ ] 01-018: Live search bar wired to FTS (filenames/folders); combines with folder selection; no jank on 50k.
+- [x] 01-018: Live search bar wired to FTS (filenames/folders); combines with folder selection; no jank on 50k.

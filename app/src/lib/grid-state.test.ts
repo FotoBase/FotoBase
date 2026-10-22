@@ -17,10 +17,11 @@ import {
 beforeEach(() => resetGridState());
 
 describe("gridState", () => {
-  it("defaults to a 160px zoom, empty selection, top scroll", () => {
+  it("defaults to a 160px zoom, empty selection, top scroll, empty search", () => {
     expect(gridState.thumbSize).toBe(DEFAULT_THUMB_SIZE);
     expect(gridState.selection.size).toBe(0);
     expect(gridState.scrollTop).toBe(0);
+    expect(gridState.searchQuery).toBe("");
   });
 
   it("toggleSelection adds, removes, and keeps ids unique", () => {
@@ -43,6 +44,14 @@ describe("gridState", () => {
     expect(ZOOM_MIN).toBe(64);
     expect(ZOOM_MAX).toBe(512);
     expect(ZOOM_STEP).toBe(8);
+  });
+
+  it("carries the live-search query in the shared store (TASK-01-018)", () => {
+    // Query state lives in the store so both renderers filter for free.
+    gridState.searchQuery = "beach";
+    expect(gridState.searchQuery).toBe("beach");
+    resetGridState();
+    expect(gridState.searchQuery).toBe("");
   });
 });
 

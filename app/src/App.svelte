@@ -9,12 +9,14 @@
   import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
   import FolderTree from "./lib/FolderTree.svelte";
+  import SearchBar from "./lib/SearchBar.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadSettings, type Settings } from "./lib/settings";
   import { runUpdateFlow } from "./lib/updates";
-  import { pickRenderer } from "./lib/grid-state.svelte.js";
+  import { pickRenderer, gridState } from "./lib/grid-state.svelte.js";
   import { debounce, type GridItem } from "./lib/grid";
+  import { listLibraryItems } from "./lib/search";
   import type { FolderInfo, MenuItem } from "./lib/folder-tree";
 
   let pong = $state<string | null>(null);
@@ -83,17 +85,19 @@
     })();
   });
 
-  // Folder filtering (TASK-01-015): the selected folder ids are the grid's
-  // filter; the backend narrows by folder_id in SQL. Re-runs whenever the
-  // tree selection changes.
+  // Library filtering (TASK-01-015 folders, TASK-01-018 live search): the
+  // selected folder ids and the shared store's searchQuery combine — the
+  // backend narrows in SQL (folder `IN` + FTS MATCH), so a 50k library
+  // never ships every row over IPC just to hide most of it. Clearing the
+  // search naturally restores the folder-filtered view: the query is the
+  // only thing that changed.
   $effect(() => {
+    // Read both filters up front so the effect tracks each of them.
     const sel = selectedFolders;
+    const query = gridState.searchQuery;
     void (async () => {
       try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        photos = sel.length
-          ? await invoke<GridItem[]>("list_files", { folders: sel })
-          : await invoke<GridItem[]>("list_files");
+        photos = await listLibraryItems(sel, query);
       } catch {
         // Browser dev / backend down: nothing to show.
         photos = [];
@@ -186,6 +190,9 @@
       onfoldercontextmenu={openFolderMenu}
     />
     <div class="grid-area">
+      <!-- Live search (TASK-01-018): debounced into the shared store; the
+           effect above re-queries FTS and both renderers narrow. -->
+      <SearchBar />
       <!-- Renderer switch (TASK-01-014): config-driven, user-overridable. DOM
            stays the default everywhere; the canvas renderer is available on all
            OSes. Both read the same shared store, so zoom/selection/scroll carry

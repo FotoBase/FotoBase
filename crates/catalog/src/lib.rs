@@ -304,6 +304,56 @@ impl Catalog {
         Ok(ids.flatten().collect())
     }
 
+    /// Live search returning whole grid rows (TASK-01-018, PLAN §2C): the
+    /// same matching rules as [`Self::search_files`], but each hit carries
+    /// filename + content hash so the UI can render thumbnails without a
+    /// second lookup. An optional folder-id list narrows the match to the
+    /// Folders-view selection — search and folder filter combine; an empty
+    /// list filters everything out, never degenerating into an unbounded
+    /// `IN ()`. No image bytes here, ids and metadata only.
+    pub fn search_files_detailed(
+        &self,
+        query: &str,
+        folders: Option<&[i64]>,
+        limit: usize,
+    ) -> Result<Vec<FileInfo>> {
+        let expr = fts_match_expr(query);
+        if expr.is_empty() {
+            return Ok(Vec::new());
+        }
+        if let Some(ids) = folders {
+            if ids.is_empty() {
+                return Ok(Vec::new());
+            }
+        }
+        let folder_clause = match folders {
+            None => String::new(),
+            Some(ids) => {
+                let placeholders = "?,".repeat(ids.len()).trim_end_matches(',').to_string();
+                format!(" AND f.folder_id IN ({placeholders})")
+            }
+        };
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(expr)];
+        if let Some(ids) = folders {
+            params.extend(ids.iter().copied().map(|id| Box::new(id) as _));
+        }
+        params.push(Box::new(limit as i64));
+        let sql = format!(
+            "SELECT f.id, f.filename, f.hash FROM files_fts
+             JOIN files f ON f.id = files_fts.rowid
+             WHERE files_fts MATCH ?1{folder_clause}
+             ORDER BY rank
+             LIMIT ?{}",
+            params.len()
+        );
+        let mut stmt = self.conn.prepare_cached(&sql)?;
+        let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt.query_map(refs.as_slice(), |r| {
+            Ok(FileInfo { id: r.get(0)?, filename: r.get(1)?, hash: r.get(2)? })
+        })?;
+        Ok(rows.flatten().collect())
+    }
+
     /// The library grid's item list (TASK-01-013, PLAN §4): id, filename and
     /// content hash, path-ordered. The hash is the `thumb://` cache key; a
     /// `None` hash (not yet computed) still lists, so the UI shows the

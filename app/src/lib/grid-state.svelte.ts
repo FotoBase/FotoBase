@@ -20,6 +20,10 @@ class GridState {
   selection = $state(new Set<number>());
   /// Last scroll offset, so a renderer switch resumes where the user was.
   scrollTop = $state(0);
+  /// Live-search query (TASK-01-018, PLAN §2C). Lives in the shared store so
+  /// the DOM and canvas grids filter for free: the shell fetches the
+  /// matching items once and hands them to whichever renderer is mounted.
+  searchQuery = $state("");
 
   toggleSelection(id: number): void {
     const next = new Set(this.selection);
@@ -36,6 +40,7 @@ export function resetGridState(): void {
   gridState.thumbSize = DEFAULT_THUMB_SIZE;
   gridState.selection = new Set();
   gridState.scrollTop = 0;
+  gridState.searchQuery = "";
 }
 
 /// Which renderer to mount for a persisted setting. Canvas only when
