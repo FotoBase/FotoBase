@@ -1,6 +1,6 @@
 # task: build perf acceptance harness
 
-**Feature:** [FEAT-01-05-perf-acceptance-harness](FEAT-01-05-perf-acceptance-harness.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-22)
+**Feature:** [FEAT-01-05-perf-acceptance-harness](FEAT-01-05-perf-acceptance-harness.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-22)
 
 ## Description
 
