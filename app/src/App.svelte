@@ -11,6 +11,7 @@
   import FolderTree from "./lib/FolderTree.svelte";
   import SearchBar from "./lib/SearchBar.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
+  import Viewer from "./lib/Viewer.svelte";
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadSettings, type Settings } from "./lib/settings";
   import { runUpdateFlow } from "./lib/updates";
@@ -32,6 +33,26 @@
     x: 0,
     y: 0,
   });
+
+  // Single-photo viewer (TASK-01-019): opened from the grid over the current
+  // folder/search selection. `slideshow` is set by the context menu's
+  // "View slideshow" entry; keyboard control lives inside the viewer.
+  let viewer = $state<{ open: boolean; index: number; slideshow: boolean }>({
+    open: false,
+    index: 0,
+    slideshow: false,
+  });
+
+  function openViewer(item: GridItem, slideshow = false): void {
+    const index = photos.findIndex((p) => p.id === item.id);
+    viewer = { open: true, index: index < 0 ? 0 : index, slideshow };
+  }
+
+  function openSlideshow(): void {
+    // No selection: start from the first photo of the current view.
+    const first = photos[0];
+    if (first) openViewer(first, true);
+  }
 
   async function ping(): Promise<void> {
     try {
@@ -126,9 +147,11 @@
           // Browser dev / backend down: nothing to refresh.
         }
       })();
+    } else if (id === "view-slideshow") {
+      openSlideshow();
     }
-    // view-slideshow / locate-on-disk / remove-from-fotobase: wired no-ops
-    // until the viewer and the 01-021 file-menu commands exist.
+    // locate-on-disk / remove-from-fotobase: wired no-ops
+    // until the 01-021 file-menu commands exist.
   }
 
   function openFolderMenu(e: { folder: FolderInfo; x: number; y: number }): void {
@@ -198,12 +221,28 @@
            OSes. Both read the same shared store, so zoom/selection/scroll carry
            across a switch. -->
       {#if settings && pickRenderer(settings.grid_renderer) === "canvas"}
-        <CanvasThumbnailGrid items={photos} onvisible={prioritizeVisible} />
+        <CanvasThumbnailGrid
+          items={photos}
+          onvisible={prioritizeVisible}
+          onopen={(item) => openViewer(item)}
+        />
       {:else}
-        <ThumbnailGrid items={photos} onvisible={prioritizeVisible} />
+        <ThumbnailGrid
+          items={photos}
+          onvisible={prioritizeVisible}
+          onopen={(item) => openViewer(item)}
+        />
       {/if}
     </div>
   </div>
+  {#if viewer.open}
+    <Viewer
+      items={photos}
+      startIndex={viewer.index}
+      startSlideshow={viewer.slideshow}
+      onclose={() => (viewer = { open: false, index: 0, slideshow: false })}
+    />
+  {/if}
   <ContextMenu
     bind:open={folderMenu.open}
     x={folderMenu.x}

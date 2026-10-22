@@ -8,7 +8,7 @@
 - Info pane shows EXIF (camera, lens, exposure), a correct histogram, and file properties, updating per photo.
 - Locate on disk opens the OS file manager at the photo; Delete moves to OS trash after confirmation; folder removal is catalog-only; Refresh thumbnails re-queues renders.
 
-- [ ] `01-019` (M) Single-photo viewer with filmstrip; fullscreen; basic slideshow (timing, no music).
+- [x] `01-019` (M) Single-photo viewer with filmstrip; fullscreen; basic slideshow (timing, no music).
 - [ ] `01-020` (M) Info pane: EXIF (camera, lens, exposure), histogram, file properties.
 - [ ] `01-021` (S) File-menu basics: Locate on disk, Delete from disk (trash + confirm), Exit; folder "Remove from Fotobase" (catalog only) + Refresh thumbnails.
 

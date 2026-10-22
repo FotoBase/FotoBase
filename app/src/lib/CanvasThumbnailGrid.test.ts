@@ -233,4 +233,25 @@ describe("CanvasThumbnailGrid", () => {
     const later = onvisible.mock.calls.at(-1)![0] as string[];
     expect(later[0]).not.toBe(HASH(0));
   });
+
+  // Viewer open (TASK-01-019): a double-click on a cell hands that photo to
+  // the shell, mirroring the DOM grid's onopen contract.
+  it("double-click opens the photo under the pointer (onopen)", async () => {
+    const onopen = vi.fn();
+    render(CanvasThumbnailGrid, {
+      items: makeItems(100),
+      loadImage: fakeLoadImage,
+      onopen,
+    });
+    await settle();
+
+    const canvas = screen.getByTestId("grid-canvas");
+    const ev = new MouseEvent("dblclick", { bubbles: true });
+    Object.defineProperty(ev, "offsetX", { value: 200 }); // second cell (col 1)
+    Object.defineProperty(ev, "offsetY", { value: 10 });
+    canvas.dispatchEvent(ev);
+    flushSync();
+
+    expect(onopen).toHaveBeenCalledWith({ id: 1, filename: "photo-1.jpg", hash: HASH(1) });
+  });
 });

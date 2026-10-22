@@ -14,6 +14,7 @@ use tauri_plugin_updater::UpdaterExt;
 
 pub mod folder_manager;
 pub mod import;
+pub mod preview;
 pub mod rebuild;
 pub mod settings;
 pub mod thumb;
@@ -172,6 +173,21 @@ fn thumb_response(reply: thumb::ThumbReply) -> tauri::http::Response<Vec<u8>> {
         .header("access-control-allow-origin", "*")
         .body(reply.body)
         .expect("static thumb response parts are valid")
+}
+
+/// `preview://` scheme handler (TASK-01-019, PLAN §3 rule 3): serves the
+/// full-size image for the single-photo viewer, resolved hash → original
+/// path → bytes straight from disk. Zero image bytes cross IPC. A miss
+/// (unknown hash, vanished file) returns the placeholder image — the
+/// viewer never pops an error dialog.
+const PREVIEW_PROTOCOL: &str = "preview";
+fn preview_response(reply: preview::PreviewReply) -> tauri::http::Response<Vec<u8>> {
+    tauri::http::Response::builder()
+        .status(reply.status)
+        .header("content-type", reply.content_type)
+        .header("access-control-allow-origin", "*")
+        .body(reply.body)
+        .expect("static preview response parts are valid")
 }
 
 // --- Folder Manager (TASK-01-016, PLAN §2A) ---------------------------------
@@ -482,6 +498,16 @@ pub fn run() {
                 }
             }
             thumb_response(reply)
+        })
+        .register_uri_scheme_protocol(PREVIEW_PROTOCOL, |ctx, request| {
+            let state = ctx.app_handle().state::<AppState>();
+            // Same URI grammar as thumb:// — reuse its parser.
+            let hash = thumb::hash_from_uri(request.uri()).unwrap_or_default();
+            let reply = with_catalog(&state, |cat| {
+                Ok::<_, fotobase_catalog::CatalogError>(preview::resolve_preview(&hash, cat))
+            })
+            .unwrap_or_else(|_| preview::placeholder());
+            preview_response(reply)
         })
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;

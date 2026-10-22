@@ -26,9 +26,17 @@
     overscan?: number;
     /// Called (debounced) with the unique hashes on screen.
     onvisible?: (hashes: string[]) => void;
+    /// Called with the photo the user opened (double-click or Enter —
+    /// TASK-01-019): the shell mounts the full-view viewer over the list.
+    onopen?: (item: GridItem) => void;
   }
 
-  let { items = [], overscan = 2, onvisible = () => {} }: Props = $props();
+  let {
+    items = [],
+    overscan = 2,
+    onvisible = () => {},
+    onopen = () => {},
+  }: Props = $props();
 
   const REPORT_DEBOUNCE_MS = 100;
 
@@ -118,7 +126,17 @@
           style="transform: translateY({row.start}px); height: {row.size}px; grid-template-columns: repeat({columns}, var(--thumb-size))"
         >
           {#each rowItems(items, columns, row.index) as item (item.id)}
-            <div class="grid-cell" data-testid="grid-cell" style="--thumb-size: {gridState.thumbSize}px">
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <div
+              class="grid-cell"
+              data-testid="grid-cell"
+              style="--thumb-size: {gridState.thumbSize}px"
+              tabindex="0"
+              ondblclick={() => onopen(item)}
+              onkeydown={(e) => {
+                if (e.key === "Enter") onopen(item);
+              }}
+            >
               {#if thumbUri(item.hash)}
                 <img
                   src={thumbUri(item.hash) ?? ""}

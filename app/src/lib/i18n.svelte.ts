@@ -75,6 +75,7 @@ const messages: Record<string, Dict> = {
     "import.error": "Import failed: {error}",
     "search.placeholder": "Search filenames and folders",
     "search.clear": "Clear search",
+    "viewer.slideshowRunning": "Slideshow running",
   },
   de: {
     "app.title": "Fotobase",
@@ -146,6 +147,7 @@ const messages: Record<string, Dict> = {
     "import.error": "Import fehlgeschlagen: {error}",
     "search.placeholder": "Dateinamen und Ordner durchsuchen",
     "search.clear": "Suche löschen",
+    "viewer.slideshowRunning": "Diashow läuft",
   },
 };
 

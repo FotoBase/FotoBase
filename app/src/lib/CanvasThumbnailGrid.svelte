@@ -46,6 +46,8 @@
     onvisible?: (hashes: string[]) => void;
     /// Called with the event coordinates and the item under the pointer.
     oncontextmenu?: (e: { x: number; y: number; item: GridItem }) => void;
+    /// Called with the photo the user opened (double-click — TASK-01-019).
+    onopen?: (item: GridItem) => void;
   }
 
   let {
@@ -54,6 +56,7 @@
     loadImage = async () => null,
     onvisible = () => {},
     oncontextmenu = () => {},
+    onopen = () => {},
   }: Props = $props();
 
   const REPORT_DEBOUNCE_MS = 100;
@@ -236,6 +239,20 @@
     if (index === null) return;
     oncontextmenu({ x: e.clientX, y: e.clientY, item: items[index] });
   }
+
+  function onDoubleClick(e: MouseEvent): void {
+    if (!scrollEl) return;
+    const index = cellAt(
+      e.offsetX,
+      e.offsetY,
+      scrollEl.scrollTop,
+      gridState.thumbSize,
+      columns,
+      items.length,
+    );
+    if (index === null) return;
+    onopen(items[index]);
+  }
 </script>
 
 <div class="grid-shell">
@@ -259,6 +276,7 @@
       bind:this={canvasEl}
       onclick={onClick}
       oncontextmenu={onContextMenu}
+      ondblclick={onDoubleClick}
     ></canvas>
   </div>
 </div>

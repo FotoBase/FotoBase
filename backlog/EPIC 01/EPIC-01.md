@@ -39,7 +39,7 @@
 
 ## feat: UI — viewer & info
 
-- [ ] `01-019` (M) Single-photo viewer with filmstrip; fullscreen; basic slideshow (timing, no music).
+- [x] `01-019` (M) Single-photo viewer with filmstrip; fullscreen; basic slideshow (timing, no music).
 - [ ] `01-020` (M) Info pane: EXIF (camera, lens, exposure), histogram, file properties.
 - [ ] `01-021` (S) File-menu basics: Locate on disk, Delete from disk (trash + confirm), Exit; folder "Remove from Fotobase" (catalog only) + Refresh thumbnails.
 
