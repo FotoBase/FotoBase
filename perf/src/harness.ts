@@ -21,8 +21,8 @@
 //                     hardware (it is not the decision hardware).
 
 import { execFileSync, spawn } from "node:child_process";
-import { createServer } from "node:net";
 import fs from "node:fs";
+import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,7 +61,11 @@ function parseArgs(argv: string[]): Args {
     return i >= 0 ? argv[i + 1] : undefined;
   };
   const has = (flag: string): boolean => argv.includes(flag);
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const repoRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+  );
   return {
     selfCheck: has("--self-check"),
     smoke: has("--smoke"),
@@ -91,18 +95,27 @@ function runSelfCheck(): number {
   console.log(JSON.stringify(report, null, 2));
   const failures = evaluateBars(metrics);
   for (const f of failures) console.error(`MISSED BAR: ${f}`);
-  console.error(failures.length > 0 ? "self-check: MISS (exit 1)" : "self-check: PASS");
+  console.error(
+    failures.length > 0 ? "self-check: MISS (exit 1)" : "self-check: PASS",
+  );
   return report.passed ? 0 : 1;
 }
 
 // --- Runner info (§3: stable environment notes) ------------------------------
 
-function runnerInfo(): { os: string; webkitgtk: string; cpu: string; ram_gb: number } {
+function runnerInfo(): {
+  os: string;
+  webkitgtk: string;
+  cpu: string;
+  ram_gb: number;
+} {
   let webkitgtk = "n/a";
   if (process.platform === "linux") {
     for (const pkg of ["webkit2gtk-4.1", "webkit2gtk-4.0"]) {
       try {
-        webkitgtk = execFileSync("pkg-config", ["--modversion", pkg], { encoding: "utf8" }).trim();
+        webkitgtk = execFileSync("pkg-config", ["--modversion", pkg], {
+          encoding: "utf8",
+        }).trim();
         break;
       } catch {
         /* try the next pkg-config name */
@@ -185,7 +198,9 @@ function treeRssKb(pid: number): number {
   }
   if (process.platform === "darwin") {
     // `ps -axo pid=,ppid=,rss=` — RSS in 1 KiB units; walk the same tree.
-    const rows = execFileSync("ps", ["-axo", "pid=,ppid=,rss="], { encoding: "utf8" })
+    const rows = execFileSync("ps", ["-axo", "pid=,ppid=,rss="], {
+      encoding: "utf8",
+    })
       .trim()
       .split("\n")
       .map((line) => line.trim().split(/\s+/).map(Number))
@@ -292,7 +307,11 @@ const SCROLL_RUN = `
   requestAnimationFrame(loop);
 `;
 
-async function waitUntil(fn: () => Promise<boolean>, timeoutMs: number, everyMs = 250): Promise<void> {
+async function waitUntil(
+  fn: () => Promise<boolean>,
+  timeoutMs: number,
+  everyMs = 250,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await fn()) return;
@@ -335,7 +354,12 @@ function appDataDir(home: string): string {
     case "linux":
       return path.join(home, ".local", "share", "io.github.fotobase.app");
     case "darwin":
-      return path.join(home, "Library", "Application Support", "io.github.fotobase.app");
+      return path.join(
+        home,
+        "Library",
+        "Application Support",
+        "io.github.fotobase.app",
+      );
     default:
       return path.join(home, "AppData", "Roaming", "io.github.fotobase.app");
   }
@@ -343,16 +367,22 @@ function appDataDir(home: string): string {
 
 async function runFull(args: Args): Promise<number> {
   if (process.platform === "win32") {
-    console.error("The full run needs tauri-driver; Windows (msedgedriver) is not wired up. Run on Linux/macOS.");
+    console.error(
+      "The full run needs tauri-driver; Windows (msedgedriver) is not wired up. Run on Linux/macOS.",
+    );
     return 2;
   }
   if (!args.fixture || !fs.existsSync(args.fixture)) {
     console.error(`--fixture directory not found: ${args.fixture}`);
-    console.error("Generate it first: python3 tools/fixture_gen.py --count <N> --seed 42 --out <dir>");
+    console.error(
+      "Generate it first: python3 tools/fixture_gen.py --count <N> --seed 42 --out <dir>",
+    );
     return 2;
   }
   if (!fs.existsSync(args.app)) {
-    console.error(`--app binary not found: ${args.app} (cargo build -p fotobase first)`);
+    console.error(
+      `--app binary not found: ${args.app} (cargo build -p fotobase first)`,
+    );
     return 2;
   }
 
@@ -361,7 +391,10 @@ async function runFull(args: Args): Promise<number> {
   const dataDir = appDataDir(home);
   fs.mkdirSync(dataDir, { recursive: true });
   // The renderer under test is pinned through the app's own settings store.
-  fs.writeFileSync(path.join(dataDir, "settings.json"), JSON.stringify({ grid_renderer: args.renderer }));
+  fs.writeFileSync(
+    path.join(dataDir, "settings.json"),
+    JSON.stringify({ grid_renderer: args.renderer }),
+  );
 
   const port = await freePort();
   // tauri-driver renamed its listen flag between v1 (--webdriver-port) and
@@ -381,11 +414,10 @@ async function runFull(args: Args): Promise<number> {
     FOTOBASE_PERF_FIXTURE: path.resolve(args.fixture),
     FOTOBASE_PERF_COUNT: String(args.count),
   };
-  const driver = spawn(
-    "tauri-driver",
-    [driverFlag, String(port)],
-    { stdio: ["ignore", "inherit", "inherit"], env },
-  );
+  const driver = spawn("tauri-driver", [driverFlag, String(port)], {
+    stdio: ["ignore", "inherit", "inherit"],
+    env,
+  });
 
   let browser: Awaited<ReturnType<typeof remote>> | undefined;
   const sampler = new RssSampler();
@@ -395,20 +427,25 @@ async function runFull(args: Args): Promise<number> {
       hostname: "127.0.0.1",
       port,
       logLevel: "warn",
-      capabilities: [
-        {
-          browserName: "wry",
-          "tauri:options": { application: path.resolve(args.app) },
-        },
-      ],
+      // Single object, not an array: webdriverio v9 passes `capabilities`
+      // straight through as alwaysMatch, and WebKitWebDriver rejects a
+      // JSON array there ("alwaysMatch is invalid in capabilities").
+      capabilities: {
+        browserName: "wry",
+        "tauri:options": { application: path.resolve(args.app) },
+      },
     });
 
     sampler.start(path.basename(args.app));
 
     // The app boots, arms the fixture folder (env hook), and the scan starts.
-    await waitUntil(async () =>
-      Boolean(await browser!.execute(() => Boolean((window as any).__TAURI__))),
-    60_000);
+    await waitUntil(
+      async () =>
+        Boolean(
+          await browser!.execute(() => Boolean((window as any).__TAURI__)),
+        ),
+      60_000,
+    );
 
     // §2 jank during scan: install the rAF stall monitor before the scan
     // fills the catalog.
@@ -433,7 +470,9 @@ async function runFull(args: Args): Promise<number> {
       ? (p.first_thumb_serve_ms - p.scan_started_ms) / 1000
       : (Date.now() - startedAt) / 1000;
     if (!p.first_thumb_serve_ms) {
-      console.error("warning: no real thumbnail was served during the run; reporting elapsed time");
+      console.error(
+        "warning: no real thumbnail was served during the run; reporting elapsed time",
+      );
       firstThumbS = Math.max(firstThumbS, args.timeoutS);
     }
 
@@ -445,7 +484,12 @@ async function runFull(args: Args): Promise<number> {
         const el = document.querySelector(sel);
         if (el) el.scrollTop = 0;
       }, '[data-testid="grid-scroll"], [data-testid="canvas-grid-scroll"]');
-      const run = (await browser.executeAsync(SCROLL_RUN, args.scrollS * 1000, 50, 600)) as {
+      const run = (await browser.executeAsync(
+        SCROLL_RUN,
+        args.scrollS * 1000,
+        50,
+        600,
+      )) as {
         frames: number;
         elapsedMs: number;
         jank: number;
@@ -454,7 +498,9 @@ async function runFull(args: Args): Promise<number> {
       if (run.error) throw new Error(run.error);
       fpsRuns.push(run.frames / (run.elapsedMs / 1000));
       scrollJank += run.jank;
-      console.error(`scroll run ${i + 1}/${args.runs}: ${fpsRuns[fpsRuns.length - 1].toFixed(1)} fps`);
+      console.error(
+        `scroll run ${i + 1}/${args.runs}: ${fpsRuns[fpsRuns.length - 1].toFixed(1)} fps`,
+      );
     }
 
     // §2 idle RAM: quiesce after the full scan, then take the median of the
@@ -465,7 +511,9 @@ async function runFull(args: Args): Promise<number> {
 
     const metrics: Metrics = {
       time_to_first_thumbnail_s: round1(firstThumbS),
-      full_scan_duration_s: round1((p.scan_completed_ms! - p.scan_started_ms) / 1000),
+      full_scan_duration_s: round1(
+        (p.scan_completed_ms! - p.scan_started_ms) / 1000,
+      ),
       scroll_fps_median: round1(median(fpsRuns)),
       idle_ram_mb: round1(idleRamMb),
       ui_jank_events: scanJank + scrollJank,
@@ -497,19 +545,26 @@ async function runFull(args: Args): Promise<number> {
         for (const e of schemaErrors) console.error(`SCHEMA: ${e}`);
         return 1;
       }
-      console.error("smoke: schema-valid perf-report.json produced (bars not enforced in CI)");
+      console.error(
+        "smoke: schema-valid perf-report.json produced (bars not enforced in CI)",
+      );
       return 0;
     }
     return report.passed ? 0 : 1;
   } catch (e) {
-    console.error(`harness error: ${e instanceof Error ? e.message : String(e)}`);
+    console.error(
+      `harness error: ${e instanceof Error ? e.message : String(e)}`,
+    );
     return 2;
   } finally {
     if (browser) await browser.deleteSession().catch(() => {});
     sampler.stop();
     driver.kill("SIGTERM");
     // Leave the temp home for post-mortem (catalog/cache), but bounded.
-    setTimeout(() => fs.rmSync(tmp, { recursive: true, force: true }), 1000).unref?.();
+    setTimeout(
+      () => fs.rmSync(tmp, { recursive: true, force: true }),
+      1000,
+    ).unref?.();
   }
 }
 
