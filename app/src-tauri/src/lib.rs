@@ -16,6 +16,7 @@ pub mod associations;
 pub mod file_menu;
 pub mod folder_manager;
 pub mod import;
+pub mod perf_probe;
 pub mod preview;
 pub mod rebuild;
 pub mod settings;
@@ -364,6 +365,14 @@ fn find_file_by_path(
     with_catalog(&state, |cat| cat.file_by_path(&path))
 }
 
+/// Perf-harness probe (TASK-01-026): the §2 timestamps the WebDriver
+/// harness polls for. `None` in every normal launch — the hook is inert
+/// unless the harness armed the app through the environment.
+#[tauri::command]
+fn perf_probe() -> Option<perf_probe::Snapshot> {
+    perf_probe::snapshot()
+}
+
 // --- Options dialog (TASK-01-022, PLAN §2 General tab) ----------------------
 
 /// Current settings. The frontend reads these when opening the dialog.
@@ -631,6 +640,12 @@ pub fn run() {
                 Some(req) => thumb::resolve_thumb(req, &state.cache_dir),
                 None => thumb::placeholder(),
             };
+            // A real (cached) JPEG went out: the protocol's
+            // time-to-first-thumbnail endpoint (TASK-01-026). Recorded before
+            // the placeholder handling below — a hit is neither.
+            if reply.content_type == "image/jpeg" {
+                perf_probe::note_first_thumb();
+            }
             // Placeholder went out (miss or malformed key): best-effort
             // trigger of the render that will fill the cache for next time.
             if reply.content_type == "image/png" {
@@ -689,6 +704,24 @@ pub fn run() {
                 folders: Mutex::new(None),
                 pending_open: Mutex::new(pending_open),
             });
+            // Perf-harness hook (TASK-01-026, protocol §1): inert unless the
+            // harness armed the app through the environment. Cold start with
+            // an empty catalog + cache is guaranteed by the harness pointing
+            // the app's data dir at a fresh directory.
+            if let Some(cfg) = perf_probe::arm_from_env() {
+                perf_probe::begin(cfg.expected);
+                let fixture = cfg.fixture.to_string_lossy().into_owned();
+                let state = app.state::<AppState>();
+                if let Err(e) = with_folder_manager(&state, |fm| {
+                    fm.set_mode(
+                        &fixture,
+                        folder_manager::parse_mode("always").expect("static mode"),
+                    )
+                }) {
+                    tracing::warn!("perf harness: arming fixture folder failed: {e}");
+                }
+                perf_probe::spawn_completion_watcher(state.catalog_path.clone(), cfg.expected);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -716,7 +749,8 @@ pub fn run() {
             register_associations,
             unregister_associations,
             take_open_files,
-            find_file_by_path
+            find_file_by_path,
+            perf_probe
         ])
         .build(tauri::generate_context!())
         .expect("error while building fotobase")

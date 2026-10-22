@@ -1,0 +1,80 @@
+name: perf-smoke
+
+# TASK-01-026: CI perf smoke per docs/webkitgtk-perf-protocol.md §5 (task
+# 00-012). Runs the harness end-to-end on ubuntu-latest with the 1k fixture
+# and asserts ONLY that `perf-report.json` is produced and schema-valid —
+# never the §2 bars (CI hardware is not the decision hardware; full 50k
+# decision runs stay manual/local per the protocol). Weekly schedule covers
+# the §10 WebView-drift risk.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 04:00 UTC — WebView drift is a listed §10 risk.
+    - cron: "0 4 * * 1"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system deps (Tauri/WebKitGTK + xvfb for the headless run)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libde265-dev \
+            libaom-dev \
+            xvfb
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: cargo install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: npm ci (harness)
+        working-directory: perf
+        run: npm ci
+
+      - name: Harness unit tests (report bars, schema, self-check)
+        working-directory: perf
+        run: npx vitest run
+
+      - name: Generate 1k fixture (00-013 generator, seed 42)
+        run: |
+          pip install pillow
+          python3 tools/fixture_gen.py --count 1000 --seed 42 --out /tmp/fixture
+
+      - name: cargo build (debug app for the driver)
+        run: cargo build -p fotobase
+
+      - name: Perf smoke run (schema-valid report only, bars not enforced)
+        working-directory: perf
+        run: xvfb-run -a npx tsx src/harness.ts --fixture /tmp/fixture --count 1000 --seed 42 --smoke --out perf-report.json
+
+      - name: Upload perf-report.json
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-report
+          path: perf/perf-report.json
+          if-no-files-found: ignore

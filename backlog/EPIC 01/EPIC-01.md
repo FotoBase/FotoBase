@@ -52,4 +52,4 @@
 
 ## feat: perf acceptance harness
 
-- [ ] `01-026` (M) Perf harness on 00-013 fixture: time-to-first-thumb, idle/peak RAM, scroll fps per OS; runs in CI as smoke test (per §10 WebView-drift risk).
+- [x] `01-026` (M) Perf harness on 00-013 fixture: time-to-first-thumb, idle/peak RAM, scroll fps per OS; runs in CI as smoke test (per §10 WebView-drift risk).
