@@ -290,6 +290,27 @@ impl Catalog {
         Ok(paths.flatten().collect())
     }
 
+    /// The catalog row for one on-disk path (TASK-01-025): routing a
+    /// file the OS opened with Fotobase into the viewer needs the path →
+    /// grid-item lookup. `files.path` is UNIQUE, so this is one indexed
+    /// query; `None` when the file is not cataloged (yet).
+    pub fn file_by_path(&self, path: &str) -> Result<Option<FileInfo>> {
+        let mut stmt =
+            self.conn.prepare_cached("SELECT id, filename, hash FROM files WHERE path = ?1")?;
+        let mut rows = stmt.query_map([path], |r| {
+            Ok(FileInfo { id: r.get(0)?, filename: r.get(1)?, hash: r.get(2)? })
+        })?;
+        match rows.next() {
+            Some(row) => Ok(Some(row?)),
+            None => Ok(None),
+        }
+    }
+
+    /// The id for one on-disk path, `None` when not cataloged.
+    pub fn file_id_by_path(&self, path: &str) -> Result<Option<i64>> {
+        Ok(self.file_by_path(path)?.map(|f| f.id))
+    }
+
     /// Import-time duplicate check (TASK-01-017, PLAN §2 "Detect duplicates
     /// while importing"): `true` when some cataloged file already carries
     /// this content hash. `NULL` hashes (not yet computed lazily) match

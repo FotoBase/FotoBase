@@ -7,7 +7,10 @@
     clearCache,
     onRebuildProgress,
     rebuildCatalog,
+    registerAssociations,
     saveSettings,
+    unregisterAssociations,
+    IMAGE_EXTENSIONS,
     THEME_CHOICES,
     UPDATE_MODES,
     type Settings,
@@ -47,6 +50,27 @@
 
   function setTheme(theme: Settings["theme"]): void {
     apply({ ...settings, theme });
+  }
+
+  // File associations (TASK-01-025, PLAN §2M): a checked type registers
+  // Fotobase as the OS default viewer for it (unchecking unregisters and
+  // restores the previous handler). The persisted list is the checked
+  // state's source of truth; an OS-side failure is reported, never silent.
+  let assocResult = $state<string | null>(null);
+
+  function setAssociation(ext: string, want: boolean): void {
+    const current = settings.file_associations;
+    const next = want
+      ? current.includes(ext)
+        ? current
+        : [...current, ext]
+      : current.filter((e) => e !== ext);
+    apply({ ...settings, file_associations: next });
+    assocResult = null;
+    const call = want ? registerAssociations([ext]) : unregisterAssociations([ext]);
+    void call.catch((e) => {
+      assocResult = t("options.associations.failed", { error: String(e) });
+    });
   }
 
   async function onClearCache(): Promise<void> {
@@ -188,6 +212,29 @@
           {/if}
         </div>
 
+        <!-- File associations (TASK-01-025, PLAN §2M): which image types
+             the OS opens with Fotobase. -->
+        <fieldset class="options-row options-associations">
+          <legend>{t("options.associations")}</legend>
+          <p class="assoc-hint">{t("options.associations.hint")}</p>
+          <div class="assoc-list">
+            {#each IMAGE_EXTENSIONS as ext (ext)}
+              <label>
+                <input
+                  type="checkbox"
+                  data-testid={`assoc-${ext}`}
+                  checked={settings.file_associations.includes(ext)}
+                  onchange={(e) => setAssociation(ext, e.currentTarget.checked)}
+                />
+                {ext}
+              </label>
+            {/each}
+          </div>
+          {#if assocResult}
+            <span class="clear-result" data-testid="assoc-result">{assocResult}</span>
+          {/if}
+        </fieldset>
+
         <label class="options-row options-check">
           <input
             type="checkbox"
@@ -252,6 +299,28 @@
     border: 1px solid rgb(128 128 128 / 40%);
     border-radius: 6px;
     padding: 0.5rem 0.75rem;
+  }
+  .options-associations {
+    display: grid;
+    gap: 0.3rem;
+    border: 1px solid rgb(128 128 128 / 40%);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+  }
+  .assoc-hint {
+    margin: 0;
+    color: var(--fb-muted, #555);
+    font-size: 0.85rem;
+  }
+  .assoc-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.9rem;
+  }
+  .assoc-list label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
   }
   .options-check {
     justify-content: start;

@@ -13,7 +13,7 @@
   import ContextMenu from "./lib/ContextMenu.svelte";
   import Viewer from "./lib/Viewer.svelte";
   import { setLocale, t } from "./lib/i18n.svelte.js";
-  import { loadSettings, type Settings } from "./lib/settings";
+  import { findFileByPath, loadSettings, takeOpenFiles, type Settings } from "./lib/settings";
   import { runUpdateFlow } from "./lib/updates";
   import { applyTheme, resolveTheme, systemPrefersDark, watchSystemTheme } from "./lib/theme";
   import { shortcuts, type ShortcutHandlers } from "./lib/shortcuts";
@@ -141,7 +141,56 @@
       setLocale(s.language);
       await runUpdateFlow(s.update_mode);
       await refreshLibrary();
+      await openOsFiles();
     })();
+  });
+
+  // OS-opened files (TASK-01-025, PLAN §2M): when the user opens an image
+  // with Fotobase from the file manager, the backend parks the path at
+  // startup (argv on Windows/Linux, LaunchServices `RunEvent::Opened` on
+  // macOS); here it is resolved against the catalog and the viewer opens
+  // on that row. Uncataloged paths are ignored — the file first needs to
+  // live in a watched folder. Best-effort: a missing backend (browser dev)
+  // must never break startup.
+  async function handleOpenPaths(paths: string[]): Promise<void> {
+    for (const path of paths) {
+      try {
+        const match = await findFileByPath(path);
+        if (!match) continue;
+        const index = photos.findIndex((p) => p.id === match.id);
+        if (index >= 0) {
+          viewer = { open: true, index, slideshow: false };
+          break;
+        }
+      } catch {
+        // Backend down mid-lookup: leave the viewer alone.
+      }
+    }
+  }
+
+  async function openOsFiles(): Promise<void> {
+    try {
+      await handleOpenPaths(await takeOpenFiles());
+    } catch {
+      // Browser dev / backend down: nothing to open.
+    }
+  }
+
+  // Files opened with Fotobase while it is already running (macOS
+  // open-with): the backend announces them on `open-file`.
+  $effect(() => {
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<string[]>("open-file", (e) => {
+          void handleOpenPaths(e.payload);
+        });
+      } catch {
+        // Browser dev: no backend, no events.
+      }
+    })();
+    return () => unlisten?.();
   });
 
   // Library filtering (TASK-01-015 folders, TASK-01-018 live search): the
