@@ -135,4 +135,21 @@ describe("ThumbnailGrid", () => {
     flushSync();
     expect(onopen).toHaveBeenCalledOnce();
   });
+
+  // Context menu (TASK-01-021): right-clicking a cell reports the cell's
+  // position and the photo, so the shell can open its per-photo menu.
+  it("right-click reports the photo and pointer position (oncontextmenu)", () => {
+    const oncontextmenu = vi.fn();
+    render(ThumbnailGrid, { items: makeItems(10), oncontextmenu });
+
+    const cell = document.querySelectorAll('[data-testid="grid-cell"]')[2] as HTMLElement;
+    const ev = new MouseEvent("contextmenu", { bubbles: true, clientX: 11, clientY: 22 });
+    cell.dispatchEvent(ev);
+    flushSync();
+    expect(oncontextmenu).toHaveBeenCalledWith({
+      x: 11,
+      y: 22,
+      item: { id: 2, filename: "photo-2.jpg", hash: HASH(2) },
+    });
+  });
 });

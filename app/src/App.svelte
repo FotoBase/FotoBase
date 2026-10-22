@@ -18,6 +18,9 @@
   import { pickRenderer, gridState } from "./lib/grid-state.svelte.js";
   import { debounce, type GridItem } from "./lib/grid";
   import { listLibraryItems } from "./lib/search";
+  import { deleteFromDisk, exitApp, refreshFolderThumbnails, revealInDisk } from "./lib/file-menu";
+  import { loadPhotoInfo } from "./lib/info-pane";
+  import { removeFolder } from "./lib/folder-manager";
   import type { FolderInfo, MenuItem } from "./lib/folder-tree";
 
   let pong = $state<string | null>(null);
@@ -28,10 +31,18 @@
   let photos = $state<GridItem[]>([]);
   let folders = $state<FolderInfo[]>([]);
   let selectedFolders = $state<number[]>([]);
-  let folderMenu = $state<{ open: boolean; x: number; y: number }>({
+  let folderMenu = $state<{ open: boolean; x: number; y: number; folder: FolderInfo | null }>({
     open: false,
     x: 0,
     y: 0,
+    folder: null,
+  });
+  // Per-photo context menu (TASK-01-021): the right-clicked grid cell.
+  let photoMenu = $state<{ open: boolean; x: number; y: number; item: GridItem | null }>({
+    open: false,
+    x: 0,
+    y: 0,
+    item: null,
   });
 
   // Single-photo viewer (TASK-01-019): opened from the grid over the current
@@ -126,36 +137,77 @@
     })();
   });
 
-  // Context-menu skeleton (TASK-01-015): P1 entries emit and are handled
-  // where a trivial handler exists; the rest stay wired no-ops until their
-  // commands land (slideshow P1 viewer, locate/remove = 01-021).
-  const menuItems = $derived<MenuItem[]>([
+  // Context menus (TASK-01-021, PLAN §2 File menu / Folder context menu):
+  // the photo menu carries the File-menu P1 entries (locate, delete to
+  // trash, exit); the folder menu carries refresh / locate / remove-from-
+  // catalog. Confirmations happen before anything touches the disk.
+  const photoMenuItems = $derived<MenuItem[]>([
     { id: "view-slideshow", label: t("menu.viewSlideshow") },
+    { id: "locate-on-disk", label: t("menu.locateOnDisk") },
+    { id: "delete-from-disk", label: t("menu.deleteFromDisk") },
+    { id: "add-to-album", label: t("menu.addToAlbum"), disabled: true },
+    { id: "exit", label: t("menu.exit") },
+  ]);
+
+  const folderMenuItems = $derived<MenuItem[]>([
     { id: "refresh-thumbnails", label: t("menu.refreshThumbnails") },
     { id: "locate-on-disk", label: t("menu.locateOnDisk") },
     { id: "remove-from-fotobase", label: t("menu.removeFromFotobase") },
-    { id: "add-to-album", label: t("menu.addToAlbum"), disabled: true },
+    { id: "exit", label: t("menu.exit") },
   ]);
 
-  function handleMenuPick(id: string): void {
-    if (id === "refresh-thumbnails") {
-      void (async () => {
-        try {
-          const { invoke } = await import("@tauri-apps/api/core");
-          await invoke("clear_cache");
-        } catch {
-          // Browser dev / backend down: nothing to refresh.
-        }
-      })();
-    } else if (id === "view-slideshow") {
+  async function handlePhotoPick(id: string): Promise<void> {
+    const item = photoMenu.item;
+    if (!item) return;
+    if (id === "view-slideshow") {
       openSlideshow();
+    } else if (id === "locate-on-disk" || id === "delete-from-disk") {
+      // Both need the on-disk path; the grid items carry only id + hash.
+      try {
+        const info = await loadPhotoInfo(item.id);
+        if (!info) return;
+        if (id === "locate-on-disk") {
+          await revealInDisk(info.path);
+        } else if (confirm(t("confirm.deletePhoto"))) {
+          await deleteFromDisk(item.id);
+          await refreshLibrary();
+        }
+      } catch {
+        // Browser dev / backend down: nothing to reveal or delete.
+      }
+    } else if (id === "exit") {
+      void exitApp().catch(() => {
+        // The backend tears down mid-response on a clean exit — not an error.
+      });
     }
-    // locate-on-disk / remove-from-fotobase: wired no-ops
-    // until the 01-021 file-menu commands exist.
+  }
+
+  async function handleFolderPick(id: string): Promise<void> {
+    const folder = folderMenu.folder;
+    if (!folder) return;
+    try {
+      if (id === "refresh-thumbnails") {
+        await refreshFolderThumbnails(folder.path);
+      } else if (id === "locate-on-disk") {
+        await revealInDisk(folder.path);
+      } else if (id === "remove-from-fotobase" && confirm(t("folderManager.remove.confirm"))) {
+        // Catalog only — the files on disk are never touched.
+        await removeFolder(folder.path);
+        await refreshLibrary();
+      } else if (id === "exit") {
+        void exitApp().catch(() => {});
+      }
+    } catch {
+      // Browser dev / backend down: nothing to do.
+    }
+  }
+
+  function openPhotoMenu(e: { x: number; y: number; item: GridItem }): void {
+    photoMenu = { open: true, x: e.x, y: e.y, item: e.item };
   }
 
   function openFolderMenu(e: { folder: FolderInfo; x: number; y: number }): void {
-    folderMenu = { open: true, x: e.x, y: e.y };
+    folderMenu = { open: true, x: e.x, y: e.y, folder: e.folder };
   }
 </script>
 
@@ -225,12 +277,14 @@
           items={photos}
           onvisible={prioritizeVisible}
           onopen={(item) => openViewer(item)}
+          oncontextmenu={openPhotoMenu}
         />
       {:else}
         <ThumbnailGrid
           items={photos}
           onvisible={prioritizeVisible}
           onopen={(item) => openViewer(item)}
+          oncontextmenu={openPhotoMenu}
         />
       {/if}
     </div>
@@ -247,7 +301,14 @@
     bind:open={folderMenu.open}
     x={folderMenu.x}
     y={folderMenu.y}
-    items={menuItems}
-    onpick={handleMenuPick}
+    items={folderMenuItems}
+    onpick={handleFolderPick}
+  />
+  <ContextMenu
+    bind:open={photoMenu.open}
+    x={photoMenu.x}
+    y={photoMenu.y}
+    items={photoMenuItems}
+    onpick={handlePhotoPick}
   />
 </main>

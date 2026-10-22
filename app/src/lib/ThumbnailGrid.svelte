@@ -29,6 +29,9 @@
     /// Called with the photo the user opened (double-click or Enter —
     /// TASK-01-019): the shell mounts the full-view viewer over the list.
     onopen?: (item: GridItem) => void;
+    /// Called with the photo the user right-clicked (TASK-01-021): the shell
+    /// opens its per-photo context menu at the pointer.
+    oncontextmenu?: (e: { x: number; y: number; item: GridItem }) => void;
   }
 
   let {
@@ -36,6 +39,7 @@
     overscan = 2,
     onvisible = () => {},
     onopen = () => {},
+    oncontextmenu = () => {},
   }: Props = $props();
 
   const REPORT_DEBOUNCE_MS = 100;
@@ -133,6 +137,10 @@
               style="--thumb-size: {gridState.thumbSize}px"
               tabindex="0"
               ondblclick={() => onopen(item)}
+              oncontextmenu={(e) => {
+                e.preventDefault();
+                oncontextmenu({ x: e.clientX, y: e.clientY, item });
+              }}
               onkeydown={(e) => {
                 if (e.key === "Enter") onopen(item);
               }}

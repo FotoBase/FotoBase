@@ -12,6 +12,7 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
+pub mod file_menu;
 pub mod folder_manager;
 pub mod import;
 pub mod preview;
@@ -80,6 +81,21 @@ fn with_catalog<T>(
         *guard = Some(cat);
     }
     f(guard.as_ref().expect("catalog just inserted")).map_err(|e| e.to_string())
+}
+
+/// [`with_catalog`] for the rare mutating commands (TASK-01-021): the `Mutex`
+/// guard hands out `&mut Catalog` so a command can drop rows. Mutations stay
+/// behind the same lazy-open, single-connection path as the reads.
+fn with_catalog_mut<T>(
+    state: &AppState,
+    f: impl FnOnce(&mut Catalog) -> Result<T, fotobase_catalog::CatalogError>,
+) -> Result<T, String> {
+    let mut guard = state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
+    if guard.is_none() {
+        let cat = Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?;
+        *guard = Some(cat);
+    }
+    f(guard.as_mut().expect("catalog just inserted")).map_err(|e| e.to_string())
 }
 
 /// Lock-and-create the Folder Manager backend; it owns a second catalog
@@ -226,6 +242,67 @@ fn set_folder_mode(
 #[tauri::command]
 fn remove_folder(path: String, state: tauri::State<'_, AppState>) -> Result<usize, String> {
     with_folder_manager(&state, |fm| fm.remove(&path))
+}
+
+// --- File menu / folder context menu (TASK-01-021, PLAN §2) -----------------
+
+/// "Locate on disk" (File menu / Folder context menu): reveal a photo or
+/// folder in the OS file manager, with the item selected. Pure OS adapter —
+/// nothing in the catalog or on disk changes.
+#[tauri::command]
+fn reveal_path(path: String) -> Result<(), String> {
+    file_menu::reveal_path(&path)
+}
+
+/// "Delete from disk" (File menu): move one photo to the OS trash (never a
+/// permanent delete) and drop its catalog row. The UI confirms first; the
+/// trash happens before the row goes, so a failed trash leaves the library
+/// untouched (§3 rule 1: originals change only on the user's explicit
+/// delete).
+#[tauri::command]
+fn delete_to_trash(file_id: i64, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let path =
+        with_catalog(&state, |cat| cat.photo_info(file_id).map(|info| info.map(|i| i.path)))?;
+    let path = path.ok_or_else(|| format!("unknown photo id: {file_id}"))?;
+    let err = |e: String| fotobase_catalog::CatalogError::Corrupted(e);
+    with_catalog_mut(&state, |cat| file_menu::delete_to_trash(file_id, &path, cat).map_err(err))
+}
+
+/// "Refresh thumbnails" (Folder context menu): invalidate the folder's
+/// cached thumbnails, then re-queue their renders at background priority in
+/// the bounded queue (§3 rule 4). The queue is drained first so no in-flight
+/// render can write a stale entry back after the delete — the same safe
+/// order `clear_cache` uses. Returns how many jobs were re-queued.
+#[tauri::command]
+async fn refresh_folder_thumbnails(
+    path: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<usize, String> {
+    let cache_dir = state.cache_dir.clone();
+    let queue = state.thumbs.clone();
+    queue.drain().await;
+    with_catalog(&state, |cat| {
+        file_menu::refresh_folder_thumbnails(cat, &cache_dir, &queue, &path)
+            .map_err(fotobase_catalog::CatalogError::Corrupted)
+    })
+}
+
+/// "Exit" (File menu): quit cleanly. Pending jobs are drained first —
+/// pending ones cancelled, in-flight ones cancelled and waited out — so the
+/// process never dies in the middle of a cache write or a file copy
+/// (imports observe the cancellation and leave no half-copied file). All
+/// cache writes are atomic `.tmp` + rename anyway; this just makes exit
+/// deterministic.
+#[tauri::command]
+async fn exit_app(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let thumbs = state.thumbs.clone();
+    let rebuilds = state.rebuilds.clone();
+    let imports = state.imports.clone();
+    thumbs.drain().await;
+    rebuilds.drain().await;
+    imports.drain().await;
+    app.exit(0);
+    Ok(())
 }
 
 /// Trivial IPC command so the frontend wiring is validated from day one.
@@ -567,6 +644,10 @@ pub fn run() {
             rebuild_catalog,
             set_folder_mode,
             remove_folder,
+            reveal_path,
+            delete_to_trash,
+            refresh_folder_thumbnails,
+            exit_app,
             start_import,
             cancel_import,
             check_for_updates,

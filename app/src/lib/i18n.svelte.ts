@@ -45,6 +45,9 @@ const messages: Record<string, Dict> = {
     "menu.locateOnDisk": "Locate on disk",
     "menu.removeFromFotobase": "Remove from Fotobase",
     "menu.addToAlbum": "Add to album",
+    "menu.deleteFromDisk": "Delete from disk",
+    "menu.exit": "Exit",
+    "confirm.deletePhoto": "Move this photo to the trash? The file leaves its folder but stays recoverable from the OS trash.",
     "app.folderManager": "Folder Manager",
     "folderManager.title": "Folder Manager",
     "folderManager.hint":
@@ -130,6 +133,9 @@ const messages: Record<string, Dict> = {
     "menu.locateOnDisk": "Auf Festplatte zeigen",
     "menu.removeFromFotobase": "Aus Fotobase entfernen",
     "menu.addToAlbum": "Zum Album hinzufügen",
+    "menu.deleteFromDisk": "Von Festplatte löschen",
+    "menu.exit": "Beenden",
+    "confirm.deletePhoto": "Dieses Foto in den Papierkorb verschieben? Die Datei verlässt ihren Ordner, bleibt aber im Papierkorb wiederherstellbar.",
     "app.folderManager": "Ordnerverwaltung",
     "folderManager.title": "Ordnerverwaltung",
     "folderManager.hint":
