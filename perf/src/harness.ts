@@ -364,6 +364,13 @@ async function runFull(args: Args): Promise<number> {
   fs.writeFileSync(path.join(dataDir, "settings.json"), JSON.stringify({ grid_renderer: args.renderer }));
 
   const port = await freePort();
+  // tauri-driver renamed its listen flag between v1 (--webdriver-port) and
+  // v2 (--port); pick the one the installed binary actually accepts.
+  const driverFlag = execFileSync("tauri-driver", ["--help"], {
+    encoding: "utf8",
+  }).includes("--webdriver-port")
+    ? "--webdriver-port"
+    : "--port";
   // The app inherits the driver's environment: a fresh HOME gives the
   // protocol §1 cold start (empty catalog + empty thumbnail cache), and the
   // FOTOBASE_PERF_* variables arm the perf hook inside the app.
@@ -376,7 +383,7 @@ async function runFull(args: Args): Promise<number> {
   };
   const driver = spawn(
     "tauri-driver",
-    ["--webdriver-port", String(port)],
+    [driverFlag, String(port)],
     { stdio: ["ignore", "inherit", "inherit"], env },
   );
 
