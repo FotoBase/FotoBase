@@ -6,7 +6,11 @@
 import { describe, expect, it } from "vitest";
 import { folderName, groupFoldersByYear, type FolderInfo } from "./folder-tree";
 
-const f = (id: number, path: string, year: number | null): FolderInfo => ({ id, path, year });
+const f = (
+  id: number,
+  path: string,
+  year: number | null,
+): FolderInfo => ({ id, path, year, scan_mode: "once" });
 
 describe("groupFoldersByYear", () => {
   it("groups folders under their year, newest year first", () => {

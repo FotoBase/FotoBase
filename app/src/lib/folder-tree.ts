@@ -8,6 +8,8 @@ export interface FolderInfo {
   path: string;
   /** Year of the folder's newest file, or null when nothing is dated. */
   year: number | null;
+  /** Folder Manager mode (TASK-01-016, PLAN §2A): watched or not. */
+  scan_mode: "once" | "always";
 }
 
 /** A year node in the tree; `year: null` is the trailing "unknown" group. */

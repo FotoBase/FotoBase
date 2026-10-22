@@ -12,6 +12,7 @@ use serde::Serialize;
 use tauri::Manager;
 use tauri_plugin_updater::UpdaterExt;
 
+pub mod folder_manager;
 pub mod rebuild;
 pub mod settings;
 pub mod thumb;
@@ -45,6 +46,10 @@ struct AppState {
     /// Update feed artifact found by the last check, awaiting the user's
     /// install decision (check-but-ask) or immediate install (auto).
     pending_update: Mutex<Option<tauri_plugin_updater::Update>>,
+    /// Folder Manager backend (TASK-01-016): watcher + its own catalog
+    /// connection, created lazily on the first folder-manager command (and
+    /// then armed for every persisted `always` folder).
+    folders: Mutex<Option<folder_manager::FolderManager>>,
 }
 
 /// Lock-and-open the shared catalog; commands and the scheme handler share
@@ -59,6 +64,26 @@ fn with_catalog<T>(
         *guard = Some(cat);
     }
     f(guard.as_ref().expect("catalog just inserted")).map_err(|e| e.to_string())
+}
+
+/// Lock-and-create the Folder Manager backend; it owns a second catalog
+/// connection (WAL: UI reads through [`with_catalog`] never block behind a
+/// watch-triggered scan) and the `notify` watcher armed for every persisted
+/// `always` folder.
+fn with_folder_manager<T>(
+    state: &AppState,
+    f: impl FnOnce(&folder_manager::FolderManager) -> Result<T, String>,
+) -> Result<T, String> {
+    let mut guard =
+        state.folders.lock().map_err(|e| format!("folder manager mutex poisoned: {e}"))?;
+    if guard.is_none() {
+        let fm = folder_manager::FolderManager::open(
+            &state.catalog_path,
+            fotobase_scanner::DEFAULT_DEBOUNCE,
+        )?;
+        *guard = Some(fm);
+    }
+    f(guard.as_ref().expect("folder manager just inserted"))
 }
 
 /// Live FTS search (TASK-01-008, PLAN §5): returns matching file ids; the UI
@@ -124,6 +149,31 @@ fn thumb_response(reply: thumb::ThumbReply) -> tauri::http::Response<Vec<u8>> {
         .header("access-control-allow-origin", "*")
         .body(reply.body)
         .expect("static thumb response parts are valid")
+}
+
+// --- Folder Manager (TASK-01-016, PLAN §2A) ---------------------------------
+
+/// Apply a folder's scan mode: "once" scans it now and leaves it unwatched;
+/// "always" hands it to the notify watcher (its closing scan brings the
+/// folder into the library immediately). The mode is persisted with the
+/// folder row, so a restart resumes the same watching set.
+#[tauri::command]
+fn set_folder_mode(
+    path: String,
+    mode: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let mode =
+        folder_manager::parse_mode(&mode).ok_or_else(|| format!("unknown scan mode: {mode}"))?;
+    with_folder_manager(&state, |fm| fm.set_mode(&path, mode))
+}
+
+/// Remove a folder from the catalog (nested rows included). Files on disk
+/// are never touched — the confirmation for that is the UI's job. Returns
+/// how many folder rows were dropped.
+#[tauri::command]
+fn remove_folder(path: String, state: tauri::State<'_, AppState>) -> Result<usize, String> {
+    with_folder_manager(&state, |fm| fm.remove(&path))
 }
 
 /// Trivial IPC command so the frontend wiring is validated from day one.
@@ -328,6 +378,7 @@ pub fn run() {
                 rebuilds,
                 settings: Mutex::new(persisted),
                 pending_update: Mutex::new(None),
+                folders: Mutex::new(None),
             });
             Ok(())
         })
@@ -341,6 +392,8 @@ pub fn run() {
             set_settings,
             clear_cache,
             rebuild_catalog,
+            set_folder_mode,
+            remove_folder,
             check_for_updates,
             install_pending_update
         ])

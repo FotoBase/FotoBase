@@ -4,6 +4,7 @@
   // startup, the dialog persists every change, and the update-mode policy
   // runs once on startup.
   import OptionsDialog from "./lib/OptionsDialog.svelte";
+  import FolderManagerDialog from "./lib/FolderManagerDialog.svelte";
   import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
   import FolderTree from "./lib/FolderTree.svelte";
@@ -17,6 +18,7 @@
 
   let pong = $state<string | null>(null);
   let optionsOpen = $state(false);
+  let folderManagerOpen = $state(false);
   let settings = $state<Settings | null>(null);
   let photos = $state<GridItem[]>([]);
   let folders = $state<FolderInfo[]>([]);
@@ -51,6 +53,21 @@
     })();
   }, 150);
 
+  // Library refresh (TASK-01-016): the startup load and every Folder
+  // Manager change (mode applied / folder removed) re-read folders + files,
+  // so the grid mirrors the catalog immediately.
+  async function refreshLibrary(): Promise<void> {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      photos = await invoke<GridItem[]>("list_files");
+      folders = await invoke<FolderInfo[]>("list_folders");
+    } catch {
+      // Browser dev: no backend, empty grid and tree.
+      photos = [];
+      folders = [];
+    }
+  }
+
   $effect(() => {
     // Startup: load persisted settings, apply the language, then honor the
     // update policy (auto installs, check-but-ask prompts, off does
@@ -60,15 +77,7 @@
       settings = s;
       setLocale(s.language);
       await runUpdateFlow(s.update_mode);
-      try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        photos = await invoke<GridItem[]>("list_files");
-        folders = await invoke<FolderInfo[]>("list_folders");
-      } catch {
-        // Browser dev: no backend, empty grid and tree.
-        photos = [];
-        folders = [];
-      }
+      await refreshLibrary();
     })();
   });
 
@@ -137,6 +146,13 @@
   <button type="button" onclick={() => (optionsOpen = true)} data-testid="open-options">
     {t("app.options")}
   </button>
+  <button
+    type="button"
+    onclick={() => (folderManagerOpen = true)}
+    data-testid="open-folder-manager"
+  >
+    {t("app.folderManager")}
+  </button>
   {#if settings}
     <OptionsDialog
       bind:open={optionsOpen}
@@ -145,6 +161,13 @@
         settings = s;
         setLocale(s.language);
       }}
+    />
+  {/if}
+  {#if settings}
+    <FolderManagerDialog
+      bind:open={folderManagerOpen}
+      folders={folders}
+      onchanged={refreshLibrary}
     />
   {/if}
   <!-- Folders view + grid (TASK-01-015): the tree's multi-select is the

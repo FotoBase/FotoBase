@@ -45,6 +45,38 @@ pub struct FileInfo {
     pub hash: Option<String>,
 }
 
+/// Per-folder scan mode (TASK-01-016, PLAN §2A Folder Manager): `Once` is a
+/// folder that was scanned into the catalog but is not watched — new files
+/// only appear on an explicit rescan. `Always` marks a watched folder: the
+/// scanner's `notify` watcher (01-007) rescans it whenever its contents
+/// change. Serialized as the exact strings stored in `folders.scan_mode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ScanMode {
+    Once,
+    Always,
+}
+
+impl ScanMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ScanMode::Once => "once",
+            ScanMode::Always => "always",
+        }
+    }
+
+    /// Parse the `folders.scan_mode` column value; unknown text falls back to
+    /// the schema default `once` (the CHECK constraint forbids anything else,
+    /// so this only guards against hand-edited databases).
+    pub fn from_db(value: &str) -> ScanMode {
+        if value == "always" {
+            ScanMode::Always
+        } else {
+            ScanMode::Once
+        }
+    }
+}
+
 /// One Folders-view entry (TASK-01-015, PLAN §2B): a real on-disk folder
 /// plus the year it groups under. The year is derived from the newest dated
 /// file inside the folder — `taken_at` when present, else `mtime` — and is
@@ -55,6 +87,7 @@ pub struct FolderInfo {
     pub id: i64,
     pub path: String,
     pub year: Option<i64>,
+    pub scan_mode: ScanMode,
 }
 
 #[derive(Debug)]
@@ -273,10 +306,11 @@ impl Catalog {
     }
 
     /// All folders in the catalog, path-ordered, each with the year its
-    /// newest file falls in (TASK-01-015, PLAN §2B). `LEFT JOIN` keeps empty
-    /// folders listed — they group under "unknown year" in the tree.
+    /// newest file falls in (TASK-01-015, PLAN §2B) and its scan mode
+    /// (TASK-01-016, PLAN §2A). `LEFT JOIN` keeps empty folders listed — they
+    /// group under "unknown year" in the tree.
     pub fn list_folders(&self) -> Result<Vec<FolderInfo>> {
-        let sql = "SELECT f.id, f.path, MAX(COALESCE( \
+        let sql = "SELECT f.id, f.path, f.scan_mode, MAX(COALESCE( \
                    CASE WHEN length(fi.taken_at) >= 4 \
                         THEN CAST(substr(fi.taken_at, 1, 4) AS INTEGER) END, \
                         CAST(strftime('%Y', fi.mtime, 'unixepoch') AS INTEGER))) \
@@ -284,9 +318,60 @@ impl Catalog {
                    GROUP BY f.id, f.path ORDER BY f.path";
         let mut stmt = self.conn.prepare_cached(sql)?;
         let rows = stmt.query_map([], |r| {
-            Ok(FolderInfo { id: r.get(0)?, path: r.get(1)?, year: r.get(2)? })
+            let mode: String = r.get(2)?;
+            Ok(FolderInfo {
+                id: r.get(0)?,
+                path: r.get(1)?,
+                scan_mode: ScanMode::from_db(&mode),
+                year: r.get(3)?,
+            })
         })?;
         Ok(rows.flatten().collect())
+    }
+
+    /// Persist a folder's scan mode (TASK-01-016, PLAN §2A). Returns `false`
+    /// when no folder row has that path — the caller decides whether that is
+    /// an error (the Folder Manager treats it as a stale dialog entry).
+    pub fn set_folder_scan_mode(&mut self, path: &str, mode: ScanMode) -> Result<bool> {
+        let changed = self.conn.execute(
+            "UPDATE folders SET scan_mode = ?2 WHERE path = ?1",
+            rusqlite::params![path, mode.as_str()],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Paths of every folder the watcher must keep an eye on (TASK-01-016):
+    /// the `scan_mode = 'always'` rows. Nested rows are included — the caller
+    /// folds them into their top-level roots before arming watchers.
+    pub fn watched_folder_paths(&self) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT path FROM folders WHERE scan_mode = 'always' ORDER BY path")?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        Ok(rows.flatten().collect())
+    }
+
+    /// Remove a folder from the catalog (TASK-01-016, PLAN §2A "Remove from
+    /// Fotobase"): the row itself plus every nested folder row the scanner
+    /// seeded underneath it. Foreign keys cascade the delete to the `files`
+    /// rows (and their `metadata` / FTS rows); the files on disk are never
+    /// touched. Returns how many folder rows were removed — `0` when the
+    /// folder is not in the catalog.
+    pub fn remove_folder_tree(&mut self, path: &str) -> Result<usize> {
+        let mut stmt = self.conn.prepare_cached("SELECT id, path FROM folders")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+        let doomed: Vec<i64> = rows
+            .flatten()
+            .filter(|(_, p)| p == path || is_within(p, path))
+            .map(|(id, _)| id)
+            .collect();
+        drop(stmt);
+
+        let mut removed = 0;
+        for id in doomed {
+            removed += self.conn.execute("DELETE FROM folders WHERE id = ?1", [id])?;
+        }
+        Ok(removed)
     }
 
     /// The grid's items restricted to the selected folders (TASK-01-015):
@@ -310,6 +395,21 @@ impl Catalog {
         })?;
         Ok(rows.flatten().collect())
     }
+}
+
+/// True when `path` is inside `root` but not `root` itself
+/// (separator-boundary aware: `/a/bcd` is not inside `/a/b`). Shared by the
+/// Folder Manager's root folding and its remove-the-tree query.
+///
+/// Both separators count as the boundary regardless of platform: catalog
+/// rows store paths exactly as the caller spelled them, so a Windows
+/// catalog can hold `C:\photos` while tests and Unix data use `/photos`
+/// (`/a/bcd` vs `/a/b` is still rejected — the boundary must be a
+/// separator, not just a shared prefix). Note `"/a"` vs `"a/b"` style
+/// relative roots work the same way.
+pub fn is_within(path: &str, root: &str) -> bool {
+    let Some(rest) = path.strip_prefix(root) else { return false };
+    rest.starts_with('/') || rest.starts_with('\\')
 }
 
 /// Build an FTS5 MATCH expression from user-typed text: each whitespace
@@ -379,5 +479,19 @@ mod tests {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
         assert_eq!(civil_from_days(19_723), (2024, 1, 1));
         assert_eq!(civil_from_days(20_747), (2026, 10, 21));
+    }
+
+    #[test]
+    fn is_within_is_separator_agnostic_and_boundary_aware() {
+        // Forward slashes (Unix paths, test fixtures).
+        assert!(is_within("/photos/2023", "/photos"));
+        assert!(!is_within("/photosx", "/photos"));
+        assert!(!is_within("/photos", "/photos"));
+        // Backslashes (Windows catalog rows).
+        assert!(is_within(r"C:\photos\2023", r"C:\photos"));
+        assert!(!is_within(r"C:\photosx", r"C:\photos"));
+        // Mixed spellings of the same tree.
+        assert!(is_within("/photos\\2023", "/photos"));
+        assert!(is_within(r"C:\photos/2023", r"C:\photos"));
     }
 }
