@@ -11,6 +11,7 @@
 <script lang="ts">
   import { thumbUri, type GridItem } from "./grid";
   import { nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
+  import InfoPane from "./InfoPane.svelte";
   import { t } from "./i18n.svelte.js";
 
   interface Props {
@@ -35,6 +36,10 @@
   let index = $state(Math.max(0, Math.min(startIndex, items.length - 1)));
   let slideshowRunning = $state(startSlideshow);
   let fullscreen = $state(false);
+  // Info pane (TASK-01-020, PLAN §2 View menu "Show image properties"). The
+  // menu bar itself arrives with the file-menu work (01-021); until then the
+  // toggle lives in the viewer's status bar and on the `i` key.
+  let infoOpen = $state(false);
 
   const current = $derived(items[index] ?? null);
   const mainUri = $derived(previewUri(current?.hash ?? null));
@@ -92,6 +97,10 @@
       case "F":
         void toggleFullscreen();
         break;
+      case "i":
+      case "I":
+        infoOpen = !infoOpen;
+        break;
       case " ":
         e.preventDefault();
         slideshowRunning = !slideshowRunning;
@@ -106,6 +115,9 @@
 </script>
 
 <div class="viewer" data-testid="viewer">
+  {#if infoOpen}
+    <InfoPane photo={current} />
+  {/if}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="viewer-stage" data-testid="viewer-stage">
     {#if mainUri}
@@ -119,6 +131,15 @@
     {#if slideshowRunning}
       <span data-testid="slideshow-running">{t("viewer.slideshowRunning")}</span>
     {/if}
+    <button
+      type="button"
+      class="viewer-info-toggle"
+      data-testid="toggle-info"
+      title={t("menu.showImageProperties")}
+      onclick={() => (infoOpen = !infoOpen)}
+    >
+      {t("viewer.info")}
+    </button>
   </div>
   <div class="filmstrip" data-testid="filmstrip">
     {#each items as item, i (item.id)}

@@ -137,6 +137,19 @@ fn list_files(
     })
 }
 
+/// Info pane payload for one photo (TASK-01-020, PLAN §2D): file properties
+/// (path, size, dimensions, format, modified) plus the EXIF fields cached in
+/// the `metadata` table at scan time. `None` for an unknown id. No image
+/// bytes — the histogram is computed by the WebView from the `preview://`
+/// bytes it already displays.
+#[tauri::command]
+fn photo_info(
+    file_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<fotobase_catalog::PhotoInfo>, String> {
+    with_catalog(&state, |cat| cat.photo_info(file_id))
+}
+
 /// The Folders-view tree data (TASK-01-015, PLAN §2B): every catalog folder
 /// with the year its newest file falls in. Ids + paths only — no image
 /// bytes, and the UI derives display names from the paths.
@@ -545,6 +558,7 @@ pub fn run() {
             ping,
             search_files,
             list_files,
+            photo_info,
             list_folders,
             prioritize_visible,
             get_settings,
