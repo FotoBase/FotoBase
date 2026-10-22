@@ -267,6 +267,20 @@ impl Catalog {
         Ok(paths.flatten().collect())
     }
 
+    /// Import-time duplicate check (TASK-01-017, PLAN §2 "Detect duplicates
+    /// while importing"): `true` when some cataloged file already carries
+    /// this content hash. `NULL` hashes (not yet computed lazily) match
+    /// nothing — the import hashes the source file itself, so this only
+    /// ever sees hashes that were stored explicitly.
+    pub fn has_hash(&self, hash: &str) -> Result<bool> {
+        let hits: i64 = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM files WHERE hash = ?1)",
+            [hash],
+            |r| r.get(0),
+        )?;
+        Ok(hits > 0)
+    }
+
     /// Live full-text search over filename + folder (PLAN §5 `files_fts`,
     /// TASK-01-008). Returns matching file ids, best matches first, at most
     /// `limit` of them.

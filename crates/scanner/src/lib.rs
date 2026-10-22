@@ -19,6 +19,11 @@ use fotobase_catalog::{Catalog, Result};
 mod watcher;
 pub use watcher::{Watcher, WatcherError, DEFAULT_DEBOUNCE};
 
+pub mod import;
+pub use import::{
+    content_hash, copy_file, import_folder, ImportOptions, ImportProgress, ImportReport, Naming,
+};
+
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase-scanner";
 

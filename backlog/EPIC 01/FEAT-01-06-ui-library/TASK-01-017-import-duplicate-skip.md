@@ -1,6 +1,6 @@
 # task: build import with destination naming and duplicate skip
 
-**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-06-ui-library](FEAT-01-06-ui-library.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-22)
 
 ## Description
 Implement Import from folder / removable drive per PLAN §2A/§6 P1: destination folder naming (date / custom) and duplicate skipping with an "Exclude duplicates" checkbox, default on (per §2 Options: "Detect duplicates while importing", default-enabled).
@@ -19,4 +19,4 @@ Implement Import from folder / removable drive per PLAN §2A/§6 P1: destination
 - Integration: cancel mid-import ⇒ no partial files at the destination.
 
 ## Acceptance criteria
-- [ ] 01-017: Import from folder/removable drive with date/custom destination naming and duplicate skip (checkbox default on).
+- [x] 01-017: Import from folder/removable drive with date/custom destination naming and duplicate skip (checkbox default on).
