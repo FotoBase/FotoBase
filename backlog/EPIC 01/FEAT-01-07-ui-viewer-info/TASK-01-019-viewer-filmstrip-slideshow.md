@@ -1,6 +1,6 @@
 # task: build single-photo viewer with filmstrip and slideshow
 
-**Feature:** [FEAT-01-07-ui-viewer-info](FEAT-01-07-ui-viewer-info.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-07-ui-viewer-info](FEAT-01-07-ui-viewer-info.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-22)
 
 ## Description
 Implement the single-photo viewer per PLAN §2D (edit-view P1 scope is view-only): opens from the grid with filmstrip navigation, fullscreen mode, and a basic timed slideshow (timing only — music/transitions are P4).
@@ -20,4 +20,4 @@ Implement the single-photo viewer per PLAN §2D (edit-view P1 scope is view-only
 - E2E: start slideshow with a 1 s interval on a 3-photo fixture ⇒ all three shown in order.
 
 ## Acceptance criteria
-- [ ] 01-019: Viewer with filmstrip, fullscreen, timed slideshow, full keyboard control.
+- [x] 01-019: Viewer with filmstrip, fullscreen, timed slideshow, full keyboard control.

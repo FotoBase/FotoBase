@@ -112,4 +112,27 @@ describe("ThumbnailGrid", () => {
     const later = onvisible.mock.calls.at(-1)![0] as string[];
     expect(later[0]).not.toBe(HASH(0));
   });
+
+  // Viewer open (TASK-01-019): double-click (or Enter on the focused cell)
+  // hands the photo to the shell, which mounts the full-view viewer over
+  // the current collection.
+  it("double-click opens the photo in the viewer (onopen)", () => {
+    const onopen = vi.fn();
+    render(ThumbnailGrid, { items: makeItems(10), onopen });
+
+    const cell = document.querySelectorAll('[data-testid="grid-cell"]')[3];
+    cell.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    flushSync();
+    expect(onopen).toHaveBeenCalledWith({ id: 3, filename: "photo-3.jpg", hash: HASH(3) });
+  });
+
+  it("Enter on a focused cell opens it too", () => {
+    const onopen = vi.fn();
+    render(ThumbnailGrid, { items: makeItems(10), onopen });
+
+    const cell = document.querySelectorAll('[data-testid="grid-cell"]')[1] as HTMLElement;
+    cell.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    flushSync();
+    expect(onopen).toHaveBeenCalledOnce();
+  });
 });
