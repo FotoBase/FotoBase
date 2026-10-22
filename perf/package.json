@@ -1,0 +1,19 @@
+{
+  "name": "fotobase-perf-harness",
+  "private": true,
+  "type": "module",
+  "description": "TASK-01-026: perf acceptance harness (docs/webkitgtk-perf-protocol.md).",
+  "scripts": {
+    "test": "vitest run",
+    "harness": "tsx src/harness.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5",
+    "vitest": "^3"
+  },
+  "dependencies": {
+    "webdriverio": "^9"
+  }
+}

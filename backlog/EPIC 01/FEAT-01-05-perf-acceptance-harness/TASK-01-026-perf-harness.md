@@ -1,6 +1,6 @@
 # task: build perf acceptance harness
 
-**Feature:** [FEAT-01-05-perf-acceptance-harness](FEAT-01-05-perf-acceptance-harness.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-05-perf-acceptance-harness](FEAT-01-05-perf-acceptance-harness.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-22)
 
 ## Description
 
@@ -25,4 +25,4 @@ Build the perf harness on the 00-013 fixture (PLAN §9 Performance row, §10 Web
 
 ## Acceptance criteria
 
-- [ ] 01-026: Harness measures first-thumb/RAM/fps per OS on the 00-013 fixture, runs as CI smoke, fails on missed §6 bars, emits comparable results.
+- [x] 01-026: Harness measures first-thumb/RAM/fps per OS on the 00-013 fixture, runs as CI smoke, fails on missed §6 bars, emits comparable results.
