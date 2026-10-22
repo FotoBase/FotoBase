@@ -74,11 +74,11 @@ pub fn watched_folders(cat: &Catalog) -> Vec<String> {
     roots
 }
 
-/// True when `path` is `root` itself or inside it (separator-boundary aware:
-/// `/a/bcd` is not inside `/a/b`).
+/// True when `path` is `root` itself or inside it. Separator-agnostic
+/// (both `/` and `\` count as the boundary — catalog rows store paths as
+/// the caller spelled them; see [`fotobase_catalog::is_within`]).
 fn is_within(path: &str, root: &str) -> bool {
-    let Some(rest) = path.strip_prefix(root) else { return false };
-    rest.is_empty() || rest.starts_with(std::path::MAIN_SEPARATOR)
+    path == root || fotobase_catalog::is_within(path, root)
 }
 
 /// Full rebuild: re-scan each watched folder with the skip disabled.

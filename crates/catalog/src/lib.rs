@@ -400,9 +400,16 @@ impl Catalog {
 /// True when `path` is inside `root` but not `root` itself
 /// (separator-boundary aware: `/a/bcd` is not inside `/a/b`). Shared by the
 /// Folder Manager's root folding and its remove-the-tree query.
+///
+/// Both separators count as the boundary regardless of platform: catalog
+/// rows store paths exactly as the caller spelled them, so a Windows
+/// catalog can hold `C:\photos` while tests and Unix data use `/photos`
+/// (`/a/bcd` vs `/a/b` is still rejected — the boundary must be a
+/// separator, not just a shared prefix). Note `"/a"` vs `"a/b"` style
+/// relative roots work the same way.
 pub fn is_within(path: &str, root: &str) -> bool {
     let Some(rest) = path.strip_prefix(root) else { return false };
-    rest.starts_with(std::path::MAIN_SEPARATOR)
+    rest.starts_with('/') || rest.starts_with('\\')
 }
 
 /// Build an FTS5 MATCH expression from user-typed text: each whitespace
@@ -472,5 +479,19 @@ mod tests {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
         assert_eq!(civil_from_days(19_723), (2024, 1, 1));
         assert_eq!(civil_from_days(20_747), (2026, 10, 21));
+    }
+
+    #[test]
+    fn is_within_is_separator_agnostic_and_boundary_aware() {
+        // Forward slashes (Unix paths, test fixtures).
+        assert!(is_within("/photos/2023", "/photos"));
+        assert!(!is_within("/photosx", "/photos"));
+        assert!(!is_within("/photos", "/photos"));
+        // Backslashes (Windows catalog rows).
+        assert!(is_within(r"C:\photos\2023", r"C:\photos"));
+        assert!(!is_within(r"C:\photosx", r"C:\photos"));
+        // Mixed spellings of the same tree.
+        assert!(is_within("/photos\\2023", "/photos"));
+        assert!(is_within(r"C:\photos/2023", r"C:\photos"));
     }
 }

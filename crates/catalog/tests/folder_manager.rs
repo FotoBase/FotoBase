@@ -102,6 +102,24 @@ fn removing_an_unknown_folder_reports_no_row() {
     assert_eq!(cat.remove_folder_tree("/photos/ghost").unwrap(), 0);
 }
 
+/// Windows CI regression (PR #180): catalog rows can carry backslash paths
+/// while the Folder Manager works with forward-slash spellings (or vice
+/// versa) — the tree match must not depend on the platform separator.
+#[test]
+fn removing_a_tree_matches_either_path_separator() {
+    let dir = TempDir::new().unwrap();
+    let mut cat = open_in(&dir);
+    cat.seed_folder("C:\\photos").unwrap();
+    cat.seed_folder("C:\\photos\\2023").unwrap();
+    cat.seed_folder("C:\\videos").unwrap();
+    add_file(&mut cat, 1, "C:\\photos\\a.jpg");
+    add_file(&mut cat, 2, "C:\\photos\\2023\\b.jpg");
+
+    assert_eq!(cat.remove_folder_tree("C:\\photos").unwrap(), 2);
+    let paths: Vec<String> = cat.list_folders().unwrap().into_iter().map(|f| f.path).collect();
+    assert_eq!(paths, vec!["C:\\videos".to_string()]);
+}
+
 #[test]
 fn scan_mode_survives_reopening_the_catalog() {
     let dir = TempDir::new().unwrap();
