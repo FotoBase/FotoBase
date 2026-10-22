@@ -173,7 +173,14 @@ pub fn import_folder(
         }
 
         let final_path = dest_dir.join(&final_name);
-        upsert_imported(catalog, &dest_dir.to_string_lossy(), &final_path.to_string_lossy(), f, &final_name, &hash)?;
+        upsert_imported(
+            catalog,
+            &dest_dir.to_string_lossy(),
+            &final_path.to_string_lossy(),
+            f,
+            &final_name,
+            &hash,
+        )?;
         report.copied += 1;
     }
     Ok(report)
