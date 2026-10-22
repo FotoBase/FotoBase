@@ -39,3 +39,6 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Fixture generator dep (00-013)
 RUN pip install --no-cache-dir pillow
+
+# WebDriver shim for the harness (WebdriverIO + tauri-driver)
+RUN cargo install tauri-driver --locked
