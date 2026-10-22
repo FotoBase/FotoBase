@@ -264,3 +264,76 @@ main {
   opacity: 1;
   outline: 2px solid #4a9eff;
 }
+
+/* Info pane (TASK-01-020, PLAN §2D): overlays the stage's right edge; the
+   photo stays fully visible behind it. */
+.info-pane {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 280px;
+  overflow-y: auto;
+  padding: 1rem;
+  background: rgba(17, 17, 17, 0.92);
+  border-left: 1px solid #333;
+  font-size: 0.85rem;
+  z-index: 1;
+}
+
+.info-pane h3 {
+  margin: 1rem 0 0.25rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #999;
+}
+
+.info-pane h3:first-child {
+  margin-top: 0;
+}
+
+.info-pane dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0;
+}
+
+.info-pane dt {
+  color: #999;
+}
+
+.info-pane dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.info-histogram {
+  display: block;
+  width: 100%;
+  height: 96px;
+  background: #000;
+  border-radius: 4px;
+}
+
+.info-pending {
+  color: #777;
+  margin: 0.25rem 0 0;
+}
+
+.viewer-info-toggle {
+  margin-left: auto;
+  background: none;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  padding: 0.1rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.viewer-info-toggle:hover {
+  border-color: #4a9eff;
+  color: #fff;
+}

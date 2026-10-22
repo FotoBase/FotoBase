@@ -77,6 +77,29 @@ impl ScanMode {
     }
 }
 
+/// One photo's info-pane payload (TASK-01-020, PLAN §2D): file properties
+/// from the `files` row plus the EXIF fields cached in the `metadata` table
+/// at scan time (`None`s until the metadata crate's extraction lands). No
+/// image bytes — pixels travel through `preview://` only.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct PhotoInfo {
+    pub id: i64,
+    pub path: String,
+    pub filename: String,
+    pub size: i64,
+    pub mtime: f64,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub media_type: String,
+    pub camera: Option<String>,
+    pub lens: Option<String>,
+    pub exposure: Option<String>,
+    pub f_number: Option<f64>,
+    pub iso: Option<i64>,
+    pub focal_length: Option<f64>,
+    pub taken_at: Option<String>,
+}
+
 /// One Folders-view entry (TASK-01-015, PLAN §2B): a real on-disk folder
 /// plus the year it groups under. The year is derived from the newest dated
 /// file inside the folder — `taken_at` when present, else `mtime` — and is
@@ -367,6 +390,44 @@ impl Catalog {
             Ok(FileInfo { id: r.get(0)?, filename: r.get(1)?, hash: r.get(2)? })
         })?;
         Ok(rows.flatten().collect())
+    }
+
+    /// The info pane's data for one photo (TASK-01-020, PLAN §2D): the file
+    /// properties joined with the scan-time EXIF cache (`LEFT JOIN` — a photo
+    /// without a `metadata` row still lists, with `None` EXIF). `None` when
+    /// no file row has that id; file properties never error the pane out.
+    pub fn photo_info(&self, file_id: i64) -> Result<Option<PhotoInfo>> {
+        let row = self.conn.query_row(
+            "SELECT f.id, f.path, f.filename, f.size, f.mtime, f.width, f.height, f.media_type, \
+                    m.camera, m.lens, m.exposure, m.f_number, m.iso, m.focal_length, f.taken_at \
+             FROM files f LEFT JOIN metadata m ON m.file_id = f.id \
+             WHERE f.id = ?1",
+            [file_id],
+            |r| {
+                Ok(PhotoInfo {
+                    id: r.get(0)?,
+                    path: r.get(1)?,
+                    filename: r.get(2)?,
+                    size: r.get(3)?,
+                    mtime: r.get(4)?,
+                    width: r.get(5)?,
+                    height: r.get(6)?,
+                    media_type: r.get(7)?,
+                    camera: r.get(8)?,
+                    lens: r.get(9)?,
+                    exposure: r.get(10)?,
+                    f_number: r.get(11)?,
+                    iso: r.get(12)?,
+                    focal_length: r.get(13)?,
+                    taken_at: r.get(14)?,
+                })
+            },
+        );
+        match row {
+            Ok(info) => Ok(Some(info)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     /// All folders in the catalog, path-ordered, each with the year its
