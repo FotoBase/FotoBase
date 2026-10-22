@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libwebkit2gtk-4.1-dev \
+        webkit2gtk-driver \
         build-essential \
         curl \
         wget \
