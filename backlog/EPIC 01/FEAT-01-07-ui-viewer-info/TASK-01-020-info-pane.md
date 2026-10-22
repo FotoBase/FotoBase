@@ -1,6 +1,6 @@
 # task: build info pane — EXIF, histogram, file properties
 
-**Feature:** [FEAT-01-07-ui-viewer-info](FEAT-01-07-ui-viewer-info.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in progress (2026-10-22)
+**Feature:** [FEAT-01-07-ui-viewer-info](FEAT-01-07-ui-viewer-info.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-22)
 
 ## Description
 Implement the info pane per PLAN §2D ("Info pane: EXIF (camera, lens, exposure), histogram, file properties") and §2 View menu ("Show image properties" toggle). Updates per photo as the viewer navigates.
