@@ -11,3 +11,5 @@ __pycache__/
 # Frontend
 node_modules/
 app/dist/
+
+/vscode/tasks.json
