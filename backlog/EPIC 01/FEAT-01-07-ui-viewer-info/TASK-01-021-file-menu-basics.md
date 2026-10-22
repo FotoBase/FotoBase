@@ -1,6 +1,6 @@
 # task: implement file-menu basics and folder commands
 
-**Feature:** [FEAT-01-07-ui-viewer-info](FEAT-01-07-ui-viewer-info.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-07-ui-viewer-info](FEAT-01-07-ui-viewer-info.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-22)
 
 ## Description
 Implement the P1 File-menu and folder-context commands per PLAN §2 File menu / Folder context menu: Locate on disk, Delete from disk (trash + confirmation), Exit; folder "Remove from Fotobase" (catalog only) and Refresh thumbnails.
@@ -22,4 +22,4 @@ Implement the P1 File-menu and folder-context commands per PLAN §2 File menu / 
 - Integration: Remove folder ⇒ files still on disk, rows gone; Refresh thumbnails ⇒ re-render jobs enqueued.
 
 ## Acceptance criteria
-- [ ] 01-021: Locate on disk, Delete from disk (trash + confirm), Exit, folder Remove from Fotobase (catalog only), Refresh thumbnails — all wired.
+- [x] 01-021: Locate on disk, Delete from disk (trash + confirm), Exit, folder Remove from Fotobase (catalog only), Refresh thumbnails — all wired.

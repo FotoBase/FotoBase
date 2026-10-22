@@ -499,6 +499,16 @@ impl Catalog {
         Ok(removed)
     }
 
+    /// Remove one photo's catalog row (TASK-01-021, PLAN §2 "Delete from
+    /// disk"): the `files` row goes, foreign keys cascade the delete to its
+    /// `metadata` / tag / album rows, and the FTS triggers clean the search
+    /// index. The file on disk is the caller's business — this only drops
+    /// the catalog entry. Returns `false` when no row has that id.
+    pub fn remove_file(&mut self, file_id: i64) -> Result<bool> {
+        let removed = self.conn.execute("DELETE FROM files WHERE id = ?1", [file_id])?;
+        Ok(removed > 0)
+    }
+
     /// The grid's items restricted to the selected folders (TASK-01-015):
     /// multi-select folder filtering runs in SQL so a 50k-photo library never
     /// ships every row over IPC just to hide most of it. An empty selection
