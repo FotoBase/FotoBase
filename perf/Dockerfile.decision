@@ -18,6 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libde265-dev \
         libaom-dev \
         xvfb \
+        cmake \
+        nasm \
+        libjpeg-dev \
+        libpng-dev \
         pkg-config \
         python3 \
         python3-pip \
