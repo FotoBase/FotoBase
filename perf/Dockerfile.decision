@@ -1,0 +1,37 @@
+# TASK-01-004 decision-run image: ubuntu:22.04 + WebKitGTK 2.40+ + toolchain
+# (docs/webkitgtk-perf-protocol.md §1). Build once on the Linux x64 host, then
+# run perf/decision-run.sh inside it — see perf/README.md "Decision run".
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libwebkit2gtk-4.1-dev \
+        build-essential \
+        curl \
+        wget \
+        file \
+        libxdo-dev \
+        libssl-dev \
+        libayatana-appindicator3-dev \
+        librsvg2-dev \
+        libde265-dev \
+        libaom-dev \
+        xvfb \
+        pkg-config \
+        python3 \
+        python3-pip \
+        ca-certificates \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node 22 (harness toolchain, matches CI)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs
+
+# Stable Rust (cargo build -p fotobase)
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable --profile minimal
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Fixture generator dep (00-013)
+RUN pip install --no-cache-dir pillow
