@@ -12,7 +12,14 @@
   const DEBOUNCE_MS = 80;
 
   let text = $state("");
+  let inputEl = $state<HTMLInputElement | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
+
+  /// Focus the input (TASK-01-024): the shell's Ctrl/Cmd+F shortcut calls
+  /// this through the component ref. Exported as a component method.
+  export function focus(): void {
+    inputEl?.focus();
+  }
 
   function oninput(event: Event & { currentTarget: HTMLInputElement }): void {
     text = event.currentTarget.value;
@@ -33,6 +40,7 @@
   <input
     type="search"
     data-testid="search-input"
+    bind:this={inputEl}
     placeholder={t("search.placeholder")}
     aria-label={t("search.placeholder")}
     value={text}

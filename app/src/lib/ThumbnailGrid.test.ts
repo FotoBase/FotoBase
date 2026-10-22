@@ -7,9 +7,10 @@
 // also what keeps the grid cheap on 50k items.
 
 import { flushSync } from "svelte";
-import { cleanup, render, screen } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ThumbnailGrid from "./ThumbnailGrid.svelte";
+import { gridState, resetGridState } from "./grid-state.svelte.js";
 import type { GridItem } from "./grid";
 
 const HASH = (n: number) => n.toString(16).padStart(32, "0");
@@ -30,7 +31,10 @@ function scrollBy(delta: number): void {
   flushSync();
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  resetGridState();
+  cleanup();
+});
 
 describe("ThumbnailGrid", () => {
   it("mounts a bounded DOM for 1000 items (only visible rows exist)", () => {
@@ -64,6 +68,34 @@ describe("ThumbnailGrid", () => {
     render(ThumbnailGrid, { items });
 
     expect(document.querySelector('[data-testid="grid-placeholder"]')).not.toBeNull();
+  });
+
+  it("arrow keys move focus and selection (TASK-01-024)", () => {
+    render(ThumbnailGrid, { items: makeItems(12) });
+
+    const first = document.querySelector('[data-cell-index="0"]') as HTMLElement;
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    flushSync();
+
+    // 800px viewport at 160px thumbs = 4 columns; Down from 0 lands on 4.
+    const target = document.querySelector('[data-cell-index="4"]') as HTMLElement;
+    expect(target).not.toBeNull();
+    expect(document.activeElement).toBe(target);
+    expect(gridState.selection.has(4)).toBe(true);
+    expect(gridState.selection.has(0)).toBe(false);
+  });
+
+  it("arrow navigation never leaves the grid", () => {
+    render(ThumbnailGrid, { items: makeItems(6) });
+
+    const first = document.querySelector('[data-cell-index="0"]') as HTMLElement;
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowLeft" });
+    flushSync();
+
+    expect(document.activeElement).toBe(first);
+    expect(gridState.selection.size).toBe(0);
   });
 
   it("zoom slider resizes thumbs live without re-fetching (srcs unchanged)", () => {

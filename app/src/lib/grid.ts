@@ -35,6 +35,32 @@ export function thumbUri(hash: string | null): string | null {
   return `thumb://${hash}`;
 }
 
+/// HiDPI srcset (TASK-01-024): on a display with devicePixelRatio > 1 the
+/// browser is offered a 2x variant (`?s=2` → the backend's 1024px cache
+/// entry) so cells up to ZOOM_MAX stay sharp on Retina/4K. `null` on 1x
+/// displays — the single `src` is already sharp there, and no second render
+/// should ever be queued for it.
+export function thumbSrcset(hash: string | null, devicePixelRatio: number): string | null {
+  if (hash === null || !isThumbHash(hash)) return null;
+  if (devicePixelRatio <= 1) return null;
+  return `thumb://${hash}?s=2 2x`;
+}
+
+/// Keyboard grid navigation (TASK-01-024): the neighbor of cell `index` in
+/// a `columns`-wide grid of `count` items for an arrow key, or `null` when
+/// the move would leave the grid (no wrapping — the edge is the edge).
+export function nextCell(
+  index: number,
+  columns: number,
+  count: number,
+  key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+): number | null {
+  const target =
+    key === "ArrowLeft" ? index - 1 : key === "ArrowRight" ? index + 1 : key === "ArrowUp" ? index - columns : index + columns;
+  if (target < 0 || target >= count) return null;
+  return target;
+}
+
 /// The items of one grid row.
 export function rowItems<T>(items: T[], columns: number, row: number): T[] {
   return items.slice(row * columns, row * columns + columns);

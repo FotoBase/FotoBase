@@ -8,11 +8,16 @@ export type UpdateMode = "auto" | "check-but-ask" | "off";
 /// user override — no accepted ADR has chosen canvas as an OS default.
 export type GridRendererSetting = "dom" | "canvas";
 
+/// UI theme (TASK-01-024): follow the OS, or force light/dark. Mirrors the
+/// Rust `Theme` enum (kebab-case serialization).
+export type ThemeSetting = "system" | "light" | "dark";
+
 export interface Settings {
   language: string;
   update_mode: UpdateMode;
   show_tooltips: boolean;
   grid_renderer: GridRendererSetting;
+  theme: ThemeSetting;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -20,7 +25,14 @@ export const DEFAULT_SETTINGS: Settings = {
   update_mode: "check-but-ask",
   show_tooltips: true,
   grid_renderer: "dom",
+  theme: "system",
 };
+
+export const THEME_CHOICES: { value: ThemeSetting; labelKey: string }[] = [
+  { value: "system", labelKey: "options.theme.system" },
+  { value: "light", labelKey: "options.theme.light" },
+  { value: "dark", labelKey: "options.theme.dark" },
+];
 
 export const UPDATE_MODES: { value: UpdateMode; labelKey: string }[] = [
   { value: "auto", labelKey: "options.updates.auto" },

@@ -1,6 +1,6 @@
 # task: polish dark mode, hidpi, and keyboard shortcuts
 
-**Feature:** [FEAT-01-04-options-platform-polish](FEAT-01-04-options-platform-polish.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** todo
+**Feature:** [FEAT-01-04-options-platform-polish](FEAT-01-04-options-platform-polish.md) · **Epic:** [EPIC-01 — Viewer & library MVP](../EPIC-01.md) · **Status:** in review (2026-10-22)
 
 ## Description
 Deliver the platform-polish P1 items from PLAN §2 additions ("Dark mode / HiDPI: native theming, sharp on 4K/Retina") and §2M ("Keyboard shortcuts: full keyboard control"): dark mode and HiDPI correctness on all three OSes, plus documented shortcuts for every core P1 flow.
@@ -19,4 +19,4 @@ Deliver the platform-polish P1 items from PLAN §2 additions ("Dark mode / HiDPI
 - E2E: each documented shortcut triggers its action (grid navigation, viewer open/close, search focus).
 
 ## Acceptance criteria
-- [ ] 01-024: Dark mode + HiDPI correct on all three OSes; core-flow keyboard shortcuts implemented and documented.
+- [x] 01-024: Dark mode + HiDPI correct on all three OSes; core-flow keyboard shortcuts implemented and documented.

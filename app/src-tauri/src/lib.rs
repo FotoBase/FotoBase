@@ -572,17 +572,18 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .register_uri_scheme_protocol(THUMB_PROTOCOL, |ctx, request| {
             let state = ctx.app_handle().state::<AppState>();
-            let hash = thumb::hash_from_uri(request.uri());
-            let reply = match hash.as_deref() {
-                Some(hash) => thumb::resolve_thumb(hash, &state.cache_dir),
+            // `?s=2` selects the HiDPI (1024px) cache entry (TASK-01-024).
+            let req = thumb::request_from_uri(request.uri());
+            let reply = match &req {
+                Some(req) => thumb::resolve_thumb(req, &state.cache_dir),
                 None => thumb::placeholder(),
             };
             // Placeholder went out (miss or malformed key): best-effort
             // trigger of the render that will fill the cache for next time.
             if reply.content_type == "image/png" {
-                if let Some(hash) = hash.as_deref() {
+                if let Some(req) = &req {
                     let _ = with_catalog(&state, |cat| {
-                        thumb::enqueue_missing_thumbs(hash, cat, &state.cache_dir, &state.thumbs);
+                        thumb::enqueue_missing_thumbs(req, cat, &state.cache_dir, &state.thumbs);
                         Ok(())
                     });
                 }

@@ -69,15 +69,59 @@ pub fn is_cache_key(s: &str) -> bool {
     s.len() == 32 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-/// Resolve a cache key against the thumbnail cache directory.
+/// A parsed `thumb://` request: which cache entry and which size variant.
+///
+/// HiDPI (TASK-01-024): `?s=2` selects the 2x entry (`<hash>@2x.jpg`, 1024px
+/// max edge) so Retina/4K displays stay sharp; no query means the legacy 1x
+/// entry (`<hash>.jpg`, 512px). Unknown scale values are rejected — the UI
+/// gets the placeholder instead of silently mis-sized pixels.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThumbRequest {
+    pub hash: String,
+    pub scale: u32,
+}
+
+/// Cache-file suffix for a scale variant: 1x keeps the legacy name (existing
+/// caches stay valid), 2x is tagged so both sizes coexist.
+fn cache_file(hash: &str, scale: u32) -> String {
+    match scale {
+        1 => format!("{hash}.jpg"),
+        2 => format!("{hash}@2x.jpg"),
+        _ => unreachable!("request_from_uri only admits 1 and 2"),
+    }
+}
+
+/// The render-job key for a request: scale 2 gets its own key so repeated
+/// 2x misses coalesce separately from 1x renders.
+pub fn job_key(req: &ThumbRequest) -> String {
+    match req.scale {
+        1 => req.hash.clone(),
+        2 => format!("{}@2x", req.hash),
+        _ => unreachable!("request_from_uri only admits 1 and 2"),
+    }
+}
+
+/// Parse a scheme request URI into a [`ThumbRequest`]. Accepts both WebView
+/// spellings (see [`hash_from_uri`]) plus the optional `?s=2` HiDPI query.
+pub fn request_from_uri(uri: &Uri) -> Option<ThumbRequest> {
+    let hash = hash_from_uri(uri)?;
+    let scale = match uri.query() {
+        None | Some("s=1") => 1,
+        Some("s=2") => 2,
+        Some(_) => return None,
+    };
+    Some(ThumbRequest { hash, scale })
+}
+
+/// Resolve a request against the thumbnail cache directory.
 ///
 /// Hit → the cached JPEG bytes. Miss (or an unreadable entry) → the
 /// placeholder PNG. Both are displayable images: the UI never sees an error.
-pub fn resolve_thumb(hash: &str, cache_dir: &Path) -> ThumbReply {
-    if !is_cache_key(hash) {
+pub fn resolve_thumb(req: &ThumbRequest, cache_dir: &Path) -> ThumbReply {
+    if !is_cache_key(&req.hash) {
         return placeholder();
     }
-    match std::fs::read(cache_dir.join(format!("{hash}.jpg"))) {
+    match std::fs::read(cache_dir.join(cache_file(&req.hash, req.scale))) {
         Ok(bytes) => ThumbReply { status: 200, content_type: "image/jpeg", body: bytes },
         Err(_) => placeholder(),
     }
@@ -91,20 +135,29 @@ pub fn placeholder() -> ThumbReply {
 ///
 /// Looks the hash up in the catalog and enqueues a [`thumbnail_job`] per
 /// source path at [`Priority::Visible`] (the user is looking at it right
-/// now). Jobs are keyed by the hash, so repeated requests for the same
-/// thumbnail coalesce onto one running render. Returns the job handles —
-/// empty when the hash is unknown (nothing cached *and* nothing catalogued
-/// carries it yet).
+/// now). Jobs are keyed by [`job_key`], so repeated requests for the same
+/// thumbnail coalesce onto one running render — and 2x requests coalesce
+/// separately from 1x (TASK-01-024). Returns the job handles — empty when
+/// the hash is unknown (nothing cached *and* nothing catalogued carries it
+/// yet).
 pub fn enqueue_missing_thumbs(
-    hash: &str,
+    req: &ThumbRequest,
     catalog: &Catalog,
     cache_dir: &Path,
     queue: &Queue<ThumbOutcome>,
 ) -> Vec<JobHandle<ThumbOutcome>> {
-    if !is_cache_key(hash) {
+    if !is_cache_key(&req.hash) {
         return Vec::new();
     }
-    let paths: Vec<PathBuf> = match catalog.paths_for_hash(hash) {
+    let opts = fotobase_render::ThumbOptions {
+        // 2x variant: 1024px max edge keeps a ≤512 CSS-px cell sharp at a
+        // device pixel ratio of 2 (Retina / 150%-scaled 4K).
+        max_edge: if req.scale == 2 { 1024 } else { 512 },
+        cache_tag: (req.scale == 2).then_some("@2x".to_string()),
+        ..Default::default()
+    };
+    let key = job_key(req);
+    let paths: Vec<PathBuf> = match catalog.paths_for_hash(&req.hash) {
         Ok(paths) => paths.into_iter().map(PathBuf::from).collect(),
         // A poisoned/closed catalog must not turn into an error dialog; the
         // placeholder already went out, the render can be re-triggered later.
@@ -116,9 +169,9 @@ pub fn enqueue_missing_thumbs(
             let cache_dir = cache_dir.to_path_buf();
             queue
                 .try_enqueue(
-                    hash,
+                    key.as_str(),
                     Priority::Visible,
-                    thumbnail_job(src, cache_dir, Default::default()),
+                    thumbnail_job(src, cache_dir, opts.clone()),
                 )
                 // Full queue: the bounded queue protects memory (§3 rule 4);
                 // dropping the request is the correct degradation — the next
@@ -171,6 +224,56 @@ mod tests {
     fn placeholder_is_a_nonempty_png() {
         assert!(super::PLACEHOLDER_PNG.starts_with(&[0x89, b'P', b'N', b'G']));
         assert!(!super::PLACEHOLDER_PNG.is_empty());
+    }
+
+    #[test]
+    fn uri_parses_scale_2x_requests() {
+        // TASK-01-024 HiDPI: `?s=2` selects the 2x cache entry; no query
+        // means the legacy 1x thumb. Unknown scale values are rejected, not
+        // silently mis-sized.
+        let hash = "a".repeat(32);
+        let u1: tauri::http::Uri = format!("thumb://{hash}").parse().unwrap();
+        let r1 = super::request_from_uri(&u1).unwrap();
+        assert_eq!(r1.hash, hash);
+        assert_eq!(r1.scale, 1);
+
+        let u2: tauri::http::Uri = format!("thumb://{hash}?s=2").parse().unwrap();
+        let r2 = super::request_from_uri(&u2).unwrap();
+        assert_eq!(r2.hash, hash);
+        assert_eq!(r2.scale, 2);
+
+        let uw: tauri::http::Uri = format!("http://thumb.localhost/{hash}?s=2").parse().unwrap();
+        assert_eq!(super::request_from_uri(&uw).unwrap().scale, 2);
+
+        let ub: tauri::http::Uri = format!("thumb://{hash}?s=9").parse().unwrap();
+        assert!(super::request_from_uri(&ub).is_none());
+    }
+
+    #[test]
+    fn scale2_resolves_the_at2x_cache_entry() {
+        let hash = "a".repeat(32);
+        let dir = std::env::temp_dir().join(format!("fb-thumb-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("{hash}@2x.jpg")), b"jpeg2x").unwrap();
+
+        let req: tauri::http::Uri = format!("thumb://{hash}?s=2").parse().unwrap();
+        let reply = super::resolve_thumb(&super::request_from_uri(&req).unwrap(), &dir);
+        assert_eq!(reply.body, b"jpeg2x".to_vec());
+
+        // Misses still degrade to the placeholder, never an error.
+        let miss: tauri::http::Uri = format!("thumb://{hash}").parse().unwrap();
+        let reply = super::resolve_thumb(&super::request_from_uri(&miss).unwrap(), &dir);
+        assert!(reply.body.starts_with(&[0x89, b'P', b'N', b'G']));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn job_key_distinguishes_scale_variants() {
+        let hash = "a".repeat(32);
+        let req1 = super::ThumbRequest { hash: hash.clone(), scale: 1 };
+        let req2 = super::ThumbRequest { hash: hash.clone(), scale: 2 };
+        assert_eq!(super::job_key(&req1), hash);
+        assert_eq!(super::job_key(&req2), format!("{hash}@2x"));
     }
 
     #[test]

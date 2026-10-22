@@ -49,11 +49,16 @@ pub struct ThumbOptions {
     pub max_edge: u32,
     /// JPEG quality of the cached thumbnail.
     pub quality: u8,
+    /// Optional cache-file tag distinguishing a size variant from the
+    /// legacy 512px entry (TASK-01-024 HiDPI: `Some("@2x")` names
+    /// `<hash>@2x.jpg`). `None` keeps the legacy `<hash>.jpg` name, so
+    /// existing caches stay valid.
+    pub cache_tag: Option<String>,
 }
 
 impl Default for ThumbOptions {
     fn default() -> Self {
-        Self { max_edge: 512, quality: 85 }
+        Self { max_edge: 512, quality: 85, cache_tag: None }
     }
 }
 
@@ -127,7 +132,10 @@ pub fn thumbnail(
         acc
     });
 
-    let cached = cache_dir.join(format!("{hash}.jpg"));
+    let cached = match &opts.cache_tag {
+        Some(tag) => cache_dir.join(format!("{hash}{tag}.jpg")),
+        None => cache_dir.join(format!("{hash}.jpg")),
+    };
     if let Some((w, h)) = cached_dimensions(&cached) {
         return Ok(Thumbnail { path: cached, width: w, height: h, from_cache: true });
     }

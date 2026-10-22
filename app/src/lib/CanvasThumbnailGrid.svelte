@@ -131,6 +131,18 @@
 
   // Repaint whenever the visible range, zoom, or selection changes. Reads
   // only reactive inputs, writes none — no self-re-run loop.
+  /// A themed palette color (TASK-01-024): the canvas cannot use CSS
+  /// variables directly, so read the resolved value off the document root —
+  /// the same palette the stylesheet keys off `data-theme`.
+  function paletteVar(name: string, fallback: string): string {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return v || fallback;
+    } catch {
+      return fallback;
+    }
+ }
+
   $effect(() => {
     const canvas = canvasEl;
     if (!canvas) return;
@@ -171,7 +183,7 @@
             ctx.drawImage(entry as unknown as CanvasImageSource, x, y, size, size);
           } else {
             // Placeholder first; the real thumb replaces it on next repaint.
-            ctx.fillStyle = "#2a2a2a";
+            ctx.fillStyle = paletteVar("--fb-surface", "#2a2a2a");
             ctx.fillRect(x, y, size, size);
             if (uri && !entry) {
               imgCache.set(uri, "loading");
@@ -192,7 +204,7 @@
 
       // Selection highlight (shared with the DOM renderer's store).
       if (selection.size > 0) {
-        ctx.strokeStyle = "#4a9eff";
+        ctx.strokeStyle = paletteVar("--fb-accent", "#4a9eff");
         ctx.lineWidth = 2;
         for (const id of selection) {
           const index = items.findIndex((it) => it.id === id);
