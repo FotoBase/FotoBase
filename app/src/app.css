@@ -1,8 +1,49 @@
-/* Plain CSS / CSS variables only — no CSS framework (PLAN §4). */
-:root {
+/* Plain CSS / CSS variables only — no CSS framework (PLAN §4).
+
+   Theming (TASK-01-024): every color routes through a --fb-* variable; the
+   palette is chosen by a `data-theme` attribute on the document root,
+   resolved from the OS preference (or the Options → Theme toggle) by
+   `theme.ts`. The viewer block below stays neutral-dark in BOTH themes on
+   purpose: photo colors must be judged against a dark neutral stage. */
+:root,
+:root[data-theme="dark"] {
   --fb-bg: #1e1e1e;
   --fb-fg: #eaeaea;
+  --fb-text: #eaeaea;
   --fb-accent: #4a9eff;
+  --fb-surface: #2a2a2a;
+  --fb-surface-alt: #303030;
+  --fb-surface-hover: #333;
+  --fb-border: #444;
+  --fb-border-soft: #333;
+  --fb-muted: #9a9a9a;
+  --fb-dim: #777;
+  --fb-faint: #bbb;
+  --fb-on-accent: #101010;
+  --fb-input-bg: #1c1c1c;
+  --fb-error: #b00020;
+  --fb-shadow: rgba(0, 0, 0, 0.5);
+  --fb-backdrop: rgb(0 0 0 / 40%);
+}
+
+:root[data-theme="light"] {
+  --fb-bg: #f6f6f6;
+  --fb-fg: #1c1c1c;
+  --fb-text: #1c1c1c;
+  --fb-accent: #0a66d0;
+  --fb-surface: #ffffff;
+  --fb-surface-alt: #ececec;
+  --fb-surface-hover: #e2e2e2;
+  --fb-border: #c9c9c9;
+  --fb-border-soft: #d6d6d6;
+  --fb-muted: #6b6b6b;
+  --fb-dim: #8a8a8a;
+  --fb-faint: #555;
+  --fb-on-accent: #ffffff;
+  --fb-input-bg: #ffffff;
+  --fb-error: #b00020;
+  --fb-shadow: rgba(0, 0, 0, 0.25);
+  --fb-backdrop: rgb(0 0 0 / 40%);
 }
 
 body {
@@ -63,7 +104,7 @@ main {
   height: var(--thumb-size);
   overflow: hidden;
   border-radius: 4px;
-  background: #2a2a2a;
+  background: var(--fb-surface);
 }
 
 .grid-cell img {
@@ -76,7 +117,13 @@ main {
 .grid-cell-placeholder {
   width: 100%;
   height: 100%;
-  background: repeating-linear-gradient(45deg, #2a2a2a, #2a2a2a 8px, #303030 8px, #303030 16px);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--fb-surface),
+    var(--fb-surface) 8px,
+    var(--fb-surface-alt) 8px,
+    var(--fb-surface-alt) 16px
+  );
 }
 
 /* Folders view + grid (TASK-01-015) */
@@ -92,14 +139,14 @@ main {
   max-height: 80vh;
   overflow: auto;
   text-align: left;
-  border-right: 1px solid #333;
+  border-right: 1px solid var(--fb-border-soft);
   padding-right: 0.75rem;
 }
 
 .folder-tree h3 {
   margin: 0.75rem 0 0.25rem;
   font-size: 0.85rem;
-  color: #9a9a9a;
+  color: var(--fb-muted);
 }
 
 .folder-tree ul {
@@ -124,12 +171,12 @@ main {
 }
 
 .folder-tree button:hover {
-  background: #2a2a2a;
+  background: var(--fb-surface);
 }
 
 .folder-tree button[aria-pressed="true"] {
   background: var(--fb-accent);
-  color: #101010;
+  color: var(--fb-on-accent);
 }
 
 .grid-area {
@@ -148,23 +195,23 @@ main {
   flex: 1;
   min-width: 0;
   padding: 0.35rem 0.6rem;
-  border: 1px solid #444;
+  border: 1px solid var(--fb-border);
   border-radius: 6px;
-  background: #1c1c1c;
+  background: var(--fb-input-bg);
   color: inherit;
 }
 
 .search-bar button {
   padding: 0.3rem 0.7rem;
-  border: 1px solid #444;
+  border: 1px solid var(--fb-border);
   border-radius: 6px;
-  background: #2a2a2a;
+  background: var(--fb-surface);
   color: inherit;
   cursor: pointer;
 }
 
 .search-bar button:hover {
-  background: #333;
+  background: var(--fb-surface-hover);
 }
 
 .context-menu {
@@ -173,10 +220,10 @@ main {
   margin: 0;
   padding: 0.25rem;
   list-style: none;
-  background: #2a2a2a;
-  border: 1px solid #444;
+  background: var(--fb-surface);
+  border: 1px solid var(--fb-border);
   border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 16px var(--fb-shadow);
   min-width: 12rem;
 }
 
@@ -193,17 +240,17 @@ main {
 }
 
 .context-menu button:hover:not(:disabled) {
-  background: #3a3a3a;
+  background: var(--fb-surface-hover);
 }
 
 .context-menu button:disabled {
-  color: #777;
+  color: var(--fb-dim);
   cursor: default;
 }
 
 /* Single-photo viewer (TASK-01-019): overlays the library, dark stage so
    photo colors are judged against neutral black, filmstrip along the
-   bottom. */
+   bottom. Deliberately theme-independent: dark in BOTH palettes. */
 .viewer {
   position: fixed;
   inset: 0;

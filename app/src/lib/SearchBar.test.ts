@@ -29,6 +29,15 @@ describe("SearchBar", () => {
     expect(input.placeholder).not.toBe("");
   });
 
+  it("exposes focus() for the Ctrl/Cmd+F shortcut (TASK-01-024)", () => {
+    const { component } = render(SearchBar);
+    const input = screen.getByTestId("search-input");
+
+    component.focus();
+    flushSync();
+    expect(document.activeElement).toBe(input);
+  });
+
   it("debounces typing into the shared store's searchQuery", async () => {
     render(SearchBar);
     const input = screen.getByTestId("search-input");

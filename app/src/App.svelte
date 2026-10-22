@@ -15,6 +15,8 @@
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadSettings, type Settings } from "./lib/settings";
   import { runUpdateFlow } from "./lib/updates";
+  import { applyTheme, resolveTheme, systemPrefersDark, watchSystemTheme } from "./lib/theme";
+  import { shortcuts, type ShortcutHandlers } from "./lib/shortcuts";
   import { pickRenderer, gridState } from "./lib/grid-state.svelte.js";
   import { debounce, type GridItem } from "./lib/grid";
   import { listLibraryItems } from "./lib/search";
@@ -64,6 +66,31 @@
     const first = photos[0];
     if (first) openViewer(first, true);
   }
+
+  // Theme (TASK-01-024): resolve the setting against the OS preference and
+  // publish it as a data-theme attribute the stylesheet keys off. While the
+  // setting is "system", keep following the OS live. The effect re-runs
+  // when the setting changes and tears the listener down when it doesn't.
+  $effect(() => {
+    const setting = settings?.theme;
+    if (!setting) return;
+    applyTheme(resolveTheme(setting, systemPrefersDark()));
+    if (setting !== "system") return;
+    return watchSystemTheme((dark) => applyTheme(resolveTheme(setting, dark)));
+  });
+
+  // Global keyboard shortcuts (TASK-01-024, docs/help/shortcuts.md). The
+  // component-local keys (grid arrows/Enter, viewer navigation) live in
+  // their own components; these are the shell-level ones.
+  let searchEl: { focus(): void } | null = $state(null);
+  const globalShortcuts: ShortcutHandlers = {
+    "search-focus": () => searchEl?.focus(),
+    exit: () => {
+      void exitApp().catch(() => {
+        // The backend tears down mid-response on a clean exit — not an error.
+      });
+    },
+  };
 
   async function ping(): Promise<void> {
     try {
@@ -211,7 +238,7 @@
   }
 </script>
 
-<main>
+<main use:shortcuts={globalShortcuts}>
   <h1>{t("app.title")}</h1>
   <p>{t("app.tagline")}</p>
   <button
@@ -267,7 +294,7 @@
     <div class="grid-area">
       <!-- Live search (TASK-01-018): debounced into the shared store; the
            effect above re-queries FTS and both renderers narrow. -->
-      <SearchBar />
+      <SearchBar bind:this={searchEl} />
       <!-- Renderer switch (TASK-01-014): config-driven, user-overridable. DOM
            stays the default everywhere; the canvas renderer is available on all
            OSes. Both read the same shared store, so zoom/selection/scroll carry

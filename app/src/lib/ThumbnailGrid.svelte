@@ -18,7 +18,7 @@
   } from "@tanstack/virtual-core";
   import { t } from "./i18n.svelte.js";
   import { untrack } from "svelte";
-  import { columnCount, debounce, rowItems, thumbUri, visibleHashes, GRID_GAP, type GridItem } from "./grid";
+  import { columnCount, debounce, nextCell, rowItems, thumbSrcset, thumbUri, visibleHashes, GRID_GAP, type GridItem } from "./grid";
   import { gridState, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./grid-state.svelte.js";
 
   interface Props {
@@ -43,6 +43,26 @@
   }: Props = $props();
 
   const REPORT_DEBOUNCE_MS = 100;
+
+  // Keyboard grid navigation (TASK-01-024): arrows move focus and selection
+  // to the neighbor cell (pure math in `nextCell`). The target row is
+  // virtually always rendered (overscan ≥ 1 on every side); when it is not,
+  // the selection still moves and focus stays put — the next arrow press
+  // re-targets from the selection, so nothing is lost.
+  function onCellKeydown(e: KeyboardEvent, index: number, item: GridItem): void {
+    if (e.key === "Enter") {
+      onopen(item);
+      return;
+    }
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "ArrowUp" && e.key !== "ArrowDown") {
+      return;
+    }
+    e.preventDefault();
+    const target = nextCell(index, columns, items.length, e.key);
+    if (target === null) return;
+    gridState.selection = new Set([items[target].id]);
+    scrollEl?.querySelector<HTMLElement>(`[data-cell-index="${target}"]`)?.focus();
+  }
 
   let scrollEl = $state<HTMLDivElement | null>(null);
   let virtualRows = $state<VirtualItem[]>([]);
@@ -129,11 +149,12 @@
           class="grid-row"
           style="transform: translateY({row.start}px); height: {row.size}px; grid-template-columns: repeat({columns}, var(--thumb-size))"
         >
-          {#each rowItems(items, columns, row.index) as item (item.id)}
+          {#each rowItems(items, columns, row.index) as item, localIdx (item.id)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <div
               class="grid-cell"
               data-testid="grid-cell"
+              data-cell-index={row.index * columns + localIdx}
               style="--thumb-size: {gridState.thumbSize}px"
               tabindex="0"
               ondblclick={() => onopen(item)}
@@ -141,13 +162,12 @@
                 e.preventDefault();
                 oncontextmenu({ x: e.clientX, y: e.clientY, item });
               }}
-              onkeydown={(e) => {
-                if (e.key === "Enter") onopen(item);
-              }}
+              onkeydown={(e) => onCellKeydown(e, row.index * columns + localIdx, item)}
             >
               {#if thumbUri(item.hash)}
                 <img
                   src={thumbUri(item.hash) ?? ""}
+                  srcset={thumbSrcset(item.hash, window.devicePixelRatio) ?? undefined}
                   alt={item.filename}
                   loading="lazy"
                   draggable="false"

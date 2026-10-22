@@ -12,7 +12,8 @@ use std::path::{Path, PathBuf};
 
 use fotobase_jobs::Outcome;
 use fotobase_lib::thumb::{
-    enqueue_missing_thumbs, hash_from_uri, resolve_thumb, ThumbOutcome, PLACEHOLDER_PNG,
+    enqueue_missing_thumbs, hash_from_uri, resolve_thumb, ThumbOutcome, ThumbRequest,
+    PLACEHOLDER_PNG,
 };
 use fotobase_render::{thumbnail, ThumbOptions};
 use image::ImageEncoder as _;
@@ -52,6 +53,11 @@ fn cache_key(src: &Path) -> String {
         let _ = write!(acc, "{b:02x}");
         acc
     })
+}
+
+/// 1x cache request (the legacy form, no `?s=` query).
+fn req1(hash: &str) -> ThumbRequest {
+    ThumbRequest { hash: hash.to_string(), scale: 1 }
 }
 
 // --- URI parsing -----------------------------------------------------------
@@ -112,7 +118,7 @@ fn cached_hash_returns_the_cached_bytes() {
     let thumb = thumbnail(&src, &cache, ThumbOptions::default()).unwrap();
     let expected = std::fs::read(&thumb.path).unwrap();
 
-    let reply = resolve_thumb(&cache_key(&src), &cache);
+    let reply = resolve_thumb(&req1(&cache_key(&src)), &cache);
 
     assert_eq!(reply.status, 200);
     assert_eq!(reply.content_type, "image/jpeg");
@@ -124,7 +130,7 @@ fn unknown_hash_returns_the_placeholder_never_an_error() {
     let tmp = TempDir::new().unwrap();
     let cache = tmp.path().join("thumbs"); // empty cache → guaranteed miss
 
-    let reply = resolve_thumb("e3b0c44298fc1c149afbf4c8996fb924", &cache);
+    let reply = resolve_thumb(&req1("e3b0c44298fc1c149afbf4c8996fb924"), &cache);
 
     assert_eq!(reply.status, 200, "a miss must still be a displayable image");
     assert_eq!(reply.content_type, "image/png");
@@ -147,7 +153,7 @@ fn unreadable_cache_entry_degrades_to_placeholder() {
     std::fs::remove_file(&entry).unwrap();
     std::fs::create_dir(&entry).unwrap();
 
-    let reply = resolve_thumb(&hash, &cache);
+    let reply = resolve_thumb(&req1(&hash), &cache);
     assert_eq!(reply.status, 200);
     assert_eq!(reply.content_type, "image/png");
     assert_eq!(reply.body, PLACEHOLDER_PNG);
@@ -189,7 +195,7 @@ mod miss_jobs {
 
         let queue: Queue<ThumbOutcome> = Queue::new(8);
         let handles =
-            enqueue_missing_thumbs("e3b0c44298fc1c149afbf4c8996fb924", &cat, &cache, &queue);
+            enqueue_missing_thumbs(&req1("e3b0c44298fc1c149afbf4c8996fb924"), &cat, &cache, &queue);
         assert_eq!(handles.len(), 1, "one source path → one render job");
 
         // The job renders into the cache, making the next request a hit.
@@ -200,7 +206,7 @@ mod miss_jobs {
             }
         }
         // The render caches under the source's real content hash.
-        let reply = resolve_thumb(&cache_key(&src), &cache);
+        let reply = resolve_thumb(&req1(&cache_key(&src)), &cache);
         assert_eq!(reply.content_type, "image/jpeg", "render job filled the cache");
         queue.close().await;
     }
@@ -211,7 +217,7 @@ mod miss_jobs {
         let cat = Catalog::open(tmp.path().join("catalog.db")).unwrap();
         let queue: Queue<ThumbOutcome> = Queue::new(8);
         let handles = enqueue_missing_thumbs(
-            "e3b0c44298fc1c149afbf4c8996fb924",
+            &req1("e3b0c44298fc1c149afbf4c8996fb924"),
             &cat,
             &tmp.path().join("thumbs"),
             &queue,
@@ -230,8 +236,8 @@ mod miss_jobs {
 
         let queue: Queue<ThumbOutcome> = Queue::new(8);
         let key = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        let first = enqueue_missing_thumbs(key, &cat, &cache, &queue);
-        let second = enqueue_missing_thumbs(key, &cat, &cache, &queue);
+        let first = enqueue_missing_thumbs(&req1(key), &cat, &cache, &queue);
+        let second = enqueue_missing_thumbs(&req1(key), &cat, &cache, &queue);
         assert_eq!(first.len(), 1);
         assert_eq!(second.len(), 1, "second request coalesces onto the same job");
 
@@ -244,7 +250,7 @@ mod miss_jobs {
                 other => panic!("coalesced render job must succeed, got {other:?}"),
             }
         }
-        assert_eq!(resolve_thumb(&cache_key(&src), &cache).content_type, "image/jpeg");
+        assert_eq!(resolve_thumb(&req1(&cache_key(&src)), &cache).content_type, "image/jpeg");
         queue.close().await;
     }
 }

@@ -53,6 +53,20 @@ pub enum GridRenderer {
     Canvas,
 }
 
+/// UI theme (TASK-01-024, PLAN §2 additions "Dark mode / HiDPI").
+///
+/// `System` follows the OS setting (the default); `Light`/`Dark` are the
+/// explicit app toggle. The frontend resolves this to a `data-theme`
+/// attribute the stylesheet keys off.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Theme {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 /// The General-tab settings (PLAN §2 Options dialog — General tab).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
@@ -65,6 +79,9 @@ pub struct Settings {
     /// Which renderer draws the library grid (TASK-01-014).
     #[serde(default)]
     pub grid_renderer: GridRenderer,
+    /// Dark mode: follow the OS, or force light/dark (TASK-01-024).
+    #[serde(default)]
+    pub theme: Theme,
 }
 
 impl Default for Settings {
@@ -74,6 +91,7 @@ impl Default for Settings {
             update_mode: UpdateMode::CheckButAsk,
             show_tooltips: true,
             grid_renderer: GridRenderer::default(),
+            theme: Theme::default(),
         }
     }
 }
@@ -109,6 +127,33 @@ mod tests {
         assert_eq!(s.update_mode, UpdateMode::CheckButAsk);
         assert!(s.show_tooltips);
         assert_eq!(s.grid_renderer, GridRenderer::Dom);
+    }
+
+    #[test]
+    fn theme_defaults_to_system_and_serializes_kebab() {
+        // TASK-01-024: dark mode follows the OS by default; the app toggle
+        // is an explicit override.
+        assert_eq!(Settings::default().theme, Theme::System);
+        assert_eq!(serde_json::to_string(&Theme::System).unwrap(), "\"system\"");
+        assert_eq!(serde_json::to_string(&Theme::Light).unwrap(), "\"light\"");
+        assert_eq!(serde_json::to_string(&Theme::Dark).unwrap(), "\"dark\"");
+    }
+
+    #[test]
+    fn older_settings_files_without_a_theme_still_load() {
+        // Pre-01-024 settings.json has no theme field; loading it must not
+        // reset the user's other settings to defaults.
+        let dir = std::env::temp_dir().join(format!("fb-settings-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let json = br#"{"language":"de","update_mode":"off","show_tooltips":false,"grid_renderer":"canvas"}"#;
+        std::fs::write(dir.join("settings.json"), json).unwrap();
+        let s = Settings::load(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(s.language, "de");
+        assert_eq!(s.update_mode, UpdateMode::Off);
+        assert!(!s.show_tooltips);
+        assert_eq!(s.grid_renderer, GridRenderer::Canvas);
+        assert_eq!(s.theme, Theme::System);
     }
 
     #[test]

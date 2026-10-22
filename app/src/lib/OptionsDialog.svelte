@@ -8,6 +8,7 @@
     onRebuildProgress,
     rebuildCatalog,
     saveSettings,
+    THEME_CHOICES,
     UPDATE_MODES,
     type Settings,
   } from "./settings";
@@ -42,6 +43,10 @@
 
   function setGridRenderer(renderer: Settings["grid_renderer"]): void {
     apply({ ...settings, grid_renderer: renderer });
+  }
+
+  function setTheme(theme: Settings["theme"]): void {
+    apply({ ...settings, theme });
   }
 
   async function onClearCache(): Promise<void> {
@@ -121,6 +126,23 @@
           >
             <option value="dom">{t("options.gridRenderer.dom")}</option>
             <option value="canvas">{t("options.gridRenderer.canvas")}</option>
+          </select>
+        </label>
+
+        <!-- Theme (TASK-01-024): follow the OS by default, or force a
+             palette. App.svelte resolves the setting to a data-theme
+             attribute the stylesheet keys off. -->
+        <label class="options-row">
+          <span>{t("options.theme")}</span>
+          <select
+            data-testid="theme-select"
+            value={settings.theme}
+            onchange={(e) => setTheme(e.currentTarget.value as Settings["theme"])}
+            title={settings.show_tooltips ? t("options.theme") : undefined}
+          >
+            {#each THEME_CHOICES as choice (choice.value)}
+              <option value={choice.value}>{t(choice.labelKey)}</option>
+            {/each}
           </select>
         </label>
 

@@ -54,6 +54,33 @@ fn gen_png(dir: &Path, i: usize, w: u32, h: u32) -> PathBuf {
 }
 
 #[test]
+fn cache_tag_names_a_distinct_cache_entry() {
+    // TASK-01-024 HiDPI: size variants live beside the legacy 512 entry
+    // under a cache tag, so a 2x render never serves 1x pixels and never
+    // overwrites the 1x cache.
+    let tmp = TempDir::new().unwrap();
+    let src = gen_jpeg(tmp.path(), 0, 800, 600);
+    let cache = tmp.path().join("thumbs");
+
+    let opts = ThumbOptions { cache_tag: Some("@2x".into()), ..ThumbOptions::default() };
+    let first = thumbnail(&src, &cache, opts.clone()).unwrap();
+    assert!(!first.from_cache);
+    assert!(first
+        .path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.ends_with("@2x.jpg"))
+        .unwrap_or(false));
+
+    let again = thumbnail(&src, &cache, opts).unwrap();
+    assert!(again.from_cache, "the tagged entry must be a cache hit");
+
+    // The legacy (untagged) entry was not created by the tagged render.
+    let legacy = std::fs::read_dir(&cache).map(|d| d.count()).unwrap_or(0);
+    assert_eq!(legacy, 1);
+}
+
+#[test]
 fn second_call_same_content_is_cache_hit_without_decode() {
     let tmp = TempDir::new().unwrap();
     let cache = tmp.path().join("thumbs");

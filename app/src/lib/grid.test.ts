@@ -6,7 +6,9 @@ import {
   cellAt,
   columnCount,
   debounce,
+  nextCell,
   rowItems,
+  thumbSrcset,
   thumbUri,
   visibleHashes,
   type GridItem,
@@ -39,6 +41,45 @@ describe("thumbUri", () => {
     expect(thumbUri("short")).toBeNull();
     expect(thumbUri("../etc/passwd")).toBeNull();
     expect(thumbUri("A".repeat(32))).toBeNull(); // uppercase is not a cache key
+  });
+});
+
+describe("thumbSrcset (HiDPI, TASK-01-024)", () => {
+  const hash = "a".repeat(32);
+
+  it("is null on 1x displays — the single src is already sharp", () => {
+    expect(thumbSrcset(hash, 1)).toBeNull();
+  });
+
+  it("offers a 2x variant on HiDPI displays", () => {
+    expect(thumbSrcset(hash, 2)).toBe(`thumb://${hash}?s=2 2x`);
+    expect(thumbSrcset(hash, 1.5)).toBe(`thumb://${hash}?s=2 2x`);
+  });
+
+  it("rejects malformed hashes and nulls", () => {
+    expect(thumbSrcset(null, 2)).toBeNull();
+    expect(thumbSrcset("short", 2)).toBeNull();
+    expect(thumbSrcset("A".repeat(32), 2)).toBeNull();
+  });
+});
+
+describe("nextCell (keyboard grid navigation, TASK-01-024)", () => {
+  it("moves within a row", () => {
+    expect(nextCell(0, 3, 7, "ArrowRight")).toBe(1);
+    expect(nextCell(1, 3, 7, "ArrowLeft")).toBe(0);
+  });
+
+  it("never leaves the grid", () => {
+    expect(nextCell(0, 3, 7, "ArrowLeft")).toBeNull();
+    expect(nextCell(6, 3, 7, "ArrowRight")).toBeNull();
+  });
+
+  it("moves between rows and stops at the edges", () => {
+    expect(nextCell(1, 3, 7, "ArrowDown")).toBe(4);
+    expect(nextCell(4, 3, 7, "ArrowUp")).toBe(1);
+    expect(nextCell(0, 3, 7, "ArrowUp")).toBeNull();
+    // 5 + 3 = 8 is past the last item (7 items, indices 0..6).
+    expect(nextCell(5, 3, 7, "ArrowDown")).toBeNull();
   });
 });
 
