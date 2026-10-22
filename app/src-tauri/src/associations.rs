@@ -477,7 +477,7 @@ mod win {
         let classes = classes();
         let prog_id = win_prog_id(ext);
         let key = classes.create_subkey(&prog_id).map_err(|e| format!("create {prog_id}: {e}"))?.0;
-        key.set_value("", "Fotobase image").map_err(|e| format!("set {prog_id}: {e}"))?;
+        key.set_value("", &"Fotobase image").map_err(|e| format!("set {prog_id}: {e}"))?;
         let cmd = key
             .create_subkey(r"shell\open\command")
             .map_err(|e| format!("create command key: {e}"))?
