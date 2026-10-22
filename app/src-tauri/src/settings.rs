@@ -82,6 +82,12 @@ pub struct Settings {
     /// Dark mode: follow the OS, or force light/dark (TASK-01-024).
     #[serde(default)]
     pub theme: Theme,
+    /// Image types the user registered Fotobase as the OS default viewer
+    /// for (TASK-01-025, PLAN §2M). Lowercase, dotless; the list is the
+    /// Options dialog's source of truth, the OS registration is applied
+    /// through the `associations` module when it changes.
+    #[serde(default)]
+    pub file_associations: Vec<String>,
 }
 
 impl Default for Settings {
@@ -92,6 +98,7 @@ impl Default for Settings {
             show_tooltips: true,
             grid_renderer: GridRenderer::default(),
             theme: Theme::default(),
+            file_associations: Vec::new(),
         }
     }
 }
@@ -190,5 +197,16 @@ mod tests {
         assert_eq!(s.update_mode, UpdateMode::Off);
         assert!(!s.show_tooltips);
         assert_eq!(s.grid_renderer, GridRenderer::Dom);
+    }
+
+    #[test]
+    fn file_associations_default_to_empty_and_survive_old_files() {
+        // TASK-01-025: the association list is user state; a settings.json
+        // from before the field existed must not reset the other settings.
+        assert!(Settings::default().file_associations.is_empty());
+        let old = r#"{"language":"de","update_mode":"off","show_tooltips":false}"#;
+        let s: Settings = serde_json::from_str(old).unwrap();
+        assert_eq!(s.language, "de");
+        assert!(s.file_associations.is_empty());
     }
 }

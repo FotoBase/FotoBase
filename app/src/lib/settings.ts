@@ -18,6 +18,7 @@ export interface Settings {
   show_tooltips: boolean;
   grid_renderer: GridRendererSetting;
   theme: ThemeSetting;
+  file_associations: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -26,7 +27,16 @@ export const DEFAULT_SETTINGS: Settings = {
   show_tooltips: true,
   grid_renderer: "dom",
   theme: "system",
+  file_associations: [],
 };
+
+// Image types the file-association option (TASK-01-025, PLAN §2M) can
+// register Fotobase as the default viewer for. Mirrors the Rust
+// `associations::IMAGE_EXTS` (the scanner's cataloged image types).
+export const IMAGE_EXTENSIONS: string[] = [
+  "jpg", "jpeg", "png", "gif", "tif", "tiff", "webp", "heic", "heif",
+  "avif", "bmp", "dng", "cr2", "cr3", "nef", "arw", "raf", "orf", "rw2",
+];
 
 export const THEME_CHOICES: { value: ThemeSetting; labelKey: string }[] = [
   { value: "system", labelKey: "options.theme.system" },
@@ -90,4 +100,40 @@ export async function onRebuildProgress(
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
   return await listen<RebuildProgress>("rebuild-progress", (e) => cb(e.payload));
+}
+
+// File associations (TASK-01-025, PLAN §2M): register/unregister Fotobase
+// as the OS default viewer for image types. The OS writes happen in the
+// backend; the persisted settings list is the dialog's source of truth.
+export async function listAssociations(): Promise<{ ext: string; registered: boolean }[]> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return await invoke<{ ext: string; registered: boolean }[]>("list_associations");
+}
+
+export async function registerAssociations(exts: string[]): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("register_associations", { exts });
+}
+
+export async function unregisterAssociations(exts: string[]): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("unregister_associations", { exts });
+}
+
+// OS-opened files (TASK-01-025): the backend parks the paths the OS passed
+// at launch; the shell drains them once and routes them into the viewer.
+export async function takeOpenFiles(): Promise<string[]> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return await invoke<string[]>("take_open_files");
+}
+
+export interface FilePathMatch {
+  id: number;
+  filename: string;
+  hash: string | null;
+}
+
+export async function findFileByPath(path: string): Promise<FilePathMatch | null> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return await invoke<FilePathMatch | null>("find_file_by_path", { path });
 }

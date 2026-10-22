@@ -1,22 +1,36 @@
 // OptionsDialog tests (TASK-01-022 base; TASK-01-024 adds the theme
-// setting). IPC is mocked — the component's job is decisions and ordering.
+// setting; TASK-01-025 adds file associations). IPC is mocked — the
+// component's job is decisions and ordering.
 
 import { flushSync } from "svelte";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import OptionsDialog from "./OptionsDialog.svelte";
-import { DEFAULT_SETTINGS, saveSettings, type Settings } from "./settings";
+import {
+  DEFAULT_SETTINGS,
+  registerAssociations,
+  saveSettings,
+  unregisterAssociations,
+  type Settings,
+} from "./settings";
 
 vi.mock("./settings", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./settings")>();
-  return { ...actual, saveSettings: vi.fn() };
+  return {
+    ...actual,
+    saveSettings: vi.fn(),
+    registerAssociations: vi.fn(),
+    unregisterAssociations: vi.fn(),
+  };
 });
 
 afterEach(cleanup);
 
 beforeEach(() => {
   vi.mocked(saveSettings).mockReset().mockResolvedValue(undefined);
+  vi.mocked(registerAssociations).mockReset().mockResolvedValue(undefined);
+  vi.mocked(unregisterAssociations).mockReset().mockResolvedValue(undefined);
 });
 
 const settle = async (): Promise<void> => {
@@ -49,5 +63,65 @@ describe("OptionsDialog theme (TASK-01-024)", () => {
     const select = screen.getByTestId("theme-select") as HTMLSelectElement;
     const values = [...select.options].map((o) => o.value);
     expect(values).toEqual(["system", "light", "dark"]);
+  });
+});
+
+describe("OptionsDialog file associations (TASK-01-025)", () => {
+  it("lists the supported image types with checkboxes", () => {
+    render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });
+    for (const ext of ["jpg", "png", "heic"]) {
+      const box = screen.getByTestId(`assoc-${ext}`) as HTMLInputElement;
+      expect(box.type).toBe("checkbox");
+    }
+  });
+
+  it("reflects the persisted association list as checked state", () => {
+    const settings: Settings = { ...DEFAULT_SETTINGS, file_associations: ["jpg", "png"] };
+    render(OptionsDialog, { open: true, settings, onchange: vi.fn() });
+    expect((screen.getByTestId("assoc-jpg") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId("assoc-png") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId("assoc-gif") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("checking a type registers it with the OS and persists the list", async () => {
+    const base: Settings = { ...DEFAULT_SETTINGS };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+
+    fireEvent.click(screen.getByTestId("assoc-jpg"));
+    await settle();
+
+    expect(registerAssociations).toHaveBeenCalledWith(["jpg"]);
+    expect(unregisterAssociations).not.toHaveBeenCalled();
+    const next = { ...base, file_associations: ["jpg"] };
+    expect(onchange).toHaveBeenCalledWith(next);
+    expect(saveSettings).toHaveBeenCalledWith(next);
+  });
+
+  it("unchecking a type unregisters it and drops it from the list", async () => {
+    const base: Settings = { ...DEFAULT_SETTINGS, file_associations: ["jpg", "png"] };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+
+    fireEvent.click(screen.getByTestId("assoc-jpg"));
+    await settle();
+
+    expect(unregisterAssociations).toHaveBeenCalledWith(["jpg"]);
+    expect(registerAssociations).not.toHaveBeenCalled();
+    const next = { ...base, file_associations: ["png"] };
+    expect(onchange).toHaveBeenCalledWith(next);
+    expect(saveSettings).toHaveBeenCalledWith(next);
+  });
+
+  it("a failed registration is reported, not swallowed", async () => {
+    vi.mocked(registerAssociations).mockRejectedValue(new Error("boom"));
+    const base: Settings = { ...DEFAULT_SETTINGS };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+
+    fireEvent.click(screen.getByTestId("assoc-jpg"));
+    await settle();
+
+    expect(screen.getByTestId("assoc-result").textContent).toContain("boom");
   });
 });

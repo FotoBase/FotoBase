@@ -12,6 +12,7 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
+pub mod associations;
 pub mod file_menu;
 pub mod folder_manager;
 pub mod import;
@@ -67,6 +68,9 @@ struct AppState {
     /// connection, created lazily on the first folder-manager command (and
     /// then armed for every persisted `always` folder).
     folders: Mutex<Option<folder_manager::FolderManager>>,
+    /// Files the OS opened with Fotobase at launch (TASK-01-025), drained
+    /// once by the frontend's `take_open_files` and routed into the viewer.
+    pending_open: Mutex<Vec<String>>,
 }
 
 /// Lock-and-open the shared catalog; commands and the scheme handler share
@@ -309,6 +313,55 @@ async fn exit_app(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> R
 #[tauri::command]
 fn ping() -> &'static str {
     "pong"
+}
+
+// --- File associations (TASK-01-025, PLAN §2M) -------------------------------
+
+/// Registration status of every supported image type, for the Options
+/// dialog's association list.
+#[tauri::command]
+fn list_associations() -> Vec<associations::AssociationStatus> {
+    associations::status()
+}
+
+/// Register Fotobase as the OS default viewer for the given image types.
+/// The prior handler of each type is captured first, so unregistering can
+/// restore exactly what the OS had before.
+#[tauri::command]
+fn register_associations(
+    exts: Vec<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| format!("current exe: {e}"))?;
+    associations::register(&exts, &exe, &state.data_dir)
+}
+
+/// Unregister the given image types, restoring each captured prior handler.
+#[tauri::command]
+fn unregister_associations(
+    exts: Vec<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| format!("current exe: {e}"))?;
+    associations::unregister(&exts, &exe, &state.data_dir)
+}
+
+/// Files the OS passed at launch (TASK-01-025): drained exactly once by the
+/// frontend, which resolves each path against the catalog and opens the
+/// viewer. Unknown/uncataloged paths are silently dropped.
+#[tauri::command]
+fn take_open_files(state: tauri::State<'_, AppState>) -> Vec<String> {
+    state.pending_open.lock().map(|mut guard| std::mem::take(&mut *guard)).unwrap_or_default()
+}
+
+/// Resolve one on-disk path to a grid item (TASK-01-025): the OS-opened
+/// path is matched against the catalog, and the viewer opens on that row.
+#[tauri::command]
+fn find_file_by_path(
+    path: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<fotobase_catalog::FileInfo>, String> {
+    with_catalog(&state, |cat| cat.file_by_path(&path))
 }
 
 // --- Options dialog (TASK-01-022, PLAN §2 General tab) ----------------------
@@ -617,6 +670,11 @@ pub fn run() {
                 fotobase_jobs::Queue::new(IMPORT_QUEUE_CAPACITY)
             });
             let persisted = settings::Settings::load(&data_dir);
+            // OS-opened files (TASK-01-025): whatever the OS passed on the
+            // command line that is an existing supported image is parked
+            // for the frontend to pick up and route into the viewer.
+            let pending_open: Vec<String> =
+                associations::collect_open_paths(&std::env::args().skip(1).collect::<Vec<_>>());
             app.manage(AppState {
                 data_dir: data_dir.clone(),
                 catalog_path: data_dir.join("catalog.db"),
@@ -629,6 +687,7 @@ pub fn run() {
                 settings: Mutex::new(persisted),
                 pending_update: Mutex::new(None),
                 folders: Mutex::new(None),
+                pending_open: Mutex::new(pending_open),
             });
             Ok(())
         })
@@ -652,10 +711,45 @@ pub fn run() {
             start_import,
             cancel_import,
             check_for_updates,
-            install_pending_update
+            install_pending_update,
+            list_associations,
+            register_associations,
+            unregister_associations,
+            take_open_files,
+            find_file_by_path
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running fotobase");
+        .build(tauri::generate_context!())
+        .expect("error while building fotobase")
+        .run(handle_run_event);
+}
+
+/// Run-loop events (TASK-01-025): on macOS, files the OS opens with a
+/// *running* Fotobase arrive as `RunEvent::Opened` (LaunchServices), not
+/// argv. They land in the same pending queue the frontend drains at
+/// startup, and are announced on the `open-file` event for the live shell.
+fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
+    #[cfg(target_os = "macos")]
+    if let tauri::RunEvent::Opened { urls } = event {
+        let paths: Vec<String> = urls
+            .iter()
+            .filter_map(|u| u.to_file_path().ok())
+            .map(|p| p.to_string_lossy().into_owned())
+            .filter(|p| associations::is_supported_image_path(p))
+            .collect();
+        if paths.is_empty() {
+            return;
+        }
+        if let Some(state) = app.try_state::<AppState>() {
+            if let Ok(mut guard) = state.pending_open.lock() {
+                guard.extend(paths.iter().cloned());
+            }
+        }
+        let _ = app.emit("open-file", &paths);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, event);
+    }
 }
 
 #[cfg(test)]

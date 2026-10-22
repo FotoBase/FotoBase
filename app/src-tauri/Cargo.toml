@@ -34,6 +34,10 @@ trash = "5"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
+# File associations (TASK-01-025): HKCU\Software\Classes registration.
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+
 [dev-dependencies]
 # Same verifier tauri-plugin-updater uses — tests exercise the real path.
 base64 = "0.22"
