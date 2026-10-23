@@ -1,0 +1,23 @@
+{
+  "protocol": 1,
+  "fixture": {
+    "count": 50000,
+    "seed": 42
+  },
+  "runner": {
+    "os": "linux 7.2.11-200.fc44.x86_64",
+    "webkitgtk": "2.50.4",
+    "cpu": "AMD Ryzen 7 9800X3D 8-Core Processor",
+    "ram_gb": 60
+  },
+  "renderer": "dom",
+  "metrics": {
+    "time_to_first_thumbnail_s": 3.5,
+    "full_scan_duration_s": 2.3,
+    "scroll_fps_median": 44.2,
+    "idle_ram_mb": 151.7,
+    "ui_jank_events": 120,
+    "peak_ram_mb": 163.2
+  },
+  "passed": false
+}

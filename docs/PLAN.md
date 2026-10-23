@@ -500,7 +500,7 @@ Custom namespaces (`fb:Recipe`, `fb:Albums`) don't round-trip through other tool
 - Import from folder / removable drive with duplicate skip.
 - Thumbnail pipeline (libvips, JPEG/PNG/WebP/HEIC/AVIF), on-disk cache, `thumb://` URI scheme.
 - Virtualized grid with zoom slider, folder tree grouped by year.
-- **Canvas-grid fallback** (planned deliverable, not a contingency): if the DOM grid misses the perf bar on WebKitGTK, the canvas renderer is the Linux default from day one.
+- **Canvas-grid fallback** (planned deliverable, not a contingency): if the DOM grid misses the perf bar on WebKitGTK, the canvas renderer is the Linux default from day one (**decided 2026-10-23: canvas is the Linux default** — [ADR-0013](./adr/adr-0013-canvas-grid-linux-default.md)).
 - Single-photo viewer, fullscreen, basic slideshow.
 - Info pane: EXIF + histogram.
 - Live search over filenames and folder names (FTS5).
@@ -752,7 +752,7 @@ flowchart TD
 
 | Risk                                                                                        | Impact               | Mitigation                                                                                                  |
 | ------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| WebKitGTK performance on Linux                                                              | Janky grid / viewer  | Benchmark in P1; keep DOM minimal; **canvas grid fallback is a planned P1 deliverable (see §6)**, not a contingency |
+| WebKitGTK performance on Linux                                                              | Janky grid / viewer  | Benchmark in P1; keep DOM minimal; **canvas grid fallback is a planned P1 deliverable (see §6)**, not a contingency — **decided: canvas is the Linux default** ([ADR-0013](./adr/adr-0013-canvas-grid-linux-default.md)) |
 | OS WebView drift (WKWebView/WebView2/WebKitGTK updates outside our control cap perceived quality) | Regressions we don't own | Perf smoke tests in CI per release; canvas fallback covers the worst case; pin a WebView regression triage step in the release checklist |
 | Model licensing (InsightFace ArcFace weights are non-commercial; same risk class applies to CLIP/SigLIP ONNX conversions and the HDBSCAN crate) | Legal / distribution | Permissively-licensed models only (§1 decision); per-model license manifest checked in CI; models are separate opt-in downloads |
 | exiv2 / rexiv2 dependency health (C++ ABI through Rust bindings; single point of failure for all metadata I/O) | Metadata layer rot | Own the bindings (rexiv2 fork, 2026-10-20); keep metadata I/O behind a crate-internal trait so the backend can be swapped; `kamadak-exif` as a read-only fallback; track exiv2 releases |
