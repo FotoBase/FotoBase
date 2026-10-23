@@ -194,8 +194,13 @@ mod miss_jobs {
         let cat = catalog_with_hash(&tmp, "e3b0c44298fc1c149afbf4c8996fb924", &src_str);
 
         let queue: Queue<ThumbOutcome> = Queue::new(8);
-        let handles =
-            enqueue_missing_thumbs(&req1("e3b0c44298fc1c149afbf4c8996fb924"), &cat, &cache, &queue);
+        let handles = enqueue_missing_thumbs(
+            &req1("e3b0c44298fc1c149afbf4c8996fb924"),
+            &cat,
+            &cache,
+            &queue,
+            None,
+        );
         assert_eq!(handles.len(), 1, "one source path → one render job");
 
         // The job renders into the cache, making the next request a hit.
@@ -221,6 +226,7 @@ mod miss_jobs {
             &cat,
             &tmp.path().join("thumbs"),
             &queue,
+            None,
         );
         assert!(handles.is_empty());
         queue.close().await;
@@ -236,8 +242,8 @@ mod miss_jobs {
 
         let queue: Queue<ThumbOutcome> = Queue::new(8);
         let key = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        let first = enqueue_missing_thumbs(&req1(key), &cat, &cache, &queue);
-        let second = enqueue_missing_thumbs(&req1(key), &cat, &cache, &queue);
+        let first = enqueue_missing_thumbs(&req1(key), &cat, &cache, &queue, None);
+        let second = enqueue_missing_thumbs(&req1(key), &cat, &cache, &queue, None);
         assert_eq!(first.len(), 1);
         assert_eq!(second.len(), 1, "second request coalesces onto the same job");
 
@@ -251,6 +257,59 @@ mod miss_jobs {
             }
         }
         assert_eq!(resolve_thumb(&req1(&cache_key(&src)), &cache).content_type, "image/jpeg");
+        queue.close().await;
+    }
+
+    #[tokio::test]
+    async fn display_profile_renders_into_a_profile_tagged_cache_entry() {
+        let tmp = TempDir::new().unwrap();
+        let cache = tmp.path().join("thumbs");
+        let src = gen_jpeg(&tmp.path().join("photos"), 3, 120, 90);
+        let src_str = src.to_string_lossy().to_string();
+        let cat = catalog_with_hash(&tmp, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", &src_str);
+        let queue: Queue<ThumbOutcome> = Queue::new(8);
+
+        // The same content hash rendered for two different display profiles
+        // must land in two distinct cache entries, neither of them the
+        // legacy untagged one (TASK-02-001 integration criterion).
+        let p3 = fotobase_render::rgb_profile_bytes(
+            [0.3127, 0.329, 1.0],
+            [[0.680, 0.320, 1.0], [0.265, 0.690, 1.0], [0.150, 0.060, 1.0]],
+            2.199_218_75,
+        )
+        .unwrap();
+        let srgb = fotobase_render::srgb_profile_bytes().unwrap();
+
+        for profile in [Some(p3.clone()), Some(srgb.clone()), None] {
+            let handles = enqueue_missing_thumbs(
+                &req1("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+                &cat,
+                &cache,
+                &queue,
+                profile,
+            );
+            assert_eq!(handles.len(), 1);
+            for handle in handles {
+                match &*handle.result().await {
+                    Outcome::Done(Ok(t)) => {
+                        let name = t.path.file_name().unwrap().to_str().unwrap().to_string();
+                        assert!(
+                            name.starts_with(&cache_key(&src)),
+                            "keyed by content hash: {name}"
+                        );
+                    }
+                    other => panic!("render must succeed, got {other:?}"),
+                }
+            }
+        }
+        // Three distinct entries: p3-tagged, srgb-tagged, legacy.
+        let entries: Vec<String> = std::fs::read_dir(&cache)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".jpg"))
+            .collect();
+        assert_eq!(entries.len(), 3, "one cache entry per display profile: {entries:?}");
         queue.close().await;
     }
 }

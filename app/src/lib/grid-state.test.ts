@@ -71,6 +71,27 @@ describe("gridState", () => {
     resetGridState();
     expect(gridState.thumbVersions).toEqual({});
   });
+
+  it("bumps every known hash on a display-profile change (TASK-02-001)", () => {
+    // The backend switched display profiles: every on-screen thumbnail must
+    // re-request so stale old-profile pixels never linger.
+    const a = "a".repeat(32);
+    const b = "b".repeat(32);
+    gridState.bumpThumbVersion(a);
+    gridState.bumpThumbVersion(b);
+    gridState.bumpThumbVersion(b);
+    gridState.bumpAllThumbVersions();
+    expect(gridState.thumbVersions[a]).toBe(2);
+    expect(gridState.thumbVersions[b]).toBe(3);
+    // Unknown hashes stay unknown: the first request for them renders
+    // directly into the new profile's cache entry.
+    const c = "c".repeat(32);
+    expect(gridState.thumbVersions[c]).toBeUndefined();
+    // With nothing rendered yet the bump is a no-op, not a crash.
+    resetGridState();
+    gridState.bumpAllThumbVersions();
+    expect(gridState.thumbVersions).toEqual({});
+  });
 });
 
 describe("pickRenderer", () => {

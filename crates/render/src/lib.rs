@@ -31,6 +31,14 @@ use fotobase_jobs::{job, Job, Outcome};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+pub mod color;
+pub mod icc;
+
+pub use color::{
+    rgb_profile_bytes, srgb_profile_bytes, thumb_profile_tag, transform_rgb, ColorError,
+};
+pub use icc::extract_icc;
+
 #[derive(Debug, Error)]
 pub enum RenderError {
     #[error("decode failed for {path}: {detail}")]
@@ -54,11 +62,18 @@ pub struct ThumbOptions {
     /// `<hash>@2x.jpg`). `None` keeps the legacy `<hash>.jpg` name, so
     /// existing caches stay valid.
     pub cache_tag: Option<String>,
+    /// Display ICC profile the pixels are transformed into before the cache
+    /// write (TASK-02-001). `Some` on macOS/Windows (the OS display profile)
+    /// and on Linux (the bundled sRGB profile); `None` keeps the legacy
+    /// untagged, untransformed pipeline. The profile fingerprint is appended
+    /// to the cache-file name, so a profile switch re-renders instead of
+    /// reusing pixels transformed for another display.
+    pub display_profile: Option<Vec<u8>>,
 }
 
 impl Default for ThumbOptions {
     fn default() -> Self {
-        Self { max_edge: 512, quality: 85, cache_tag: None }
+        Self { max_edge: 512, quality: 85, cache_tag: None, display_profile: None }
     }
 }
 
@@ -132,18 +147,32 @@ pub fn thumbnail(
         acc
     });
 
-    let cached = match &opts.cache_tag {
-        Some(tag) => cache_dir.join(format!("{hash}{tag}.jpg")),
-        None => cache_dir.join(format!("{hash}.jpg")),
+    let profile_tag = color::thumb_profile_tag(opts.display_profile.as_deref());
+    let cached = match (&opts.cache_tag, profile_tag.is_empty()) {
+        (Some(tag), _) => cache_dir.join(format!("{hash}{tag}{profile_tag}.jpg")),
+        (None, false) => cache_dir.join(format!("{hash}{profile_tag}.jpg")),
+        (None, true) => cache_dir.join(format!("{hash}.jpg")),
     };
     if let Some((w, h)) = cached_dimensions(&cached) {
         return Ok(Thumbnail { path: cached, width: w, height: h, from_cache: true });
     }
 
-    let (rgb, src_w, src_h) = decode(&bytes, src)?;
+    let (mut rgb, src_w, src_h) = decode(&bytes, src)?;
+    if let Some(dst) = opts.display_profile.as_deref() {
+        let src_profile = icc::extract_icc(&bytes).or_else(|| icc::extract_from_heif(&bytes));
+        transform_rgb(&mut rgb, src_profile.as_deref(), dst)
+            .map_err(|e| RenderError::Decode { path: src.to_path_buf(), detail: e.to_string() })?;
+    }
     let (dst_w, dst_h) = fit(src_w, src_h, opts.max_edge);
     let resized = resize(&rgb, src_w, src_h, dst_w, dst_h);
-    let encoded = encode_jpeg(&resized, dst_w, dst_h, opts.quality);
+    let mut encoded = encode_jpeg(&resized, dst_w, dst_h, opts.quality);
+    if let Some(profile) = &opts.display_profile {
+        // Tag the output with the destination profile so the WebView knows
+        // the pixels are already in display space and applies no second
+        // transform (the "no double-transform" requirement, sRGB Linux
+        // fallback included).
+        icc::attach_to_jpeg(&mut encoded, profile);
+    }
 
     std::fs::create_dir_all(cache_dir)?;
     // Atomic replace (same discipline as the sidecar writer): `.tmp` + rename
