@@ -53,6 +53,7 @@ interface Args {
   runs: number;
   quiesceS: number;
   timeoutS: number;
+  thumbWaitS: number;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -79,6 +80,7 @@ function parseArgs(argv: string[]): Args {
     runs: Number(get("--runs") ?? 5),
     quiesceS: Number(get("--quiesce-s") ?? 30),
     timeoutS: Number(get("--timeout-s") ?? 1800),
+    thumbWaitS: Number(get("--thumb-wait-s") ?? 120),
   };
 }
 
@@ -460,11 +462,13 @@ async function runFull(args: Args): Promise<number> {
     await browser.execute(JANK_MONITOR);
 
     // Read the probe until the scan completes (the hook thread marks it).
+    const readProbe = async (): Promise<Probe> =>
+      (await browser!.execute(() =>
+        (window as any).__TAURI__.core.invoke("perf_probe"),
+      )) as Probe;
     let probe: Probe | undefined;
     await waitUntil(async () => {
-      probe = (await browser!.execute(() =>
-        (window as any).__TAURI__.core.invoke("perf_probe"),
-      )) as Probe | undefined;
+      probe = await readProbe();
       return Boolean(probe?.scan_completed_ms);
     }, args.timeoutS * 1000);
     const p = probe as Probe;
@@ -472,16 +476,32 @@ async function runFull(args: Args): Promise<number> {
     const scanJank = (await browser.execute(JANK_READ)) as number;
 
     // §2 time_to_first_thumbnail: scan start → first real thumbnail served.
-    // A scan that finishes without ever serving a real thumbnail is a miss,
-    // not a harness error: report the elapsed time and let the bars decide.
-    let firstThumbS = p.first_thumb_serve_ms
+    // On a cold start the first real serve can only land AFTER scan
+    // completion (lazy hash backfill → grid re-list → queued render →
+    // `thumb-rendered` bump → versioned re-request), so keep polling the
+    // probe for a bounded window instead of snapshotting the instant the
+    // scan ends. A genuinely broken serve chain is a miss, not a harness
+    // error: report the real elapsed time at the give-up point and let the
+    // bars decide — never a fabricated timeout value.
+    let firstThumbS: number | undefined = p.first_thumb_serve_ms
       ? (p.first_thumb_serve_ms - p.scan_started_ms) / 1000
-      : (Date.now() - startedAt) / 1000;
-    if (!p.first_thumb_serve_ms) {
+      : undefined;
+    if (firstThumbS === undefined) {
+      const thumbDeadline = Date.now() + args.thumbWaitS * 1000;
+      while (firstThumbS === undefined && Date.now() < thumbDeadline) {
+        await sleep(250);
+        const later = await readProbe();
+        if (later.first_thumb_serve_ms) {
+          firstThumbS =
+            (later.first_thumb_serve_ms - later.scan_started_ms) / 1000;
+        }
+      }
+    }
+    if (firstThumbS === undefined) {
+      firstThumbS = (Date.now() - startedAt) / 1000;
       console.error(
-        "warning: no real thumbnail was served during the run; reporting elapsed time",
+        `warning: no real thumbnail was served within ${args.thumbWaitS} s of scan completion; reporting elapsed time`,
       );
-      firstThumbS = Math.max(firstThumbS, args.timeoutS);
     }
 
     // §2 scroll_fps: median of N scripted 10 s runs; jank accumulates.
