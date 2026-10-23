@@ -13,6 +13,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 pub mod associations;
+pub mod emit_pacer;
 pub mod file_menu;
 pub mod folder_manager;
 pub mod import;
@@ -167,6 +168,14 @@ fn spawn_hash_backfill(catalog_path: PathBuf, app: tauri::AppHandle) {
             return;
         };
         let cancel = std::sync::atomic::AtomicBool::new(false);
+        // Announce batches time-coalesced, not per batch (TASK-01-004 perf
+        // run): 50k rows at 64/batch meant ~781 `library-changed` emits in
+        // ~31 s, each a full 50k-row re-list over IPC — heap churn the
+        // idle-RAM bar paid for. First batch announces immediately; later
+        // ones at most every 250 ms; one flush after the loop so the final
+        // state is never left unannounced.
+        let mut pacer = emit_pacer::EmitPacer::new(std::time::Duration::from_millis(250));
+        let mut pending_announce = false;
         loop {
             match fotobase_scanner::backfill_hashes(&mut cat, 64, &cancel) {
                 // Error: the catalog connection is broken; a later scan
@@ -180,10 +189,17 @@ fn spawn_hash_backfill(catalog_path: PathBuf, app: tauri::AppHandle) {
                 }
                 Ok(_) => {
                     // Best-effort: a slow UI must never stall the backfill.
-                    let _ = app.emit("library-changed", ());
+                    pending_announce = true;
+                    if pacer.fire(std::time::Instant::now()) {
+                        let _ = app.emit("library-changed", ());
+                        pending_announce = false;
+                    }
                 }
                 Err(_) => break,
             }
+        }
+        if pending_announce {
+            let _ = app.emit("library-changed", ());
         }
         HASH_BACKFILL_RUNNING.store(false, Ordering::SeqCst);
     });

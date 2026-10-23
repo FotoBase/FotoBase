@@ -119,6 +119,38 @@ export function debounce<A extends unknown[]>(
   };
 }
 
+/// Leading-edge throttle with a trailing catch-up: fires immediately, then at
+/// most once per `ms` window — and if calls kept arriving during the window,
+/// one last call with the latest args fires when it closes. Unlike
+/// `debounce`, a slow drip of events is never starved: a burst that renews
+/// itself faster than the window still delivers its FIRST call, not only the
+/// last one. Used for `library-changed` re-lists (TASK-01-004 perf run: the
+/// hash backfill emits per batch, faster than any debounce window — the
+/// pure-trailing debounce postponed the grid refresh until the entire 50k
+/// backfill ended, 33 s to first thumbnail).
+export function throttle<A extends unknown[]>(
+  fn: (...args: A) => void,
+  ms: number,
+): (...args: A) => void {
+  let last = -Infinity;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return (...args: A) => {
+    const now = Date.now();
+    const remaining = ms - (now - last);
+    clearTimeout(timer);
+    if (remaining <= 0) {
+      last = now;
+      fn(...args);
+      return;
+    }
+    // Window still open: remember the latest args for the trailing catch-up.
+    timer = setTimeout(() => {
+      last = Date.now();
+      fn(...args);
+    }, remaining);
+  };
+}
+
 /// Canvas hit-testing (TASK-01-014): which item lives under a click at
 /// viewport-relative `offsetX`/`offsetY` when the grid is scrolled to
 /// `scrollTop`. Pure math so the canvas grid keeps its pointer handling

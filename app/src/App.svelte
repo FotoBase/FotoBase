@@ -15,7 +15,7 @@
   import { deleteFromDisk, exitApp, refreshFolderThumbnails, revealInDisk } from "./lib/file-menu";
   import { removeFolder } from "./lib/folder-manager";
   import type { FolderInfo, MenuItem } from "./lib/folder-tree";
-  import { debounce, type GridItem } from "./lib/grid";
+  import { debounce, throttle, type GridItem } from "./lib/grid";
   import { gridState, pickRenderer } from "./lib/grid-state.svelte.js";
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadPhotoInfo } from "./lib/info-pane";
@@ -217,16 +217,20 @@
   // Watched-folder scans can land after the startup load (cold start: the
   // first scan of a 50k folder takes seconds; live: files dropped into a
   // watched folder while the app runs). The backend announces every
-  // catalog-changing scan on `library-changed`; re-list (debounced — a
-  // scan burst must not re-list per event).
-  const refreshLibraryDebounced = debounce(() => void refreshLibrary(), 250);
+  // catalog-changing scan on `library-changed`; re-list throttled (leading
+  // edge + trailing catch-up): the first event refreshes immediately, and a
+  // burst coalesces to at most one more. A pure trailing debounce starves
+  // here — the hash backfill emits per batch, faster than any window, so the
+  // grid would not refresh until the WHOLE backfill ended (TASK-01-004 perf
+  // run: 33 s to first thumbnail).
+  const refreshLibraryThrottled = throttle(() => void refreshLibrary(), 250);
   $effect(() => {
     let unlisten: (() => void) | null = null;
     void (async () => {
       try {
         const { listen } = await import("@tauri-apps/api/event");
         unlisten = await listen("library-changed", () => {
-          refreshLibraryDebounced();
+          refreshLibraryThrottled();
         });
       } catch {
         // Browser dev: no backend, no events.
