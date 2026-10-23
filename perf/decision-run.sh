@@ -44,6 +44,8 @@ cd perf
 npm ci
 npx vitest run
 
+mkdir -p results
+
 echo "== protocol run 1 of 2 =="
 ts="$(date +%Y%m%d-%H%M%S)"
 xvfb-run -a npx tsx src/harness.ts --app ../target/release/fotobase \

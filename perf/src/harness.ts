@@ -539,6 +539,9 @@ async function runFull(args: Args): Promise<number> {
       metrics,
     });
     const json = JSON.stringify(report, null, 2);
+    // `--out` may point into a directory that does not exist yet (the
+    // decision-run script writes results/runN-<ts>.json) — create it.
+    fs.mkdirSync(path.dirname(args.out), { recursive: true });
     fs.writeFileSync(args.out, json + "\n");
     console.log(json);
 
