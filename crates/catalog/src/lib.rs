@@ -413,6 +413,30 @@ impl Catalog {
         Ok(rows.flatten().collect())
     }
 
+    /// Rows still missing their lazily-computed content hash (PLAN §10
+    /// "hash lazily"): `(id, path)` pairs, path-ordered, at most `limit` of
+    /// them — the backfill driver works in bounded batches so no single
+    /// pass holds a connection (or a lock) for a whole 50k library.
+    pub fn unhashed_files(&self, limit: usize) -> Result<Vec<(i64, String)>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT id, path FROM files WHERE hash IS NULL ORDER BY path LIMIT ?1",
+        )?;
+        let rows = stmt.query_map([limit as i64], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.flatten().collect())
+    }
+
+    /// Fill one file row's lazily-computed content hash (PLAN §10). The
+    /// hash is the render crate's cache key convention (32 lowercase hex
+    /// chars); the caller computes it from the file on disk. A row that
+    /// vanished in the meantime simply updates nothing.
+    pub fn set_file_hash(&mut self, file_id: i64, hash: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE files SET hash = ?1 WHERE id = ?2",
+            rusqlite::params![hash, file_id],
+        )?;
+        Ok(())
+    }
+
     /// The info pane's data for one photo (TASK-01-020, PLAN §2D): the file
     /// properties joined with the scan-time EXIF cache (`LEFT JOIN` — a photo
     /// without a `metadata` row still lists, with `None` EXIF). `None` when

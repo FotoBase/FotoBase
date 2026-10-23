@@ -13,6 +13,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 pub mod associations;
+pub mod emit_pacer;
 pub mod file_menu;
 pub mod folder_manager;
 pub mod import;
@@ -40,9 +41,18 @@ const IMPORT_QUEUE_CAPACITY: usize = 2;
 /// Sequence number for unique import job keys.
 static IMPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Dedup guard for the lazy hash backfill: at most one backfill thread at a
+/// time. A scan that lands while one is running is covered — the running
+/// loop keeps scanning for unhashed rows until a pass makes no progress.
+static HASH_BACKFILL_RUNNING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// Lazily-opened catalog shared by IPC commands (TASK-01-008). The catalog is
 /// a rebuildable cache (PLAN §5); nothing here writes user data.
 struct AppState {
+    /// App handle for event emission from non-command contexts (the
+    /// watcher's scan-completion hook lives on its own thread).
+    app_handle: tauri::AppHandle,
     /// App data dir: settings.json lives here.
     data_dir: PathBuf,
     catalog_path: PathBuf,
@@ -114,13 +124,85 @@ fn with_folder_manager<T>(
     let mut guard =
         state.folders.lock().map_err(|e| format!("folder manager mutex poisoned: {e}"))?;
     if guard.is_none() {
-        let fm = folder_manager::FolderManager::open(
+        let app_handle = state.app_handle.clone();
+        // Watcher-driven scans announce catalog changes on `library-changed`
+        // (PLAN §2A): the frontend re-lists, so a cold-start scan — or files
+        // dropped into a watched folder while the app runs — shows up in
+        // the grid without any user action. Without this, a scan that lands
+        // after startup never reaches the UI (perf decision run: the grid
+        // scrolled EMPTY, so no thumb:// request ever happened).
+        let catalog_path = state.catalog_path.clone();
+        let hook = std::sync::Arc::new(move |_report: &fotobase_scanner::ScanReport| {
+            let _ = app_handle.emit("library-changed", ());
+            spawn_hash_backfill(catalog_path.clone(), app_handle.clone());
+        });
+        let fm = folder_manager::FolderManager::open_with(
             &state.catalog_path,
             fotobase_scanner::DEFAULT_DEBOUNCE,
+            Some(hook),
         )?;
         *guard = Some(fm);
     }
     f(guard.as_ref().expect("folder manager just inserted"))
+}
+
+/// Lazy content-hash backfill driver (PLAN §10 "hash lazily"; perf decision
+/// run: the grid listed NULL-hash rows, so no `thumb://` URI was ever built
+/// and `first_thumb_serve_ms` never fired). Spawned after every scan that
+/// changed the catalog — and after a rebuild — it hashes unhashed rows in
+/// bounded batches on its own WAL connection (never the shared one, never
+/// under a lock), re-announcing `library-changed` per batch so the grid
+/// picks up hashes progressively: path order matches grid order, so the
+/// visible top of the library fills first. At most one runs at a time; a
+/// scan landing mid-run is covered because the loop keeps going until a
+/// pass makes no progress, plus one settle pass for rows that landed
+/// between the final check and the flag reset.
+fn spawn_hash_backfill(catalog_path: PathBuf, app: tauri::AppHandle) {
+    use std::sync::atomic::Ordering;
+    if HASH_BACKFILL_RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let Ok(mut cat) = Catalog::open(&catalog_path) else {
+            HASH_BACKFILL_RUNNING.store(false, Ordering::SeqCst);
+            return;
+        };
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        // Announce batches time-coalesced, not per batch (TASK-01-004 perf
+        // run): 50k rows at 64/batch meant ~781 `library-changed` emits in
+        // ~31 s, each a full 50k-row re-list over IPC — heap churn the
+        // idle-RAM bar paid for. First batch announces immediately; later
+        // ones at most every 250 ms; one flush after the loop so the final
+        // state is never left unannounced.
+        let mut pacer = emit_pacer::EmitPacer::new(std::time::Duration::from_millis(250));
+        let mut pending_announce = false;
+        loop {
+            match fotobase_scanner::backfill_hashes(&mut cat, 64, &cancel) {
+                // Error: the catalog connection is broken; a later scan
+                // re-arms the backfill. Zero: done — one settle pass after
+                // a pause catches rows that landed right behind the check.
+                Ok(0) => {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    if matches!(fotobase_scanner::backfill_hashes(&mut cat, 64, &cancel), Ok(0)) {
+                        break;
+                    }
+                }
+                Ok(_) => {
+                    // Best-effort: a slow UI must never stall the backfill.
+                    pending_announce = true;
+                    if pacer.fire(std::time::Instant::now()) {
+                        let _ = app.emit("library-changed", ());
+                        pending_announce = false;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        if pending_announce {
+            let _ = app.emit("library-changed", ());
+        }
+        HASH_BACKFILL_RUNNING.store(false, Ordering::SeqCst);
+    });
 }
 
 /// Live FTS search (TASK-01-008/01-018, PLAN §5): returns matching grid
@@ -199,11 +281,30 @@ fn prioritize_visible(hashes: Vec<String>, state: tauri::State<'_, AppState>) ->
 /// IPC. A cache miss returns the placeholder image and triggers a render job
 /// in the bounded queue; it is never an error dialog.
 const THUMB_PROTOCOL: &str = "thumb";
+
+/// `thumb-rendered` event payload: a queued render landed in the disk
+/// cache (outcome `Done(Ok)`). The frontend bumps its per-hash version
+/// and re-requests `thumb://<hash>?v=N` — without this, a cold-start grid
+/// holds the miss placeholder forever (`no-store` alone does not make an
+/// already-rendered <img> re-fetch).
+#[derive(Clone, Serialize)]
+struct ThumbRendered {
+    hash: String,
+    scale: u32,
+}
+
 fn thumb_response(reply: thumb::ThumbReply) -> tauri::http::Response<Vec<u8>> {
+    // A real (cached) JPEG is keyed by content hash: immutable, cache
+    // forever. The placeholder is NOT cacheable — it stands in for a
+    // thumbnail still being rendered, and pinning it in the WebView cache
+    // would leave a cold-start grid gray forever (miss observed on the
+    // perf decision run: `first_thumb_serve_ms` never fired).
+    let cache_control =
+        if reply.content_type == "image/jpeg" { "max-age=31536000, immutable" } else { "no-store" };
     tauri::http::Response::builder()
         .status(reply.status)
         .header("content-type", reply.content_type)
-        .header("cache-control", "max-age=31536000, immutable") // content-hash keyed
+        .header("cache-control", cache_control)
         .header("access-control-allow-origin", "*")
         .body(reply.body)
         .expect("static thumb response parts are valid")
@@ -650,10 +751,37 @@ pub fn run() {
             // trigger of the render that will fill the cache for next time.
             if reply.content_type == "image/png" {
                 if let Some(req) = &req {
-                    let _ = with_catalog(&state, |cat| {
-                        thumb::enqueue_missing_thumbs(req, cat, &state.cache_dir, &state.thumbs);
-                        Ok(())
-                    });
+                    let handles = with_catalog(&state, |cat| {
+                        Ok::<_, fotobase_catalog::CatalogError>(thumb::enqueue_missing_thumbs(
+                            req,
+                            cat,
+                            &state.cache_dir,
+                            &state.thumbs,
+                        ))
+                    })
+                    .unwrap_or_default();
+                    if !handles.is_empty() {
+                        // When the render lands, tell the WebView: it
+                        // re-requests with a fresh `?v=N` (the placeholder
+                        // it holds is `no-store`, but the <img> src must
+                        // still change to trigger the re-request).
+                        let app = ctx.app_handle().clone();
+                        let hash = req.hash.clone();
+                        let scale = req.scale;
+                        for handle in handles {
+                            let app = app.clone();
+                            let hash = hash.clone();
+                            tauri::async_runtime::spawn(async move {
+                                if matches!(
+                                    *handle.result().await,
+                                    fotobase_jobs::Outcome::Done(Ok(_))
+                                ) {
+                                    let _ =
+                                        app.emit("thumb-rendered", ThumbRendered { hash, scale });
+                                }
+                            });
+                        }
+                    }
                 }
             }
             thumb_response(reply)
@@ -691,6 +819,7 @@ pub fn run() {
             let pending_open: Vec<String> =
                 associations::collect_open_paths(&std::env::args().skip(1).collect::<Vec<_>>());
             app.manage(AppState {
+                app_handle: app.handle().clone(),
                 data_dir: data_dir.clone(),
                 catalog_path: data_dir.join("catalog.db"),
                 catalog: Mutex::new(None),
@@ -791,5 +920,21 @@ mod tests {
     #[test]
     fn crate_identity() {
         assert_eq!(super::CRATE_NAME, "fotobase");
+    }
+
+    #[test]
+    fn thumb_response_cache_control_split_hits_from_placeholders() {
+        // Content-hash-keyed JPEGs are immutable; the placeholder is NOT —
+        // pinning it in the WebView cache would leave a cold-start grid
+        // gray forever (perf decision run: first_thumb_serve never fired).
+        let hit = super::thumb_response(super::thumb::ThumbReply {
+            status: 200,
+            content_type: "image/jpeg",
+            body: vec![0xFF],
+        });
+        assert_eq!(hit.headers().get("cache-control").unwrap(), "max-age=31536000, immutable");
+
+        let placeholder = super::thumb_response(super::thumb::placeholder());
+        assert_eq!(placeholder.headers().get("cache-control").unwrap(), "no-store");
     }
 }

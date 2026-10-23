@@ -10,16 +10,16 @@
 -->
 <script lang="ts">
   import {
-    Virtualizer,
     elementScroll,
     observeElementOffset,
     observeElementRect,
+    Virtualizer,
     type VirtualItem,
   } from "@tanstack/virtual-core";
-  import { t } from "./i18n.svelte.js";
   import { untrack } from "svelte";
-  import { columnCount, debounce, nextCell, rowItems, thumbSrcset, thumbUri, visibleHashes, GRID_GAP, type GridItem } from "./grid";
+  import { columnCount, debounce, GRID_GAP, nextCell, rowItems, thumbSrcset, thumbUri, visibleHashes, type GridItem } from "./grid";
   import { gridState, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./grid-state.svelte.js";
+  import { t } from "./i18n.svelte.js";
 
   interface Props {
     items?: GridItem[];
@@ -165,9 +165,10 @@
               onkeydown={(e) => onCellKeydown(e, row.index * columns + localIdx, item)}
             >
               {#if thumbUri(item.hash)}
+                {@const version = gridState.thumbVersions[item.hash] ?? 0}
                 <img
-                  src={thumbUri(item.hash) ?? ""}
-                  srcset={thumbSrcset(item.hash, window.devicePixelRatio) ?? undefined}
+                  src={thumbUri(item.hash, version) ?? ""}
+                  srcset={thumbSrcset(item.hash, window.devicePixelRatio, version) ?? undefined}
                   alt={item.filename}
                   loading="lazy"
                   draggable="false"

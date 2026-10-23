@@ -13,25 +13,25 @@
 -->
 <script lang="ts">
   import {
-    Virtualizer,
     elementScroll,
     observeElementOffset,
     observeElementRect,
+    Virtualizer,
     type VirtualItem,
   } from "@tanstack/virtual-core";
-  import { t } from "./i18n.svelte.js";
   import { untrack } from "svelte";
   import {
     cellAt,
     columnCount,
     debounce,
+    GRID_GAP,
     rowItems,
     thumbUri,
     visibleHashes,
-    GRID_GAP,
     type GridItem,
   } from "./grid";
   import { gridState, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./grid-state.svelte.js";
+  import { t } from "./i18n.svelte.js";
 
   /// What `drawImage` accepts; tests inject stand-ins with the same shape.
   type ImageLike = { src: string; width: number; height: number };
@@ -177,7 +177,11 @@
           const y = row.start - scrollTop;
           if (y + size < 0 || y > h) continue; // overscan guard: offscreen cells
 
-          const uri = thumbUri(item.hash);
+          // Versioned URI (grid store): after a `thumb-rendered` event the
+          // version bumps, so imgCache misses on the new key and re-fetches
+          // — the placeholder pixels get replaced. Read inside the tracked
+          // draw, so a bump repaints without any other input changing.
+          const uri = thumbUri(item.hash, gridState.thumbVersions[item.hash] ?? 0);
           const entry = uri ? imgCache.get(uri) : undefined;
           if (entry && entry !== "loading" && entry !== "failed") {
             ctx.drawImage(entry as unknown as CanvasImageSource, x, y, size, size);

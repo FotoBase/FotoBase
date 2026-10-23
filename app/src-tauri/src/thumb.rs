@@ -102,14 +102,31 @@ pub fn job_key(req: &ThumbRequest) -> String {
 }
 
 /// Parse a scheme request URI into a [`ThumbRequest`]. Accepts both WebView
-/// spellings (see [`hash_from_uri`]) plus the optional `?s=2` HiDPI query.
+/// spellings (see [`hash_from_uri`]) plus two optional query parameters:
+/// - `s=1`/`s=2` — the HiDPI size variant,
+/// - `v=<digits>` — a cache-bust version the frontend appends after a
+///   `thumb-rendered` event; the value is ignored (the cache key is the
+///   content hash), but the parameter must be admitted or a re-request
+///   would be rejected and serve the placeholder again.
+///
+/// Anything else is rejected — the UI gets the placeholder, never
+/// mis-scaled pixels.
 pub fn request_from_uri(uri: &Uri) -> Option<ThumbRequest> {
     let hash = hash_from_uri(uri)?;
-    let scale = match uri.query() {
-        None | Some("s=1") => 1,
-        Some("s=2") => 2,
-        Some(_) => return None,
-    };
+    let mut scale = 1u32;
+    for pair in uri.query().unwrap_or("").split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        match pair {
+            "s=1" => scale = 1,
+            "s=2" => scale = 2,
+            _ if pair.starts_with("v=")
+                && !pair[2..].is_empty()
+                && pair[2..].bytes().all(|b| b.is_ascii_digit()) => {}
+            _ => return None,
+        }
+    }
     Some(ThumbRequest { hash, scale })
 }
 
@@ -247,6 +264,35 @@ mod tests {
 
         let ub: tauri::http::Uri = format!("thumb://{hash}?s=9").parse().unwrap();
         assert!(super::request_from_uri(&ub).is_none());
+    }
+
+    #[test]
+    fn uri_parses_cache_bust_versions() {
+        // After a `thumb-rendered` event the frontend re-requests with
+        // `?v=N`. The version value is ignored (the hash IS the cache key)
+        // but must be admitted, alone and combined with the scale param —
+        // otherwise the re-request would serve the placeholder again and a
+        // cold-start grid would stay gray forever.
+        let hash = "a".repeat(32);
+
+        let u: tauri::http::Uri = format!("thumb://{hash}?v=2").parse().unwrap();
+        let r = super::request_from_uri(&u).unwrap();
+        assert_eq!(r.hash, hash);
+        assert_eq!(r.scale, 1);
+
+        let u: tauri::http::Uri = format!("thumb://{hash}?v=1&s=2").parse().unwrap();
+        let r = super::request_from_uri(&u).unwrap();
+        assert_eq!(r.scale, 2);
+
+        let u: tauri::http::Uri = format!("thumb://{hash}?s=2&v=17").parse().unwrap();
+        let r = super::request_from_uri(&u).unwrap();
+        assert_eq!(r.scale, 2);
+
+        // Non-numeric or unknown parameters are still rejected.
+        for bad in ["v=abc", "v=", "x=1", "s=2&v=-1"] {
+            let u: tauri::http::Uri = format!("thumb://{hash}?{bad}").parse().unwrap();
+            assert!(super::request_from_uri(&u).is_none(), "{bad} must not parse");
+        }
     }
 
     #[test]

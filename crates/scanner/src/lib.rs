@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use fotobase_catalog::{Catalog, Result};
 
 mod watcher;
-pub use watcher::{Watcher, WatcherError, DEFAULT_DEBOUNCE};
+pub use watcher::{ScanHook, Watcher, WatcherError, DEFAULT_DEBOUNCE};
 
 pub mod import;
 pub use import::{
@@ -37,6 +37,43 @@ pub struct ScanReport {
     pub removed: usize,
     /// True if the cancel flag stopped the walk early.
     pub cancelled: bool,
+}
+
+impl ScanReport {
+    /// Did this scan change the catalog at all? No-op scans (everything
+    /// matched by mtime+size) must not wake the UI — the `library-changed`
+    /// event only fires for real changes.
+    pub fn changed(&self) -> bool {
+        self.added + self.updated + self.removed > 0
+    }
+}
+
+/// One bounded pass of the lazy content-hash backfill (PLAN §10 "hash
+/// lazily"): fills up to `batch` of the catalog's `hash IS NULL` rows by
+/// hashing the file on disk (`content_hash`, the render cache-key
+/// convention) and storing the result.
+///
+/// A scan never reads file contents, so a freshly scanned library is a
+///catalog full of NULL hashes and the grid has no `thumb://` keys — the
+/// app drives this pass (batch after batch, on its own connection) after a
+/// scan that changed something. Returns how many rows were hashed this
+/// pass; `0` means done (or nothing hashable), which is the caller's stop
+/// signal. A vanished/unreadable file stays unhashed and reports no
+/// progress, so a permanently broken row cannot spin the loop. `cancel`
+/// stops at the next file, like every other scanner entry point.
+pub fn backfill_hashes(catalog: &mut Catalog, batch: usize, cancel: &AtomicBool) -> Result<usize> {
+    let rows = catalog.unhashed_files(batch)?;
+    let mut hashed = 0usize;
+    for (id, path) in rows {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Ok(hash) = content_hash(Path::new(&path)) {
+            catalog.set_file_hash(id, &hash)?;
+            hashed += 1;
+        }
+    }
+    Ok(hashed)
 }
 
 /// Walk position reported through the [`scan_folder_with`] progress

@@ -170,6 +170,46 @@ fn removed_root_stops_scanning() {
     assert_eq!(row_count_for(&fx, "ignored.jpg"), 0);
 }
 
+/// ScanHook (library-changed backing): a watcher-driven scan that changed
+/// the catalog fires the hook with its report; the hook is the app shell's
+/// only signal that the grid should re-list (perf decision run: the
+/// cold-start scan landed after startup and the UI never saw it).
+#[test]
+fn scan_hook_fires_with_the_report_of_a_changed_scan() {
+    let lib = tempfile::tempdir().unwrap();
+    write_jpg(&lib.path().join("a.jpg"), 10);
+    let db = tempfile::tempdir().unwrap();
+    let mut cat = Catalog::open(db.path().join("catalog.db")).unwrap();
+    scan_folder(&mut cat, lib.path(), &AtomicBool::new(false)).unwrap();
+    let catalog = Arc::new(Mutex::new(cat));
+
+    let fired: Arc<Mutex<Vec<fotobase_scanner::ScanReport>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink = fired.clone();
+    let handle = Watcher::spawn_with(
+        &[lib.path().to_path_buf()],
+        catalog,
+        DEBOUNCE,
+        Some(Arc::new(move |r: &fotobase_scanner::ScanReport| {
+            sink.lock().unwrap().push(r.clone())
+        })),
+    )
+    .unwrap();
+
+    write_jpg(&lib.path().join("late.jpg"), 20);
+    assert!(
+        wait_for(|| !fired.lock().unwrap().is_empty(), Duration::from_secs(5)),
+        "changed scan never fired the hook"
+    );
+    let calls = fired.lock().unwrap();
+    assert_eq!(calls[0].added, 1, "hook carries the scan's report");
+    drop(calls);
+
+    // Quiet window settles: exactly one scan, exactly one hook call.
+    std::thread::sleep(SETTLE);
+    assert_eq!(handle.scan_count(), 1);
+    assert_eq!(fired.lock().unwrap().len(), 1);
+}
+
 /// Lifecycle: roots added after spawn are watched too.
 #[test]
 fn added_root_is_watched() {

@@ -10,9 +10,10 @@
 -->
 <script lang="ts">
   import { thumbUri, type GridItem } from "./grid";
-  import { nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
-  import InfoPane from "./InfoPane.svelte";
+  import { gridState } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
+  import InfoPane from "./InfoPane.svelte";
+  import { nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
 
   interface Props {
     items?: GridItem[];
@@ -147,7 +148,7 @@
       <img
         class="filmstrip-thumb{i === index ? ' current' : ''}"
         data-testid="filmstrip-thumb"
-        src={thumbUri(item.hash) ?? ""}
+        src={thumbUri(item.hash, gridState.thumbVersions[item.hash] ?? 0) ?? ""}
         alt={item.filename}
         draggable="false"
         onclick={() => {

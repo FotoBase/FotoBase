@@ -8,6 +8,7 @@ import {
   debounce,
   nextCell,
   rowItems,
+  throttle,
   thumbSrcset,
   thumbUri,
   visibleHashes,
@@ -42,6 +43,14 @@ describe("thumbUri", () => {
     expect(thumbUri("../etc/passwd")).toBeNull();
     expect(thumbUri("A".repeat(32))).toBeNull(); // uppercase is not a cache key
   });
+
+  it("appends a cache-bust ?v=N after a thumb-rendered bump", () => {
+    const hash = "a".repeat(32);
+    expect(thumbUri(hash, 1)).toBe(`thumb://${hash}?v=1`);
+    expect(thumbUri(hash, 3)).toBe(`thumb://${hash}?v=3`);
+    // Version 0 = never rendered since mount: plain URI, no query.
+    expect(thumbUri(hash, 0)).toBe(`thumb://${hash}`);
+  });
 });
 
 describe("thumbSrcset (HiDPI, TASK-01-024)", () => {
@@ -60,6 +69,11 @@ describe("thumbSrcset (HiDPI, TASK-01-024)", () => {
     expect(thumbSrcset(null, 2)).toBeNull();
     expect(thumbSrcset("short", 2)).toBeNull();
     expect(thumbSrcset("A".repeat(32), 2)).toBeNull();
+  });
+
+  it("carries the cache-bust version alongside the scale param", () => {
+    expect(thumbSrcset(hash, 2, 1)).toBe(`thumb://${hash}?v=1&s=2 2x`);
+    expect(thumbSrcset(hash, 2, 0)).toBe(`thumb://${hash}?s=2 2x`);
   });
 });
 
@@ -109,7 +123,10 @@ describe("visibleHashes", () => {
   ];
 
   it("collects the unique hashes of the visible rows, skipping unhashed files", () => {
-    expect(visibleHashes(items, 2, [0, 1])).toEqual(["a".repeat(32), "b".repeat(32)]);
+    expect(visibleHashes(items, 2, [0, 1])).toEqual([
+      "a".repeat(32),
+      "b".repeat(32),
+    ]);
   });
 
   it("returns an empty list for an empty visible range", () => {
@@ -159,6 +176,60 @@ describe("debounce", () => {
     vi.advanceTimersByTime(100);
     expect(fn).toHaveBeenCalledTimes(1);
     expect(fn).toHaveBeenCalledWith("c");
+    vi.useRealTimers();
+  });
+});
+
+describe("throttle", () => {
+  it("fires on the leading edge of a burst — a slow drip of events is never starved", () => {
+    // Perf-run regression (TASK-01-004): the hash backfill emits
+    // `library-changed` every few ms; a pure trailing debounce keeps
+    // postponing the re-list until the burst ENDS, so a 50k library only
+    // refreshes after the whole backfill (33 s to first thumbnail). Leading
+    // edge fixes the starvation.
+    vi.useFakeTimers();
+    const fn = vi.fn();
+    const throttled = throttle(fn, 250);
+    throttled("a");
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledWith("a");
+    vi.useRealTimers();
+  });
+
+  it("collapses a burst into at most two calls: first + last", () => {
+    vi.useFakeTimers();
+    const fn = vi.fn();
+    const throttled = throttle(fn, 250);
+    throttled("a");
+    throttled("b");
+    throttled("c");
+    expect(fn).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(250);
+    // The trailing call carries the LATEST args, so the final refresh sees
+    // the newest catalog state.
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fn).toHaveBeenLastCalledWith("c");
+    vi.useRealTimers();
+  });
+
+  it("does not fire a trailing call when nothing arrived during the window", () => {
+    vi.useFakeTimers();
+    const fn = vi.fn();
+    const throttled = throttle(fn, 250);
+    throttled("a");
+    vi.advanceTimersByTime(1000);
+    expect(fn).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("re-arms after the window: a later burst leads again", () => {
+    vi.useFakeTimers();
+    const fn = vi.fn();
+    const throttled = throttle(fn, 250);
+    throttled("a");
+    vi.advanceTimersByTime(300);
+    throttled("b");
+    expect(fn).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
   });
 });

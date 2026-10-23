@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fotobase_catalog::{Catalog, ScanMode};
-use fotobase_scanner::{scan_folder, ScanReport, Watcher};
+use fotobase_scanner::{scan_folder, ScanHook, ScanReport, Watcher};
 
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase-folder-manager";
@@ -35,6 +35,10 @@ pub fn parse_mode(mode: &str) -> Option<ScanMode> {
 pub struct FolderManager {
     watcher: Watcher,
     catalog: Arc<Mutex<Catalog>>,
+    /// Scan-completion hook (see [`Watcher::spawn_with`]): the shell emits
+    /// `library-changed` through it so the UI re-lists after a scan that
+    /// changed something — also fired by `scan_now` (Scan Once).
+    on_change: Option<ScanHook>,
 }
 
 impl FolderManager {
@@ -44,6 +48,16 @@ impl FolderManager {
     /// action). Nested rows fold into their parent — watching the parent
     /// covers the whole tree.
     pub fn open(catalog_path: &Path, debounce: Duration) -> Result<Self, String> {
+        Self::open_with(catalog_path, debounce, None)
+    }
+
+    /// [`open`] with a scan-completion hook, called after every scan that
+    /// changed the catalog (watcher-driven and `scan_now` alike).
+    pub fn open_with(
+        catalog_path: &Path,
+        debounce: Duration,
+        on_change: Option<ScanHook>,
+    ) -> Result<Self, String> {
         let catalog = Arc::new(Mutex::new(
             Catalog::open(catalog_path).map_err(|e| format!("open catalog: {e}"))?,
         ));
@@ -51,9 +65,9 @@ impl FolderManager {
             let cat = catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
             top_level_roots(&cat)
         };
-        let watcher =
-            Watcher::spawn(&roots, catalog.clone(), debounce).map_err(|e| e.to_string())?;
-        Ok(Self { watcher, catalog })
+        let watcher = Watcher::spawn_with(&roots, catalog.clone(), debounce, on_change.clone())
+            .map_err(|e| e.to_string())?;
+        Ok(Self { watcher, catalog, on_change })
     }
 
     /// Number of scans the watcher has started (test observability).
@@ -85,8 +99,15 @@ impl FolderManager {
     /// regardless of its mode.
     pub fn scan_now(&self, path: &str) -> Result<ScanReport, String> {
         let mut cat = self.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
-        scan_folder(&mut cat, Path::new(path), &std::sync::atomic::AtomicBool::new(false))
-            .map_err(|e| format!("scan {path}: {e}"))
+        let report =
+            scan_folder(&mut cat, Path::new(path), &std::sync::atomic::AtomicBool::new(false))
+                .map_err(|e| format!("scan {path}: {e}"))?;
+        if report.changed() {
+            if let Some(hook) = &self.on_change {
+                hook(&report);
+            }
+        }
+        Ok(report)
     }
 
     /// Remove a folder from the catalog (with its nested folder rows); also

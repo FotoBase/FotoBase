@@ -24,11 +24,27 @@ class GridState {
   /// the DOM and canvas grids filter for free: the shell fetches the
   /// matching items once and hands them to whichever renderer is mounted.
   searchQuery = $state("");
+  /// Per-hash cache-bust versions (PLAN §3 rule 3). A cold-start miss serves
+  /// the placeholder; when the queued render lands, the backend emits
+  /// `thumb-rendered` and the shell bumps the hash's version here — every
+  /// consumer re-requests `thumb://<hash>?v=N`, so the placeholder is
+  /// replaced without a refetch storm (only hashes that rendered bump).
+  thumbVersions = $state<Record<string, number>>({});
 
   toggleSelection(id: number): void {
     const next = new Set(this.selection);
     if (!next.delete(id)) next.add(id);
     this.selection = next;
+  }
+
+  /// Record that a thumbnail's render landed; the next URI for this hash
+  /// carries the new version. Idempotent per event, monotonic per hash.
+  bumpThumbVersion(hash: string): void {
+    if (!hash) return;
+    this.thumbVersions = {
+      ...this.thumbVersions,
+      [hash]: (this.thumbVersions[hash] ?? 0) + 1,
+    };
   }
 }
 
@@ -41,6 +57,7 @@ export function resetGridState(): void {
   gridState.selection = new Set();
   gridState.scrollTop = 0;
   gridState.searchQuery = "";
+  gridState.thumbVersions = {};
 }
 
 /// Which renderer to mount for a persisted setting. Canvas only when
