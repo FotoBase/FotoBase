@@ -422,18 +422,20 @@ async function runFull(args: Args): Promise<number> {
   let browser: Awaited<ReturnType<typeof remote>> | undefined;
   const sampler = new RssSampler();
   const startedAt = Date.now();
+  // Separate const: `tauri:options` is not in wdio's capability types.
+  const capabilities = {
+    // webdriverio v9 otherwise injects `webSocketUrl: true` (BiDi), which
+    // WebKitWebDriver rejects: "alwaysMatch is invalid in capabilities".
+    "wdio:enforceWebDriverClassic": true,
+    browserName: "wry",
+    "tauri:options": { application: path.resolve(args.app) },
+  };
   try {
     browser = await remote({
       hostname: "127.0.0.1",
       port,
       logLevel: "warn",
-      // Single object, not an array: webdriverio v9 passes `capabilities`
-      // straight through as alwaysMatch, and WebKitWebDriver rejects a
-      // JSON array there ("alwaysMatch is invalid in capabilities").
-      capabilities: {
-        browserName: "wry",
-        "tauri:options": { application: path.resolve(args.app) },
-      },
+      capabilities,
     });
 
     sampler.start(path.basename(args.app));
