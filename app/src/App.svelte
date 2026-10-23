@@ -3,27 +3,27 @@
   // first wiring of the Options dialog (TASK-01-022): settings load at
   // startup, the dialog persists every change, and the update-mode policy
   // runs once on startup.
-  import OptionsDialog from "./lib/OptionsDialog.svelte";
-  import FolderManagerDialog from "./lib/FolderManagerDialog.svelte";
-  import ImportDialog from "./lib/ImportDialog.svelte";
-  import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
-  import FolderTree from "./lib/FolderTree.svelte";
-  import SearchBar from "./lib/SearchBar.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
+  import FolderManagerDialog from "./lib/FolderManagerDialog.svelte";
+  import FolderTree from "./lib/FolderTree.svelte";
+  import ImportDialog from "./lib/ImportDialog.svelte";
+  import OptionsDialog from "./lib/OptionsDialog.svelte";
+  import SearchBar from "./lib/SearchBar.svelte";
+  import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
   import Viewer from "./lib/Viewer.svelte";
-  import { setLocale, t } from "./lib/i18n.svelte.js";
-  import { findFileByPath, loadSettings, takeOpenFiles, type Settings } from "./lib/settings";
-  import { runUpdateFlow } from "./lib/updates";
-  import { applyTheme, resolveTheme, systemPrefersDark, watchSystemTheme } from "./lib/theme";
-  import { shortcuts, type ShortcutHandlers } from "./lib/shortcuts";
-  import { pickRenderer, gridState } from "./lib/grid-state.svelte.js";
-  import { debounce, type GridItem } from "./lib/grid";
-  import { listLibraryItems } from "./lib/search";
   import { deleteFromDisk, exitApp, refreshFolderThumbnails, revealInDisk } from "./lib/file-menu";
-  import { loadPhotoInfo } from "./lib/info-pane";
   import { removeFolder } from "./lib/folder-manager";
   import type { FolderInfo, MenuItem } from "./lib/folder-tree";
+  import { debounce, type GridItem } from "./lib/grid";
+  import { gridState, pickRenderer } from "./lib/grid-state.svelte.js";
+  import { setLocale, t } from "./lib/i18n.svelte.js";
+  import { loadPhotoInfo } from "./lib/info-pane";
+  import { listLibraryItems } from "./lib/search";
+  import { findFileByPath, loadSettings, takeOpenFiles, type Settings } from "./lib/settings";
+  import { shortcuts, type ShortcutHandlers } from "./lib/shortcuts";
+  import { applyTheme, resolveTheme, systemPrefersDark, watchSystemTheme } from "./lib/theme";
+  import { runUpdateFlow } from "./lib/updates";
 
   let pong = $state<string | null>(null);
   let optionsOpen = $state(false);
@@ -185,6 +185,27 @@
         const { listen } = await import("@tauri-apps/api/event");
         unlisten = await listen<string[]>("open-file", (e) => {
           void handleOpenPaths(e.payload);
+        });
+      } catch {
+        // Browser dev: no backend, no events.
+      }
+    })();
+    return () => unlisten?.();
+  });
+
+  // Cache-miss re-bust (PLAN §3 rule 3): a cold-start `thumb://` miss serves
+  // the placeholder and queues a render; when the render lands the backend
+  // emits `thumb-rendered`. Bumping the shared store's per-hash version
+  // changes the URI every consumer builds, so the WebView re-requests and
+  // the placeholder is replaced. Without this the first-ever view of a
+  // library stays gray until something else re-renders the cell.
+  $effect(() => {
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<{ hash: string; scale: number }>("thumb-rendered", (e) => {
+          gridState.bumpThumbVersion(e.payload.hash);
         });
       } catch {
         // Browser dev: no backend, no events.

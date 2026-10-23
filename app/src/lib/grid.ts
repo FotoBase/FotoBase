@@ -15,7 +15,11 @@ export const GRID_GAP = 8;
 
 /// Full columns that fit `containerWidth` px at `thumbSize` px cells with
 /// `gap` px gutters: at least one, only whole columns (no clipped cells).
-export function columnCount(containerWidth: number, thumbSize: number, gap: number = GRID_GAP): number {
+export function columnCount(
+  containerWidth: number,
+  thumbSize: number,
+  gap: number = GRID_GAP,
+): number {
   return Math.max(1, Math.floor((containerWidth + gap) / (thumbSize + gap)));
 }
 
@@ -30,9 +34,14 @@ export function isThumbHash(s: string): boolean {
 /// (PLAN §3 rule 3): the WebView fetches bytes from the disk cache through
 /// the custom scheme handler. Returns `null` for files without a hash yet —
 /// the grid shows the placeholder for those instead.
-export function thumbUri(hash: string | null): string | null {
+///
+/// `version` (from the shared grid store, bumped on each `thumb-rendered`
+/// event) appends `?v=N`: after a cache miss served the placeholder and the
+/// queued render landed, the changed URI forces the WebView to re-request
+/// — the miss placeholder would otherwise never be replaced.
+export function thumbUri(hash: string | null, version = 0): string | null {
   if (hash === null || !isThumbHash(hash)) return null;
-  return `thumb://${hash}`;
+  return version > 0 ? `thumb://${hash}?v=${version}` : `thumb://${hash}`;
 }
 
 /// HiDPI srcset (TASK-01-024): on a display with devicePixelRatio > 1 the
@@ -40,10 +49,15 @@ export function thumbUri(hash: string | null): string | null {
 /// entry) so cells up to ZOOM_MAX stay sharp on Retina/4K. `null` on 1x
 /// displays — the single `src` is already sharp there, and no second render
 /// should ever be queued for it.
-export function thumbSrcset(hash: string | null, devicePixelRatio: number): string | null {
+export function thumbSrcset(
+  hash: string | null,
+  devicePixelRatio: number,
+  version = 0,
+): string | null {
   if (hash === null || !isThumbHash(hash)) return null;
   if (devicePixelRatio <= 1) return null;
-  return `thumb://${hash}?s=2 2x`;
+  const v = version > 0 ? `?v=${version}&` : "?";
+  return `thumb://${hash}${v}s=2 2x`;
 }
 
 /// Keyboard grid navigation (TASK-01-024): the neighbor of cell `index` in
@@ -56,7 +70,13 @@ export function nextCell(
   key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
 ): number | null {
   const target =
-    key === "ArrowLeft" ? index - 1 : key === "ArrowRight" ? index + 1 : key === "ArrowUp" ? index - columns : index + columns;
+    key === "ArrowLeft"
+      ? index - 1
+      : key === "ArrowRight"
+        ? index + 1
+        : key === "ArrowUp"
+          ? index - columns
+          : index + columns;
   if (target < 0 || target >= count) return null;
   return target;
 }
@@ -68,7 +88,11 @@ export function rowItems<T>(items: T[], columns: number, row: number): T[] {
 
 /// Unique content hashes currently on screen, in row order. These feed the
 /// job queue's visible-first priority (PLAN §3 rule 4) via the backend.
-export function visibleHashes(items: GridItem[], columns: number, rowIndexes: number[]): string[] {
+export function visibleHashes(
+  items: GridItem[],
+  columns: number,
+  rowIndexes: number[],
+): string[] {
   const hashes: string[] = [];
   const seen = new Set<string>();
   for (const row of rowIndexes) {

@@ -199,11 +199,33 @@ fn prioritize_visible(hashes: Vec<String>, state: tauri::State<'_, AppState>) ->
 /// IPC. A cache miss returns the placeholder image and triggers a render job
 /// in the bounded queue; it is never an error dialog.
 const THUMB_PROTOCOL: &str = "thumb";
+
+/// `thumb-rendered` event payload: a queued render landed in the disk
+/// cache (outcome `Done(Ok)`). The frontend bumps its per-hash version
+/// and re-requests `thumb://<hash>?v=N` — without this, a cold-start grid
+/// holds the miss placeholder forever (`no-store` alone does not make an
+/// already-rendered <img> re-fetch).
+#[derive(Clone, Serialize)]
+struct ThumbRendered {
+    hash: String,
+    scale: u32,
+}
+
 fn thumb_response(reply: thumb::ThumbReply) -> tauri::http::Response<Vec<u8>> {
+    // A real (cached) JPEG is keyed by content hash: immutable, cache
+    // forever. The placeholder is NOT cacheable — it stands in for a
+    // thumbnail still being rendered, and pinning it in the WebView cache
+    // would leave a cold-start grid gray forever (miss observed on the
+    // perf decision run: `first_thumb_serve_ms` never fired).
+    let cache_control = if reply.content_type == "image/jpeg" {
+        "max-age=31536000, immutable"
+    } else {
+        "no-store"
+    };
     tauri::http::Response::builder()
         .status(reply.status)
         .header("content-type", reply.content_type)
-        .header("cache-control", "max-age=31536000, immutable") // content-hash keyed
+        .header("cache-control", cache_control)
         .header("access-control-allow-origin", "*")
         .body(reply.body)
         .expect("static thumb response parts are valid")
@@ -650,10 +672,39 @@ pub fn run() {
             // trigger of the render that will fill the cache for next time.
             if reply.content_type == "image/png" {
                 if let Some(req) = &req {
-                    let _ = with_catalog(&state, |cat| {
-                        thumb::enqueue_missing_thumbs(req, cat, &state.cache_dir, &state.thumbs);
-                        Ok(())
-                    });
+                    let handles = with_catalog(&state, |cat| {
+                        Ok::<_, fotobase_catalog::CatalogError>(thumb::enqueue_missing_thumbs(
+                            req,
+                            cat,
+                            &state.cache_dir,
+                            &state.thumbs,
+                        ))
+                    })
+                    .unwrap_or_default();
+                    if !handles.is_empty() {
+                        // When the render lands, tell the WebView: it
+                        // re-requests with a fresh `?v=N` (the placeholder
+                        // it holds is `no-store`, but the <img> src must
+                        // still change to trigger the re-request).
+                        let app = ctx.app_handle().clone();
+                        let hash = req.hash.clone();
+                        let scale = req.scale;
+                        for handle in handles {
+                            let app = app.clone();
+                            let hash = hash.clone();
+                            tauri::async_runtime::spawn(async move {
+                                if matches!(
+                                    *handle.result().await,
+                                    fotobase_jobs::Outcome::Done(Ok(_))
+                                ) {
+                                    let _ = app.emit(
+                                        "thumb-rendered",
+                                        ThumbRendered { hash, scale },
+                                    );
+                                }
+                            });
+                        }
+                    }
                 }
             }
             thumb_response(reply)
@@ -791,5 +842,24 @@ mod tests {
     #[test]
     fn crate_identity() {
         assert_eq!(super::CRATE_NAME, "fotobase");
+    }
+
+    #[test]
+    fn thumb_response_cache_control_split_hits_from_placeholders() {
+        // Content-hash-keyed JPEGs are immutable; the placeholder is NOT —
+        // pinning it in the WebView cache would leave a cold-start grid
+        // gray forever (perf decision run: first_thumb_serve never fired).
+        let hit = super::thumb_response(super::thumb::ThumbReply {
+            status: 200,
+            content_type: "image/jpeg",
+            body: vec![0xFF],
+        });
+        assert_eq!(
+            hit.headers().get("cache-control").unwrap(),
+            "max-age=31536000, immutable"
+        );
+
+        let placeholder = super::thumb_response(super::thumb::placeholder());
+        assert_eq!(placeholder.headers().get("cache-control").unwrap(), "no-store");
     }
 }

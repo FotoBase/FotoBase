@@ -53,6 +53,24 @@ describe("gridState", () => {
     resetGridState();
     expect(gridState.searchQuery).toBe("");
   });
+
+  it("bumps per-hash thumb versions monotonically and resets cleanly", () => {
+    // thumb-rendered events bump the version; the URI changes and the
+    // WebView re-requests (a cold-start placeholder gets replaced).
+    const hash = "a".repeat(32);
+    expect(gridState.thumbVersions[hash]).toBeUndefined();
+    gridState.bumpThumbVersion(hash);
+    expect(gridState.thumbVersions[hash]).toBe(1);
+    gridState.bumpThumbVersion(hash);
+    expect(gridState.thumbVersions[hash]).toBe(2);
+
+    // An empty payload hash never lands in the map.
+    gridState.bumpThumbVersion("");
+    expect("" in gridState.thumbVersions).toBe(false);
+
+    resetGridState();
+    expect(gridState.thumbVersions).toEqual({});
+  });
 });
 
 describe("pickRenderer", () => {

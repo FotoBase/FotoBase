@@ -42,6 +42,14 @@ describe("thumbUri", () => {
     expect(thumbUri("../etc/passwd")).toBeNull();
     expect(thumbUri("A".repeat(32))).toBeNull(); // uppercase is not a cache key
   });
+
+  it("appends a cache-bust ?v=N after a thumb-rendered bump", () => {
+    const hash = "a".repeat(32);
+    expect(thumbUri(hash, 1)).toBe(`thumb://${hash}?v=1`);
+    expect(thumbUri(hash, 3)).toBe(`thumb://${hash}?v=3`);
+    // Version 0 = never rendered since mount: plain URI, no query.
+    expect(thumbUri(hash, 0)).toBe(`thumb://${hash}`);
+  });
 });
 
 describe("thumbSrcset (HiDPI, TASK-01-024)", () => {
@@ -60,6 +68,11 @@ describe("thumbSrcset (HiDPI, TASK-01-024)", () => {
     expect(thumbSrcset(null, 2)).toBeNull();
     expect(thumbSrcset("short", 2)).toBeNull();
     expect(thumbSrcset("A".repeat(32), 2)).toBeNull();
+  });
+
+  it("carries the cache-bust version alongside the scale param", () => {
+    expect(thumbSrcset(hash, 2, 1)).toBe(`thumb://${hash}?v=1&s=2 2x`);
+    expect(thumbSrcset(hash, 2, 0)).toBe(`thumb://${hash}?s=2 2x`);
   });
 });
 
@@ -109,7 +122,10 @@ describe("visibleHashes", () => {
   ];
 
   it("collects the unique hashes of the visible rows, skipping unhashed files", () => {
-    expect(visibleHashes(items, 2, [0, 1])).toEqual(["a".repeat(32), "b".repeat(32)]);
+    expect(visibleHashes(items, 2, [0, 1])).toEqual([
+      "a".repeat(32),
+      "b".repeat(32),
+    ]);
   });
 
   it("returns an empty list for an empty visible range", () => {

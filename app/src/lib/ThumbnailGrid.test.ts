@@ -6,12 +6,12 @@
 // `__clientHeight`). Rows are fixed-size (no dynamic measurement), which is
 // also what keeps the grid cheap on 50k items.
 
-import { flushSync } from "svelte";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { flushSync } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ThumbnailGrid from "./ThumbnailGrid.svelte";
-import { gridState, resetGridState } from "./grid-state.svelte.js";
 import type { GridItem } from "./grid";
+import { gridState, resetGridState } from "./grid-state.svelte.js";
 
 const HASH = (n: number) => n.toString(16).padStart(32, "0");
 
@@ -67,19 +67,25 @@ describe("ThumbnailGrid", () => {
     items[0] = { ...items[0], hash: null };
     render(ThumbnailGrid, { items });
 
-    expect(document.querySelector('[data-testid="grid-placeholder"]')).not.toBeNull();
+    expect(
+      document.querySelector('[data-testid="grid-placeholder"]'),
+    ).not.toBeNull();
   });
 
   it("arrow keys move focus and selection (TASK-01-024)", () => {
     render(ThumbnailGrid, { items: makeItems(12) });
 
-    const first = document.querySelector('[data-cell-index="0"]') as HTMLElement;
+    const first = document.querySelector(
+      '[data-cell-index="0"]',
+    ) as HTMLElement;
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowDown" });
     flushSync();
 
     // 800px viewport at 160px thumbs = 4 columns; Down from 0 lands on 4.
-    const target = document.querySelector('[data-cell-index="4"]') as HTMLElement;
+    const target = document.querySelector(
+      '[data-cell-index="4"]',
+    ) as HTMLElement;
     expect(target).not.toBeNull();
     expect(document.activeElement).toBe(target);
     expect(gridState.selection.has(4)).toBe(true);
@@ -89,7 +95,9 @@ describe("ThumbnailGrid", () => {
   it("arrow navigation never leaves the grid", () => {
     render(ThumbnailGrid, { items: makeItems(6) });
 
-    const first = document.querySelector('[data-cell-index="0"]') as HTMLElement;
+    const first = document.querySelector(
+      '[data-cell-index="0"]',
+    ) as HTMLElement;
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowLeft" });
     flushSync();
@@ -101,9 +109,9 @@ describe("ThumbnailGrid", () => {
   it("zoom slider resizes thumbs live without re-fetching (srcs unchanged)", () => {
     render(ThumbnailGrid, { items: makeItems(500) });
 
-    const srcsBefore = [...document.querySelectorAll('[data-testid="grid-cell"] img')].map(
-      (img) => img.getAttribute("src"),
-    );
+    const srcsBefore = [
+      ...document.querySelectorAll('[data-testid="grid-cell"] img'),
+    ].map((img) => img.getAttribute("src"));
 
     const slider = screen.getByTestId("zoom-slider") as HTMLInputElement;
     slider.value = "320";
@@ -111,9 +119,9 @@ describe("ThumbnailGrid", () => {
     flushSync();
     flushSync();
 
-    const srcsAfter = [...document.querySelectorAll('[data-testid="grid-cell"] img')].map(
-      (img) => img.getAttribute("src"),
-    );
+    const srcsAfter = [
+      ...document.querySelectorAll('[data-testid="grid-cell"] img'),
+    ].map((img) => img.getAttribute("src"));
     // Zooming must not re-fetch: every rendered src was already rendered at
     // the old zoom level (fewer cells fit on screen at 320px, so a strict
     // subset — no new content fetched, none dropped that was still visible).
@@ -121,8 +129,26 @@ describe("ThumbnailGrid", () => {
     expect(srcsBefore).toEqual(expect.arrayContaining(srcsAfter));
 
     // The cells now size from the new zoom level.
-    const cell = document.querySelector('[data-testid="grid-cell"]') as HTMLElement;
+    const cell = document.querySelector(
+      '[data-testid="grid-cell"]',
+    ) as HTMLElement;
     expect(cell.style.getPropertyValue("--thumb-size")).toBe("320px");
+  });
+
+  it("re-requests a thumbnail after its render lands (thumb-rendered bump)", () => {
+    render(ThumbnailGrid, { items: makeItems(20) });
+
+    const img = document.querySelector(
+      '[data-testid="grid-cell"] img',
+    ) as HTMLImageElement;
+    expect(img.getAttribute("src")).toBe(`thumb://${HASH(0)}`);
+
+    // The backend emitted thumb-rendered for this hash: the store bumps,
+    // the src changes, the WebView re-requests (cold-start fix).
+    gridState.bumpThumbVersion(HASH(0));
+    flushSync();
+
+    expect(img.getAttribute("src")).toBe(`thumb://${HASH(0)}?v=1`);
   });
 
   it("reports the visible hashes, and re-reports when the scroll range moves", async () => {
@@ -155,15 +181,23 @@ describe("ThumbnailGrid", () => {
     const cell = document.querySelectorAll('[data-testid="grid-cell"]')[3];
     cell.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
     flushSync();
-    expect(onopen).toHaveBeenCalledWith({ id: 3, filename: "photo-3.jpg", hash: HASH(3) });
+    expect(onopen).toHaveBeenCalledWith({
+      id: 3,
+      filename: "photo-3.jpg",
+      hash: HASH(3),
+    });
   });
 
   it("Enter on a focused cell opens it too", () => {
     const onopen = vi.fn();
     render(ThumbnailGrid, { items: makeItems(10), onopen });
 
-    const cell = document.querySelectorAll('[data-testid="grid-cell"]')[1] as HTMLElement;
-    cell.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    const cell = document.querySelectorAll(
+      '[data-testid="grid-cell"]',
+    )[1] as HTMLElement;
+    cell.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
     flushSync();
     expect(onopen).toHaveBeenCalledOnce();
   });
@@ -174,8 +208,14 @@ describe("ThumbnailGrid", () => {
     const oncontextmenu = vi.fn();
     render(ThumbnailGrid, { items: makeItems(10), oncontextmenu });
 
-    const cell = document.querySelectorAll('[data-testid="grid-cell"]')[2] as HTMLElement;
-    const ev = new MouseEvent("contextmenu", { bubbles: true, clientX: 11, clientY: 22 });
+    const cell = document.querySelectorAll(
+      '[data-testid="grid-cell"]',
+    )[2] as HTMLElement;
+    const ev = new MouseEvent("contextmenu", {
+      bubbles: true,
+      clientX: 11,
+      clientY: 22,
+    });
     cell.dispatchEvent(ev);
     flushSync();
     expect(oncontextmenu).toHaveBeenCalledWith({
