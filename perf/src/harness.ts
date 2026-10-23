@@ -266,7 +266,7 @@ const JANK_MONITOR = `
     window.__fbJank.raf = requestAnimationFrame(loop);
   };
   window.__fbJank.raf = requestAnimationFrame(loop);
-  true;
+  return true;
 `;
 
 const JANK_READ = `
@@ -274,7 +274,7 @@ const JANK_READ = `
   if (j && j.raf) cancelAnimationFrame(j.raf);
   const gaps = j ? j.gaps : 0;
   window.__fbJank = undefined;
-  gaps;
+  return gaps;
 `;
 
 /** Scripted grid scroll: ping-pong `scrollTop` steps while counting rAF
@@ -313,11 +313,17 @@ async function waitUntil(
   everyMs = 250,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  let lastErr: unknown;
   while (Date.now() < deadline) {
-    if (await fn()) return;
+    try {
+      if (await fn()) return;
+    } catch (err) {
+      // Scripts fail transiently while the webview is still loading.
+      lastErr = err;
+    }
     await sleep(everyMs);
   }
-  throw new Error(`timeout after ${timeoutMs} ms`);
+  throw new Error(`timeout after ${timeoutMs} ms`, { cause: lastErr });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -381,7 +387,7 @@ async function runFull(args: Args): Promise<number> {
   }
   if (!fs.existsSync(args.app)) {
     console.error(
-      `--app binary not found: ${args.app} (cargo build -p fotobase first)`,
+      `--app binary not found: ${args.app} (cargo build -p fotobase --features tauri/custom-protocol first)`,
     );
     return 2;
   }

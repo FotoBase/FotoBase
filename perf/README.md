@@ -23,7 +23,8 @@ npx vitest run                        # unit tests
 
 ```
 python3 tools/fixture_gen.py --count 50000 --seed 42 --out /tmp/fixture
-cargo build -p fotobase
+(cd app && npm ci && npm run build)
+cargo build -p fotobase --features tauri/custom-protocol
 npx tsx src/harness.ts --fixture /tmp/fixture --count 50000 \
   --renderer dom --out perf/results/<os>-<date>.json
 ```

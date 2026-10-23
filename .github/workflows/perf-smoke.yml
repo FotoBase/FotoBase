@@ -39,6 +39,7 @@ jobs:
             librsvg2-dev \
             libde265-dev \
             libaom-dev \
+            webkit2gtk-driver \
             xvfb
 
       - uses: dtolnay/rust-toolchain@stable
@@ -64,8 +65,12 @@ jobs:
           pip install pillow
           python3 tools/fixture_gen.py --count 1000 --seed 42 --out /tmp/fixture
 
+      - name: Build frontend (embedded via custom-protocol)
+        working-directory: app
+        run: npm ci && npm run build
+
       - name: cargo build (debug app for the driver)
-        run: cargo build -p fotobase
+        run: cargo build -p fotobase --features tauri/custom-protocol
 
       - name: Perf smoke run (schema-valid report only, bars not enforced)
         working-directory: perf

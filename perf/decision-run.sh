@@ -34,7 +34,10 @@ echo "== fixture (00-013, seed 42, count $count) =="
 python3 tools/fixture_gen.py --count "$count" --seed 42 --out /tmp/fixture
 
 echo "== build app =="
-cargo build -p fotobase
+# custom-protocol embeds app/dist; without it the binary loads devUrl
+# (localhost:5173), which nothing serves here.
+(cd app && npm ci && npm run build)
+cargo build --release -p fotobase --features tauri/custom-protocol
 
 echo "== harness unit tests =="
 cd perf
@@ -43,12 +46,12 @@ npx vitest run
 
 echo "== protocol run 1 of 2 =="
 ts="$(date +%Y%m%d-%H%M%S)"
-xvfb-run -a npx tsx src/harness.ts \
+xvfb-run -a npx tsx src/harness.ts --app ../target/release/fotobase \
     --fixture /tmp/fixture --count "$count" --seed 42 \
     --renderer dom --out "results/run1-$ts.json"
 
 echo "== protocol run 2 of 2 (reproducibility) =="
-xvfb-run -a npx tsx src/harness.ts \
+xvfb-run -a npx tsx src/harness.ts --app ../target/release/fotobase \
     --fixture /tmp/fixture --count "$count" --seed 42 \
     --renderer dom --out "results/run2-$ts.json"
 
