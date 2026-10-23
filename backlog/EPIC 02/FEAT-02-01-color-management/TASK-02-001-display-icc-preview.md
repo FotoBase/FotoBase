@@ -1,6 +1,6 @@
 # task: color-managed preview with display ICC profile
 
-**Feature:** [FEAT-02-01-color-management](FEAT-02-01-color-management.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in progress (2026-10-23)
+**Feature:** [FEAT-02-01-color-management](FEAT-02-01-color-management.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in review (2026-10-23)
 
 ## Description
 Read the display ICC profile on macOS and Windows and run the preview render path through a color-managed transform in the `render` crate, so previews match OS viewers (PLAN §6 P1.5 acceptance). Linux falls back to sRGB. Per PLAN §2 D, previews are served via `preview://`/`thumb://` URI schemes from disk cache — the transform applies at render time.
