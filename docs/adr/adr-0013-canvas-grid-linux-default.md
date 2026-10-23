@@ -6,12 +6,12 @@
 
 Task 00-012 defined the WebKitGTK perf protocol (`docs/webkitgtk-perf-protocol.md`); task 01-004 requires it be run and the DOM-vs-canvas decision recorded with numbers (PLAN §10 risk 1, §6 P1 acceptance). Two full 50k protocol runs (seed 42, cold start, empty catalog + empty thumbnail cache, `perf/Dockerfile.decision` container) on the decision hardware:
 
-| Metric | Bar | Run 1 | Run 2 |
-|---|---|---|---|
-| `time_to_first_thumbnail_s` | < 2 s | 3.5 | 3.4 |
-| `scroll_fps_median` | ≥ 60 fps | 44.2 | 47.7 |
-| `idle_ram_mb` | < 150 MB | 151.7 | 150.6 |
-| `ui_jank_events` | 0 | 120 | 115 |
+| Metric                      | Bar      | Run 1 | Run 2 |
+| --------------------------- | -------- | ----- | ----- |
+| `time_to_first_thumbnail_s` | < 2 s    | 3.5   | 3.4   |
+| `scroll_fps_median`         | ≥ 60 fps | 44.2  | 47.7  |
+| `idle_ram_mb`               | < 150 MB | 151.7 | 150.6 |
+| `ui_jank_events`            | 0        | 120   | 115   |
 
 Runner: Fedora 44 (kernel 7.2.11), WebKitGTK 2.50.4, AMD Ryzen 7 9800X3D, 60 GB RAM. Reports: `perf/results/run1-2026-10-23.json`, `perf/results/run2-2026-10-23.json`. Protocol §4 rule 3: any bar missed → canvas grid becomes the Linux default from day one.
 
