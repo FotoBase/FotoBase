@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use fotobase_catalog::{Catalog, Result};
 
 mod watcher;
-pub use watcher::{Watcher, WatcherError, DEFAULT_DEBOUNCE};
+pub use watcher::{ScanHook, Watcher, WatcherError, DEFAULT_DEBOUNCE};
 
 pub mod import;
 pub use import::{
@@ -37,6 +37,15 @@ pub struct ScanReport {
     pub removed: usize,
     /// True if the cancel flag stopped the walk early.
     pub cancelled: bool,
+}
+
+impl ScanReport {
+    /// Did this scan change the catalog at all? No-op scans (everything
+    /// matched by mtime+size) must not wake the UI — the `library-changed`
+    /// event only fires for real changes.
+    pub fn changed(&self) -> bool {
+        self.added + self.updated + self.removed > 0
+    }
 }
 
 /// Walk position reported through the [`scan_folder_with`] progress

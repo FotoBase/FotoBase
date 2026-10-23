@@ -43,6 +43,9 @@ static IMPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::
 /// Lazily-opened catalog shared by IPC commands (TASK-01-008). The catalog is
 /// a rebuildable cache (PLAN §5); nothing here writes user data.
 struct AppState {
+    /// App handle for event emission from non-command contexts (the
+    /// watcher's scan-completion hook lives on its own thread).
+    app_handle: tauri::AppHandle,
     /// App data dir: settings.json lives here.
     data_dir: PathBuf,
     catalog_path: PathBuf,
@@ -114,9 +117,20 @@ fn with_folder_manager<T>(
     let mut guard =
         state.folders.lock().map_err(|e| format!("folder manager mutex poisoned: {e}"))?;
     if guard.is_none() {
-        let fm = folder_manager::FolderManager::open(
+        let app_handle = state.app_handle.clone();
+        // Watcher-driven scans announce catalog changes on `library-changed`
+        // (PLAN §2A): the frontend re-lists, so a cold-start scan — or files
+        // dropped into a watched folder while the app runs — shows up in
+        // the grid without any user action. Without this, a scan that lands
+        // after startup never reaches the UI (perf decision run: the grid
+        // scrolled EMPTY, so no thumb:// request ever happened).
+        let hook = std::sync::Arc::new(move |_report: &fotobase_scanner::ScanReport| {
+            let _ = app_handle.emit("library-changed", ());
+        });
+        let fm = folder_manager::FolderManager::open_with(
             &state.catalog_path,
             fotobase_scanner::DEFAULT_DEBOUNCE,
+            Some(hook),
         )?;
         *guard = Some(fm);
     }
@@ -742,6 +756,7 @@ pub fn run() {
             let pending_open: Vec<String> =
                 associations::collect_open_paths(&std::env::args().skip(1).collect::<Vec<_>>());
             app.manage(AppState {
+                app_handle: app.handle().clone(),
                 data_dir: data_dir.clone(),
                 catalog_path: data_dir.join("catalog.db"),
                 catalog: Mutex::new(None),

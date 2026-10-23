@@ -11,13 +11,51 @@ use std::time::{Duration, Instant};
 
 use fotobase_catalog::{Catalog, ScanMode};
 use fotobase_lib::folder_manager::FolderManager;
-use fotobase_scanner::scan_folder;
+use fotobase_scanner::{scan_folder, ScanReport};
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 // Same reasoning as crates/scanner/tests/watcher.rs: debounce windows must
 // dwarf CI scheduling stalls.
 const DEBOUNCE: Duration = Duration::from_millis(300);
 const SETTLE: Duration = Duration::from_millis(1200);
+
+/// `library-changed` contract: the hook fires for scans that changed the
+/// catalog, and ONLY for those — a no-op rescan (everything matched by
+/// mtime+size) must not wake the UI.
+#[test]
+fn scan_hook_fires_for_changed_scans_only() {
+    let lib = tempfile::tempdir().unwrap();
+    let db = tempfile::tempdir().unwrap();
+    write_jpg(&lib.path().join("a.jpg"), 10);
+    let catalog_path = db.path().join("catalog.db");
+    {
+        let mut cat = Catalog::open(&catalog_path).unwrap();
+        scan_folder(&mut cat, lib.path(), &AtomicBool::new(false)).unwrap();
+    }
+    let fired: Arc<Mutex<Vec<ScanReport>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink = fired.clone();
+    let fm = FolderManager::open_with(
+        &catalog_path,
+        DEBOUNCE,
+        Some(Arc::new(move |r: &ScanReport| sink.lock().unwrap().push(r.clone()))),
+    )
+    .unwrap();
+
+    // Changed scan: a new file, brought in by scan_now (Scan Once path).
+    write_jpg(&lib.path().join("new.jpg"), 30);
+    fm.scan_now(&normalize(lib.path())).expect("scan now");
+    {
+        let calls = fired.lock().unwrap();
+        assert_eq!(calls.len(), 1, "exactly one hook call for the changed scan");
+        assert_eq!(calls[0].added, 1);
+    }
+
+    // No-op scan: nothing changed since — the hook must stay silent.
+    fm.scan_now(&normalize(lib.path())).expect("idle scan");
+    assert_eq!(fired.lock().unwrap().len(), 1, "no-op scan must not fire the hook");
+    fm.stop();
+}
 
 fn write_jpg(path: &Path, len: usize) {
     fs::write(path, vec![0xff; len]).unwrap();

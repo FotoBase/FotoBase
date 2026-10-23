@@ -214,6 +214,27 @@
     return () => unlisten?.();
   });
 
+  // Watched-folder scans can land after the startup load (cold start: the
+  // first scan of a 50k folder takes seconds; live: files dropped into a
+  // watched folder while the app runs). The backend announces every
+  // catalog-changing scan on `library-changed`; re-list (debounced — a
+  // scan burst must not re-list per event).
+  const refreshLibraryDebounced = debounce(() => void refreshLibrary(), 250);
+  $effect(() => {
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen("library-changed", () => {
+          refreshLibraryDebounced();
+        });
+      } catch {
+        // Browser dev: no backend, no events.
+      }
+    })();
+    return () => unlisten?.();
+  });
+
   // Library filtering (TASK-01-015 folders, TASK-01-018 live search): the
   // selected folder ids and the shared store's searchQuery combine — the
   // backend narrows in SQL (folder `IN` + FTS MATCH), so a 50k library

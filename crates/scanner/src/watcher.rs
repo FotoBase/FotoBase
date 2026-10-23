@@ -32,9 +32,17 @@ use fotobase_catalog::Catalog;
 use notify::Watcher as NotifyWatcher;
 
 use crate::scan_folder;
+use crate::ScanReport;
 
 /// Default debounce window ("hundreds of ms" per the task spec).
 pub const DEFAULT_DEBOUNCE: Duration = Duration::from_millis(300);
+
+/// Hook called (from the scan worker thread) after every watcher-driven
+/// scan that changed the catalog. The app shell uses it to emit
+/// `library-changed` so the UI re-lists without polling — a cold-start
+/// scan (perf harness, or the first launch after adding a watched folder)
+/// otherwise lands in a catalog the grid never re-reads.
+pub type ScanHook = Arc<dyn Fn(&ScanReport) + Send + Sync>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum WatcherError {
@@ -103,6 +111,18 @@ impl Watcher {
         roots: &[PathBuf],
         catalog: Arc<Mutex<Catalog>>,
         debounce: Duration,
+    ) -> Result<Self, WatcherError> {
+        Self::spawn_with(roots, catalog, debounce, None)
+    }
+
+    /// [`spawn`] with a [`ScanHook`]: called after every watcher-driven scan
+    /// that changed the catalog (added/updated/removed), from the scan
+    /// worker thread. Emits must be thread-safe (Tauri's `AppHandle` is).
+    pub fn spawn_with(
+        roots: &[PathBuf],
+        catalog: Arc<Mutex<Catalog>>,
+        debounce: Duration,
+        on_change: Option<ScanHook>,
     ) -> Result<Self, WatcherError> {
         let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
         let (work_tx, work_rx) = mpsc::channel::<PathBuf>();
@@ -234,6 +254,7 @@ impl Watcher {
         {
             let cancel = cancel.clone();
             let scan_count = scan_count.clone();
+            let on_change = on_change;
             threads.push(thread::Builder::new().name("fb-scan".into()).spawn(move || {
                 while let Ok(first) = work_rx.recv() {
                     if cancel.load(Ordering::Relaxed) {
@@ -254,8 +275,17 @@ impl Watcher {
                         };
                         scan_count.fetch_add(1, Ordering::Relaxed);
                         match report {
-                            Ok(r) => tracing::debug!(root = %root.display(), added = r.added,
-                                updated = r.updated, removed = r.removed, "watched rescan"),
+                            Ok(r) => {
+                                tracing::debug!(root = %root.display(), added = r.added,
+                                    updated = r.updated, removed = r.removed, "watched rescan");
+                                // Real change: wake the UI (and only then —
+                                // no-op rescans must not trigger re-lists).
+                                if r.changed() {
+                                    if let Some(hook) = &on_change {
+                                        hook(&r);
+                                    }
+                                }
+                            }
                             Err(e) => tracing::warn!(root = %root.display(), error = %e,
                                 "watched rescan failed"),
                         }
