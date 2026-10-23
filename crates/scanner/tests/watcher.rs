@@ -183,8 +183,7 @@ fn scan_hook_fires_with_the_report_of_a_changed_scan() {
     scan_folder(&mut cat, lib.path(), &AtomicBool::new(false)).unwrap();
     let catalog = Arc::new(Mutex::new(cat));
 
-    let fired: Arc<Mutex<Vec<fotobase_scanner::ScanReport>>> =
-        Arc::new(Mutex::new(Vec::new()));
+    let fired: Arc<Mutex<Vec<fotobase_scanner::ScanReport>>> = Arc::new(Mutex::new(Vec::new()));
     let sink = fired.clone();
     let handle = Watcher::spawn_with(
         &[lib.path().to_path_buf()],

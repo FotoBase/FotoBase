@@ -108,6 +108,7 @@ pub fn job_key(req: &ThumbRequest) -> String {
 ///   `thumb-rendered` event; the value is ignored (the cache key is the
 ///   content hash), but the parameter must be admitted or a re-request
 ///   would be rejected and serve the placeholder again.
+///
 /// Anything else is rejected — the UI gets the placeholder, never
 /// mis-scaled pixels.
 pub fn request_from_uri(uri: &Uri) -> Option<ThumbRequest> {

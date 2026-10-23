@@ -40,6 +40,12 @@ const IMPORT_QUEUE_CAPACITY: usize = 2;
 /// Sequence number for unique import job keys.
 static IMPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Dedup guard for the lazy hash backfill: at most one backfill thread at a
+/// time. A scan that lands while one is running is covered — the running
+/// loop keeps scanning for unhashed rows until a pass makes no progress.
+static HASH_BACKFILL_RUNNING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// Lazily-opened catalog shared by IPC commands (TASK-01-008). The catalog is
 /// a rebuildable cache (PLAN §5); nothing here writes user data.
 struct AppState {
@@ -124,8 +130,10 @@ fn with_folder_manager<T>(
         // the grid without any user action. Without this, a scan that lands
         // after startup never reaches the UI (perf decision run: the grid
         // scrolled EMPTY, so no thumb:// request ever happened).
+        let catalog_path = state.catalog_path.clone();
         let hook = std::sync::Arc::new(move |_report: &fotobase_scanner::ScanReport| {
             let _ = app_handle.emit("library-changed", ());
+            spawn_hash_backfill(catalog_path.clone(), app_handle.clone());
         });
         let fm = folder_manager::FolderManager::open_with(
             &state.catalog_path,
@@ -135,6 +143,50 @@ fn with_folder_manager<T>(
         *guard = Some(fm);
     }
     f(guard.as_ref().expect("folder manager just inserted"))
+}
+
+/// Lazy content-hash backfill driver (PLAN §10 "hash lazily"; perf decision
+/// run: the grid listed NULL-hash rows, so no `thumb://` URI was ever built
+/// and `first_thumb_serve_ms` never fired). Spawned after every scan that
+/// changed the catalog — and after a rebuild — it hashes unhashed rows in
+/// bounded batches on its own WAL connection (never the shared one, never
+/// under a lock), re-announcing `library-changed` per batch so the grid
+/// picks up hashes progressively: path order matches grid order, so the
+/// visible top of the library fills first. At most one runs at a time; a
+/// scan landing mid-run is covered because the loop keeps going until a
+/// pass makes no progress, plus one settle pass for rows that landed
+/// between the final check and the flag reset.
+fn spawn_hash_backfill(catalog_path: PathBuf, app: tauri::AppHandle) {
+    use std::sync::atomic::Ordering;
+    if HASH_BACKFILL_RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let Ok(mut cat) = Catalog::open(&catalog_path) else {
+            HASH_BACKFILL_RUNNING.store(false, Ordering::SeqCst);
+            return;
+        };
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        loop {
+            match fotobase_scanner::backfill_hashes(&mut cat, 64, &cancel) {
+                // Error: the catalog connection is broken; a later scan
+                // re-arms the backfill. Zero: done — one settle pass after
+                // a pause catches rows that landed right behind the check.
+                Ok(0) => {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    if matches!(fotobase_scanner::backfill_hashes(&mut cat, 64, &cancel), Ok(0)) {
+                        break;
+                    }
+                }
+                Ok(_) => {
+                    // Best-effort: a slow UI must never stall the backfill.
+                    let _ = app.emit("library-changed", ());
+                }
+                Err(_) => break,
+            }
+        }
+        HASH_BACKFILL_RUNNING.store(false, Ordering::SeqCst);
+    });
 }
 
 /// Live FTS search (TASK-01-008/01-018, PLAN §5): returns matching grid
@@ -231,11 +283,8 @@ fn thumb_response(reply: thumb::ThumbReply) -> tauri::http::Response<Vec<u8>> {
     // thumbnail still being rendered, and pinning it in the WebView cache
     // would leave a cold-start grid gray forever (miss observed on the
     // perf decision run: `first_thumb_serve_ms` never fired).
-    let cache_control = if reply.content_type == "image/jpeg" {
-        "max-age=31536000, immutable"
-    } else {
-        "no-store"
-    };
+    let cache_control =
+        if reply.content_type == "image/jpeg" { "max-age=31536000, immutable" } else { "no-store" };
     tauri::http::Response::builder()
         .status(reply.status)
         .header("content-type", reply.content_type)
@@ -711,10 +760,8 @@ pub fn run() {
                                     *handle.result().await,
                                     fotobase_jobs::Outcome::Done(Ok(_))
                                 ) {
-                                    let _ = app.emit(
-                                        "thumb-rendered",
-                                        ThumbRendered { hash, scale },
-                                    );
+                                    let _ =
+                                        app.emit("thumb-rendered", ThumbRendered { hash, scale });
                                 }
                             });
                         }
@@ -869,10 +916,7 @@ mod tests {
             content_type: "image/jpeg",
             body: vec![0xFF],
         });
-        assert_eq!(
-            hit.headers().get("cache-control").unwrap(),
-            "max-age=31536000, immutable"
-        );
+        assert_eq!(hit.headers().get("cache-control").unwrap(), "max-age=31536000, immutable");
 
         let placeholder = super::thumb_response(super::thumb::placeholder());
         assert_eq!(placeholder.headers().get("cache-control").unwrap(), "no-store");
