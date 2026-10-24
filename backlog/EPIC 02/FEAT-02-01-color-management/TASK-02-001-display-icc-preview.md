@@ -1,6 +1,6 @@
 # task: color-managed preview with display ICC profile
 
-**Feature:** [FEAT-02-01-color-management](FEAT-02-01-color-management.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** todo
+**Feature:** [FEAT-02-01-color-management](FEAT-02-01-color-management.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in review (2026-10-23)
 
 ## Description
 Read the display ICC profile on macOS and Windows and run the preview render path through a color-managed transform in the `render` crate, so previews match OS viewers (PLAN §6 P1.5 acceptance). Linux falls back to sRGB. Per PLAN §2 D, previews are served via `preview://`/`thumb://` URI schemes from disk cache — the transform applies at render time.
@@ -23,7 +23,7 @@ Read the display ICC profile on macOS and Windows and run the preview render pat
 - E2e/manual: visual comparison vs OS viewers on macOS and Windows wide-gamut hardware (documented protocol, screenshots in PR).
 
 ## Acceptance criteria
-- [ ] 02-001: previews match the OS viewer on macOS and Windows wide-gamut displays.
-- [ ] 02-001: display-profile changes are picked up without restart.
-- [ ] 02-001: Linux uses sRGB fallback with no artifacts.
-- [ ] 02-001: transform runs in the `render` crate via lcms2; cached previews are profile-aware.
+- [x] 02-001: previews match the OS viewer on macOS and Windows wide-gamut displays.
+- [x] 02-001: display-profile changes are picked up without restart.
+- [x] 02-001: Linux uses sRGB fallback with no artifacts.
+- [x] 02-001: transform runs in the `render` crate via lcms2; cached previews are profile-aware.

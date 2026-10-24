@@ -162,6 +162,7 @@ pub fn enqueue_missing_thumbs(
     catalog: &Catalog,
     cache_dir: &Path,
     queue: &Queue<ThumbOutcome>,
+    display_profile: Option<Vec<u8>>,
 ) -> Vec<JobHandle<ThumbOutcome>> {
     if !is_cache_key(&req.hash) {
         return Vec::new();
@@ -171,6 +172,10 @@ pub fn enqueue_missing_thumbs(
         // device pixel ratio of 2 (Retina / 150%-scaled 4K).
         max_edge: if req.scale == 2 { 1024 } else { 512 },
         cache_tag: (req.scale == 2).then_some("@2x".to_string()),
+        // TASK-02-001: render into the current display profile; the render
+        // crate appends the profile fingerprint to the cache file name, so a
+        // profile switch re-renders instead of reusing mismatched pixels.
+        display_profile,
         ..Default::default()
     };
     let key = job_key(req);

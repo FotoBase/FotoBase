@@ -46,6 +46,19 @@ class GridState {
       [hash]: (this.thumbVersions[hash] ?? 0) + 1,
     };
   }
+
+  /// Display profile changed (TASK-02-001): the backend now renders into the
+  /// new profile's cache entries, so every hash already on screen must
+  /// re-request with a bumped version — otherwise stale pixels for the old
+  /// profile would stay until reload. Hashes that never rendered keep no
+  /// entry and simply trigger the (new-profile) render on first request.
+  bumpAllThumbVersions(): void {
+    const next: Record<string, number> = {};
+    for (const [hash, v] of Object.entries(this.thumbVersions)) {
+      next[hash] = v + 1;
+    }
+    this.thumbVersions = next;
+  }
 }
 
 export const gridState = new GridState();

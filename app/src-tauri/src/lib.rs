@@ -13,6 +13,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 pub mod associations;
+pub mod display_profile;
 pub mod emit_pacer;
 pub mod file_menu;
 pub mod folder_manager;
@@ -82,6 +83,19 @@ struct AppState {
     /// Files the OS opened with Fotobase at launch (TASK-01-025), drained
     /// once by the frontend's `take_open_files` and routed into the viewer.
     pending_open: Mutex<Vec<String>>,
+    /// Current display ICC profile the render pipeline transforms into
+    /// (TASK-02-001): the OS profile on macOS/Windows, the bundled sRGB
+    /// profile on Linux. Swapped in place by the profile watcher; the render
+    /// jobs read it per enqueue so a switch re-renders into new cache entries.
+    display_profile: Mutex<Option<Vec<u8>>>,
+}
+
+/// Destination profile for the render pipeline (TASK-02-001, PLAN §6 P1.5):
+/// the OS display profile on macOS/Windows, the bundled sRGB profile on
+/// Linux or wherever no usable display profile exists.
+fn initial_display_profile() -> Option<Vec<u8>> {
+    display_profile::current_display_profile()
+        .or_else(|| fotobase_render::color::srgb_profile_bytes().ok())
 }
 
 /// Lock-and-open the shared catalog; commands and the scheme handler share
@@ -757,6 +771,7 @@ pub fn run() {
                             cat,
                             &state.cache_dir,
                             &state.thumbs,
+                            state.display_profile.lock().ok().and_then(|g| g.clone()),
                         ))
                     })
                     .unwrap_or_default();
@@ -832,6 +847,36 @@ pub fn run() {
                 pending_update: Mutex::new(None),
                 folders: Mutex::new(None),
                 pending_open: Mutex::new(pending_open),
+                display_profile: Mutex::new(initial_display_profile()),
+            });
+            // Display-profile watcher (TASK-02-001): re-read the profile
+            // every [`display_profile::POLL_INTERVAL`]; on a fingerprint
+            // change swap it into the shared state and tell the WebView, so
+            // the grid re-requests every thumbnail and lands in the new
+            // profile-tagged cache entries — no app restart needed.
+            let watcher_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut last = fotobase_render::color::profile_fingerprint(
+                    initial_display_profile().as_deref().unwrap_or_default(),
+                );
+                loop {
+                    tokio::time::sleep(display_profile::POLL_INTERVAL).await;
+                    let profile = initial_display_profile();
+                    let fp = fotobase_render::color::profile_fingerprint(
+                        profile.as_deref().unwrap_or_default(),
+                    );
+                    if fp == last {
+                        continue;
+                    }
+                    if let Some(state) = watcher_app.try_state::<AppState>() {
+                        if let Ok(mut guard) = state.display_profile.lock() {
+                            *guard = profile;
+                        }
+                        tracing::info!("display profile changed to {fp}; re-rendering previews");
+                        let _ = watcher_app.emit("display-profile-changed", fp.clone());
+                    }
+                    last = fp;
+                }
             });
             // Perf-harness hook (TASK-01-026, protocol §1): inert unless the
             // harness armed the app through the environment. Cold start with

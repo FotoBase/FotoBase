@@ -13,3 +13,4 @@ node_modules/
 app/dist/
 
 /vscode/tasks.json
+/perf/results

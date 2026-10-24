@@ -1,27 +1,27 @@
 # Fotobase — Product & Technical Plan
 
-A local-first, open-source, cross-platform photo organizer inspired by Google Picasa (2002–2016), rebuilt with a modern, low-resource stack. Working name: **Fotobase** (photo + database — the catalog *is* the product). Chosen 2026-10-20 after a name-collision sweep of ~20 candidates (see §11, question 3, for the decision record).
+A local-first, open-source, cross-platform photo organizer inspired by Google Picasa (2002–2016), rebuilt with a modern, low-resource stack. Working name: **Fotobase** (photo + database — the catalog _is_ the product). Chosen 2026-10-20 after a name-collision sweep of ~20 candidates (see §11, question 3, for the decision record).
 
 ## 1. Goals & constraints
 
-| Goal              | Detail                                                                                |
-| ----------------- | ------------------------------------------------------------------------------------- |
+| Goal              | Detail                                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
 | Native on desktop | Windows 10 22H2+, macOS 12+ (Apple Silicon + Intel), Ubuntu 22.04+ (x64, arm64) — decided 2026-10-20, see §11 Q4 |
-| Mobile            | iOS / Android are a plus, not required for v1                                         |
-| Low resources     | Target < 150 MB RAM idle with a 50k-photo library, < 20 MB installer, instant startup |
-| Local-first       | Works fully offline; no account required; cloud is opt-in via export plugins          |
-| Non-destructive   | Originals are never modified unless the user explicitly chooses "Save"                |
-| Interoperable     | Metadata in standard XMP sidecars readable by darktable, digiKam, Lightroom           |
-| Private AI        | Face recognition and smart search run on-device, models are opt-in downloads          |
-| Open source       | GPL-3.0 (required by exiv2 dependency)                                                |
+| Mobile            | iOS / Android are a plus, not required for v1                                                                    |
+| Low resources     | Target < 150 MB RAM idle with a 50k-photo library, < 20 MB installer, instant startup                            |
+| Local-first       | Works fully offline; no account required; cloud is opt-in via export plugins                                     |
+| Non-destructive   | Originals are never modified unless the user explicitly chooses "Save"                                           |
+| Interoperable     | Metadata in standard XMP sidecars readable by darktable, digiKam, Lightroom                                      |
+| Private AI        | Face recognition and smart search run on-device, models are opt-in downloads                                     |
+| Open source       | GPL-3.0 (required by exiv2 dependency)                                                                           |
 
 ### Target user & positioning (2026-10-20 review)
 
-- **Primary:** the photo *enthusiast* who left (or never joined) the cloud — shoots RAW, wants XMP interop with darktable/digiKam, values offline and privacy, and often runs older hardware.
+- **Primary:** the photo _enthusiast_ who left (or never joined) the cloud — shoots RAW, wants XMP interop with darktable/digiKam, values offline and privacy, and often runs older hardware.
 - **Secondary:** the casual family user who wants "Picasa again" — simple, fast, no account. The enthusiast-first stack must not price these users out: defaults stay simple, pro features stay opt-in.
-- **One-sentence answer to "why not Immich?":** *Fotobase is a desktop app, not a server — it runs fully offline on a 10-year-old laptop under 150 MB of RAM, with zero setup, while Immich needs a Docker host and multiple GB.* Lean into "runs on old hardware" as the anti-bloat differentiator.
+- **One-sentence answer to "why not Immich?":** _Fotobase is a desktop app, not a server — it runs fully offline on a 10-year-old laptop under 150 MB of RAM, with zero setup, while Immich needs a Docker host and multiple GB._ Lean into "runs on old hardware" as the anti-bloat differentiator.
 - **Onboarding hook:** the Picasa diaspora — "your old library, restored" (Picasa.ini ingest, P2a) is the marketing headline for first adoption.
-- **Adjacent market:** a lightweight desktop *client* for existing Immich servers (see P4 export plugins) — potentially bigger than the standalone audience.
+- **Adjacent market:** a lightweight desktop _client_ for existing Immich servers (see P4 export plugins) — potentially bigger than the standalone audience.
 
 ### Decisions taken
 
@@ -93,7 +93,7 @@ Legend for **Phase**: P1–P5 = core roadmap, F1–F4 = future features (see §7
 
 Video support is spread across phases, so the strategy is pinned here (2026-10-20):
 
-- **Decode/playback:** HTML5 `<video>` in the WebView *when the OS WebView actually has the codec* — but WebKitGTK on Fedora/Debian frequently ships **without H.264/HEVC**, so HTML5-first is not enough. Playback flow: probe codec support at startup → if a clip's codec is unsupported, fall back to on-the-fly ffmpeg transcode (to a supported intermediate, e.g. H.264/mp4 or VP9/webm) streamed to the player via a custom `stream://` URI scheme. HTML5 stays the primary path; transcode is the compatibility floor.
+- **Decode/playback:** HTML5 `<video>` in the WebView _when the OS WebView actually has the codec_ — but WebKitGTK on Fedora/Debian frequently ships **without H.264/HEVC**, so HTML5-first is not enough. Playback flow: probe codec support at startup → if a clip's codec is unsupported, fall back to on-the-fly ffmpeg transcode (to a supported intermediate, e.g. H.264/mp4 or VP9/webm) streamed to the player via a custom `stream://` URI scheme. HTML5 stays the primary path; transcode is the compatibility floor.
 - **Thumbnails:** ffmpeg-extracted frames cached in the same thumbnail store as images; same `thumb://` scheme, same job queue, lower priority than visible images.
 - **Metadata (duration, codec, rotation):** extracted at scan time via ffprobe, stored in the catalog `metadata` table.
 - **Licensing:** ship an LGPL ffmpeg build without non-free codecs; use OS decoders first (see §10 risk row).
@@ -139,11 +139,11 @@ Video support is spread across phases, so the strategy is pinned here (2026-10-2
 
 ### F. Non-destructive storage
 
-| Behaviour            | Picasa                                        | Fotobase                                                         |
-| -------------------- | --------------------------------------------- | ---------------------------------------------------------------- |
-| Edit storage         | Recipe in hidden `picasa.ini` per folder      | Recipe in XMP sidecar (custom namespace)                         |
-| Stars, albums, faces | `picasa.ini`                                  | XMP (rating, `dc:subject`, MWG face regions) + catalog           |
-| Rendering            | Applied on the fly in Picasa only             | Same; other apps see original until export/save                  |
+| Behaviour            | Picasa                                        | Fotobase                                                                                                                                                                                                                                                                                              |
+| -------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Edit storage         | Recipe in hidden `picasa.ini` per folder      | Recipe in XMP sidecar (custom namespace)                                                                                                                                                                                                                                                              |
+| Stars, albums, faces | `picasa.ini`                                  | XMP (rating, `dc:subject`, MWG face regions) + catalog                                                                                                                                                                                                                                                |
+| Rendering            | Applied on the fly in Picasa only             | Same; other apps see original until export/save                                                                                                                                                                                                                                                       |
 | Save                 | Overwrites file, backup in `.picasaoriginals` | **Spec (2026-10-20):** "Save" writes the edited pixels to the original file path; the untouched original is moved to a sibling `.originals/` folder; the saved file is recorded as a stacked version. "Save as…" / "Save a copy" never touch the original. Revert always restores from `.originals/`. |
 
 ### G. People (face recognition)
@@ -291,25 +291,25 @@ Complete inventory of every command discovered by walking through the Picasa 3.9
 
 ### 2026 additions (not in Picasa)
 
-| Feature                     | What it does                                                               | Phase                    |
-| --------------------------- | -------------------------------------------------------------------------- | ------------------------ |
-| Semantic search             | CLIP/SigLIP embeddings: "dog on the beach at sunset".                      | P3                       |
-| HEIC / AVIF / JXL           | Modern phone and web formats.                                              | P1 (HEIC/AVIF), P2 (JXL) |
-| Live/motion photos          | Play Apple Live Photos / Android Motion Photos.                            | P4                       |
-| Near-duplicate detection    | Perceptual-hash duplicate finder across the catalog.                       | P2                       |
-| Burst grouping + AI culling | Group bursts, rank by sharpness/quality, pick best.                        | P3                       |
-| Auto-tagging                | Content keywords from the same embeddings as semantic search.              | P3                       |
-| Auto-rotate / level horizon | AI-estimated rotation applied as a recipe op.                              | P3                       |
-| Memories ("On this day")    | Resurface photos taken on this date in past years.                         | P3                       |
-| Advanced search syntax      | Filter grammar: `person:anna camera:X100V before:2023`.                    | P3                       |
-| Date/time adjustment        | Shift capture time, fix timezones, merge multi-camera sets.                | P2                       |
-| Stacking                    | RAW+JPEG pairs, burst stacks, edited versions under one thumbnail.         | P2                       |
-| Metadata editing            | Edit capture time, GPS, artist, copyright in the info pane.                | P2                       |
-| Catalog trash / undo window | Soft-delete for remove-from-album, hide, unlink actions.                   | P2                       |
+| Feature                     | What it does                                                               | Phase                     |
+| --------------------------- | -------------------------------------------------------------------------- | ------------------------- |
+| Semantic search             | CLIP/SigLIP embeddings: "dog on the beach at sunset".                      | P3                        |
+| HEIC / AVIF / JXL           | Modern phone and web formats.                                              | P1 (HEIC/AVIF), P2 (JXL)  |
+| Live/motion photos          | Play Apple Live Photos / Android Motion Photos.                            | P4                        |
+| Near-duplicate detection    | Perceptual-hash duplicate finder across the catalog.                       | P2                        |
+| Burst grouping + AI culling | Group bursts, rank by sharpness/quality, pick best.                        | P3                        |
+| Auto-tagging                | Content keywords from the same embeddings as semantic search.              | P3                        |
+| Auto-rotate / level horizon | AI-estimated rotation applied as a recipe op.                              | P3                        |
+| Memories ("On this day")    | Resurface photos taken on this date in past years.                         | P3                        |
+| Advanced search syntax      | Filter grammar: `person:anna camera:X100V before:2023`.                    | P3                        |
+| Date/time adjustment        | Shift capture time, fix timezones, merge multi-camera sets.                | P2                        |
+| Stacking                    | RAW+JPEG pairs, burst stacks, edited versions under one thumbnail.         | P2                        |
+| Metadata editing            | Edit capture time, GPS, artist, copyright in the info pane.                | P2                        |
+| Catalog trash / undo window | Soft-delete for remove-from-album, hide, unlink actions.                   | P2                        |
 | Color management            | Honor display ICC profiles; tagged exports.                                | P1.5 (display), P4 (full) |
-| Picasa.ini ingest           | Read legacy stars/albums/faces from `picasa.ini` on first scan.            | P2                   |
-| NAS & multi-catalog         | Network drives as first-class watched folders; optional multiple catalogs. | P1.5 (NAS), P2 (multi) |
-| Dark mode / HiDPI           | Native theming, sharp on 4K/Retina.                                        | P1                       |
+| Picasa.ini ingest           | Read legacy stars/albums/faces from `picasa.ini` on first scan.            | P2                        |
+| NAS & multi-catalog         | Network drives as first-class watched folders; optional multiple catalogs. | P1.5 (NAS), P2 (multi)    |
+| Dark mode / HiDPI           | Native theming, sharp on 4K/Retina.                                        | P1                        |
 
 > Review 2026-10-20: cut Collage / Movie Maker / Face Movie / Poster / screensaver / Gift CD (§I) and the novelty effects (§E); moved semantic search and duplicates earlier; added the missing-feature rows above (auto-tagging, culling, stacking, color management, …).
 
@@ -401,28 +401,28 @@ WebView per OS: WebView2 (Windows, preinstalled on 10/11), WKWebView (macOS), We
 
 ### Rust core
 
-| Concern             | Crate / library                                | Notes                                                       |
-| ------------------- | ---------------------------------------------- | ----------------------------------------------------------- |
-| Catalog DB          | `rusqlite` (bundled SQLite) + FTS5             | Live search                                                 |
-| Vector search       | `sqlite-vec`                                   | Face + CLIP embeddings                                      |
-| File watching       | `notify`                                       | Local "Scan Always"; **network paths (SMB/NFS) get a polling watcher** (adaptive interval, mtime+size) — inotify/FSEvents never fire over network filesystems |
-| Fast decode         | `zune-jpeg`, `image`                           | Hot path JPEG/PNG                                           |
-| Thumbnails / resize | `libvips` (own bindings) + `fast_image_resize` | Best-in-class thumb perf (same engine class as Immich); upstream Rust bindings are immature, so we write and maintain our own thin bindings (difficulty accepted 2026-10-20) |
-| RAW                 | LibRaw (bindings)                              | Broad camera coverage                                       |
-| HEIC / AVIF         | `libheif-rs`                                   | Phone photos                                                |
-| JPEG XL             | `jxl-oxide`                                    | Pure Rust decoder                                           |
+| Concern             | Crate / library                                | Notes                                                                                                                                                                                  |
+| ------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Catalog DB          | `rusqlite` (bundled SQLite) + FTS5             | Live search                                                                                                                                                                            |
+| Vector search       | `sqlite-vec`                                   | Face + CLIP embeddings                                                                                                                                                                 |
+| File watching       | `notify`                                       | Local "Scan Always"; **network paths (SMB/NFS) get a polling watcher** (adaptive interval, mtime+size) — inotify/FSEvents never fire over network filesystems                          |
+| Fast decode         | `zune-jpeg`, `image`                           | Hot path JPEG/PNG                                                                                                                                                                      |
+| Thumbnails / resize | `libvips` (own bindings) + `fast_image_resize` | Best-in-class thumb perf (same engine class as Immich); upstream Rust bindings are immature, so we write and maintain our own thin bindings (difficulty accepted 2026-10-20)           |
+| RAW                 | LibRaw (bindings)                              | Broad camera coverage                                                                                                                                                                  |
+| HEIC / AVIF         | `libheif-rs`                                   | Phone photos                                                                                                                                                                           |
+| JPEG XL             | `jxl-oxide`                                    | Pure Rust decoder                                                                                                                                                                      |
 | Metadata            | exiv2 (own bindings, rexiv2 fork)              | EXIF/IPTC/XMP read + write, MWG regions; exiv2 is the only full XMP writer so we keep it, but own the bindings — rexiv2 upstream is thinly maintained (difficulty accepted 2026-10-20) |
-| Video               | ffmpeg (sidecar binary or `ffmpeg-next`)       | Thumbs, playback transcode, trim                            |
-| AI runtime          | `ort` (ONNX Runtime)                           | CPU by default; CoreML / DirectML / CUDA providers optional |
-| Face detection      | **YuNet (ONNX, MIT)**                          | Pinned 2026-10-20 — small, fast, permissively licensed        |
-| Face embedding      | **MobileFaceNet-class, Apache-2.0 weights**    | Pinned 2026-10-20 — no InsightFace/non-commercial models (§1 decision); vetted in the CI license manifest |
-| Clustering          | HDBSCAN (`hdbscan` / `linfa`, or in-house)     | Unknown number of people; Rust HDBSCAN crates are weak — implement in-house if the crates fall short (difficulty accepted) |
-| Semantic search     | **OpenCLIP ViT-B/32 (ONNX)**                   | Opt-in download; CC-BY/Apache-licensed weights only, vetted in the license manifest |
-| Perceptual hash     | `image_hasher`                                 | Near-duplicates                                             |
-| Reverse geocoding   | GeoNames cities dataset (embedded)             | Offline place names                                         |
-| Async / jobs        | `tokio` + custom priority queue                |                                                             |
-| Logging             | `tracing`                                      |                                                             |
-| Errors              | `thiserror` / `anyhow`                         |                                                             |
+| Video               | ffmpeg (sidecar binary or `ffmpeg-next`)       | Thumbs, playback transcode, trim                                                                                                                                                       |
+| AI runtime          | `ort` (ONNX Runtime)                           | CPU by default; CoreML / DirectML / CUDA providers optional                                                                                                                            |
+| Face detection      | **YuNet (ONNX, MIT)**                          | Pinned 2026-10-20 — small, fast, permissively licensed                                                                                                                                 |
+| Face embedding      | **MobileFaceNet-class, Apache-2.0 weights**    | Pinned 2026-10-20 — no InsightFace/non-commercial models (§1 decision); vetted in the CI license manifest                                                                              |
+| Clustering          | HDBSCAN (`hdbscan` / `linfa`, or in-house)     | Unknown number of people; Rust HDBSCAN crates are weak — implement in-house if the crates fall short (difficulty accepted)                                                             |
+| Semantic search     | **OpenCLIP ViT-B/32 (ONNX)**                   | Opt-in download; CC-BY/Apache-licensed weights only, vetted in the license manifest                                                                                                    |
+| Perceptual hash     | `image_hasher`                                 | Near-duplicates                                                                                                                                                                        |
+| Reverse geocoding   | GeoNames cities dataset (embedded)             | Offline place names                                                                                                                                                                    |
+| Async / jobs        | `tokio` + custom priority queue                |                                                                                                                                                                                        |
+| Logging             | `tracing`                                      |                                                                                                                                                                                        |
+| Errors              | `thiserror` / `anyhow`                         |                                                                                                                                                                                        |
 
 ### Testing & tooling
 
@@ -466,7 +466,7 @@ Rebuild path: walk watched folders → read sidecars → repopulate. AI-derived 
 
 ### Authority, conflicts & rebuild (2026-10-20 review)
 
-- **Authority split:** sidecars are authoritative for *user data* (rating, tags, caption, GPS, faces, recipe); the catalog is authoritative for *derived data* (thumbnails, hashes, FTS, embeddings, scan state). Never write derived data back to sidecars.
+- **Authority split:** sidecars are authoritative for _user data_ (rating, tags, caption, GPS, faces, recipe); the catalog is authoritative for _derived data_ (thumbnails, hashes, FTS, embeddings, scan state). Never write derived data back to sidecars.
 - **Conflict rule:** when catalog and sidecar disagree on user data, the sidecar wins; the catalog row is overwritten on next read.
 - **Incremental rebuild:** a full rebuild re-reads every sidecar, which is slow on large NAS libraries — so rebuilds are incremental by default (mtime + size skip), and a full rebuild is an explicit, progress-reported maintenance action.
 - **Move/rename outside the app:** folders/files are tracked by (size, mtime, content hash) so a renamed or moved original is re-associated with its sidecar and catalog entry by hash match instead of being treated as a new photo. Sidecar re-association is part of the P2a design doc (see §6).
@@ -553,7 +553,7 @@ Split out of P1 (2026-10-20 review) so the MVP ships fast; each item is independ
 - Originals unchanged (checksum) after an edit session.
 - Delete catalog → rebuild → no loss of stars/tags/captions/albums/edits.
 - darktable/digiKam show tags, ratings and captions from our sidecars.
-- A file renamed/moved *outside* Fotobase re-associates with its sidecar and stars (hash match), not treated as new.
+- A file renamed/moved _outside_ Fotobase re-associates with its sidecar and stars (hash match), not treated as new.
 
 ### Phase 2b — Edit & export — **size: L**
 
@@ -630,7 +630,7 @@ Split out of P1 (2026-10-20 review) so the MVP ships fast; each item is independ
 - Tauri iOS/Android builds sharing the Rust core.
 - Read-mostly first: browse, search, view, star/tag, share.
 - Camera roll as a "watched folder" equivalent via platform photo APIs.
-- **Decoupled from F1 layer 2 (2026-10-20 review):** the first mobile release ships against a single catalog source (e.g. NAS or a synced folder via Syncthing/iCloud) — sync (F1.2) makes multi-device *convenient*, not *possible*. This prevents the sync tar pit from starving mobile indefinitely.
+- **Decoupled from F1 layer 2 (2026-10-20 review):** the first mobile release ships against a single catalog source (e.g. NAS or a synced folder via Syncthing/iCloud) — sync (F1.2) makes multi-device _convenient_, not _possible_. This prevents the sync tar pit from starving mobile indefinitely.
 
 ---
 
@@ -731,39 +731,39 @@ flowchart TD
 
 ## 9. Verification strategy
 
-| Area                 | Check                                                                                                   |
-| -------------------- | ------------------------------------------------------------------------------------------------------- |
-| Performance          | 50k-photo fixture library: time-to-first-thumbnail, scan duration, idle/peak RAM, scroll fps on each OS |
+| Area                 | Check                                                                                                                                                                            |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Performance          | 50k-photo fixture library: time-to-first-thumbnail, scan duration, idle/peak RAM, scroll fps on each OS                                                                          |
 | Robustness           | Fuzz the metadata parser and decoders (exiv2 CVE history; camera media is untrusted input — this is the app's main attack surface); malformed files must never crash the scanner |
-| Catalog integrity    | WAL + startup `integrity_check`; corrupt the catalog file in a test → app detects it and rebuilds from sidecars without user-data loss |
-| Data safety          | Checksum all originals before/after edit sessions and test runs                                         |
-| Rebuildability       | Delete catalog → rebuild → diff all user data against pre-delete snapshot                               |
-| Interop              | Round-trip sidecars through darktable and digiKam; verify tags, ratings, captions, GPS, face regions    |
-| Render fidelity      | Golden images per recipe op; GPU vs CPU output within tolerance (F2)                                    |
-| AI                   | Clustering precision/recall on a labeled face set; resource caps respected on battery                   |
-| Export plugins       | Shared contract tests (upload, resume, retry, idempotency) per plugin                                   |
-| Sync (F1)            | Concurrent offline edits on two devices merge without loss                                              |
-| Privacy (F3)         | Relay traffic inspection shows only ciphertext                                                          |
-| Portable export (F4) | Gallery opens offline from USB on all OSes with zero network requests                                   |
+| Catalog integrity    | WAL + startup `integrity_check`; corrupt the catalog file in a test → app detects it and rebuilds from sidecars without user-data loss                                           |
+| Data safety          | Checksum all originals before/after edit sessions and test runs                                                                                                                  |
+| Rebuildability       | Delete catalog → rebuild → diff all user data against pre-delete snapshot                                                                                                        |
+| Interop              | Round-trip sidecars through darktable and digiKam; verify tags, ratings, captions, GPS, face regions                                                                             |
+| Render fidelity      | Golden images per recipe op; GPU vs CPU output within tolerance (F2)                                                                                                             |
+| AI                   | Clustering precision/recall on a labeled face set; resource caps respected on battery                                                                                            |
+| Export plugins       | Shared contract tests (upload, resume, retry, idempotency) per plugin                                                                                                            |
+| Sync (F1)            | Concurrent offline edits on two devices merge without loss                                                                                                                       |
+| Privacy (F3)         | Relay traffic inspection shows only ciphertext                                                                                                                                   |
+| Portable export (F4) | Gallery opens offline from USB on all OSes with zero network requests                                                                                                            |
 
 ---
 
 ## 10. Risks & mitigations
 
-| Risk                                                                                        | Impact               | Mitigation                                                                                                  |
-| ------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| WebKitGTK performance on Linux                                                              | Janky grid / viewer  | Benchmark in P1; keep DOM minimal; **canvas grid fallback is a planned P1 deliverable (see §6)**, not a contingency — **decided: canvas is the Linux default** ([ADR-0013](./adr/adr-0013-canvas-grid-linux-default.md)) |
-| OS WebView drift (WKWebView/WebView2/WebKitGTK updates outside our control cap perceived quality) | Regressions we don't own | Perf smoke tests in CI per release; canvas fallback covers the worst case; pin a WebView regression triage step in the release checklist |
-| Model licensing (InsightFace ArcFace weights are non-commercial; same risk class applies to CLIP/SigLIP ONNX conversions and the HDBSCAN crate) | Legal / distribution | Permissively-licensed models only (§1 decision); per-model license manifest checked in CI; models are separate opt-in downloads |
-| exiv2 / rexiv2 dependency health (C++ ABI through Rust bindings; single point of failure for all metadata I/O) | Metadata layer rot | Own the bindings (rexiv2 fork, 2026-10-20); keep metadata I/O behind a crate-internal trait so the backend can be swapped; `kamadak-exif` as a read-only fallback; track exiv2 releases |
-| WebKitGTK ships without H.264/HEVC on several major distros | Video playback silently fails on Linux | Codec-capability probe at startup + ffmpeg transcode fallback via `stream://` (see §2 Video strategy) |
-| GPL obligations (exiv2; rexiv2 itself is MPL-2.0 — the constraint comes from linking exiv2) | Constrains license   | Commit to GPL-3.0 from day one                                                                              |
-| LibRaw coverage of new cameras                                                              | Unsupported RAWs     | Track LibRaw releases; fall back to embedded JPEG preview                                                   |
-| ffmpeg patent-encumbered codecs                                                             | Distribution         | Ship LGPL build without non-free codecs; use OS decoders where possible                                     |
-| Google Photos API restrictions (since 2025, apps can only read back their own uploads)      | Limited plugin       | Position Google Photos as upload-only target                                                                |
-| Sidecar write conflicts with other apps                                                     | Data loss            | Merge-on-write (read-modify-write preserving unknown fields), file locks, backup previous sidecar           |
-| Large libraries on slow/network drives                                                      | Slow scans           | Cache by mtime+size, hash lazily, throttle IO, pause on metered/battery                                     |
-| Scope creep                                                                                 | Never ships          | Strict phase gates with acceptance criteria above                                                           |
+| Risk                                                                                                                                            | Impact                                 | Mitigation                                                                                                                                                                                                               |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| WebKitGTK performance on Linux                                                                                                                  | Janky grid / viewer                    | Benchmark in P1; keep DOM minimal; **canvas grid fallback is a planned P1 deliverable (see §6)**, not a contingency — **decided: canvas is the Linux default** ([ADR-0013](./adr/adr-0013-canvas-grid-linux-default.md)) |
+| OS WebView drift (WKWebView/WebView2/WebKitGTK updates outside our control cap perceived quality)                                               | Regressions we don't own               | Perf smoke tests in CI per release; canvas fallback covers the worst case; pin a WebView regression triage step in the release checklist                                                                                 |
+| Model licensing (InsightFace ArcFace weights are non-commercial; same risk class applies to CLIP/SigLIP ONNX conversions and the HDBSCAN crate) | Legal / distribution                   | Permissively-licensed models only (§1 decision); per-model license manifest checked in CI; models are separate opt-in downloads                                                                                          |
+| exiv2 / rexiv2 dependency health (C++ ABI through Rust bindings; single point of failure for all metadata I/O)                                  | Metadata layer rot                     | Own the bindings (rexiv2 fork, 2026-10-20); keep metadata I/O behind a crate-internal trait so the backend can be swapped; `kamadak-exif` as a read-only fallback; track exiv2 releases                                  |
+| WebKitGTK ships without H.264/HEVC on several major distros                                                                                     | Video playback silently fails on Linux | Codec-capability probe at startup + ffmpeg transcode fallback via `stream://` (see §2 Video strategy)                                                                                                                    |
+| GPL obligations (exiv2; rexiv2 itself is MPL-2.0 — the constraint comes from linking exiv2)                                                     | Constrains license                     | Commit to GPL-3.0 from day one                                                                                                                                                                                           |
+| LibRaw coverage of new cameras                                                                                                                  | Unsupported RAWs                       | Track LibRaw releases; fall back to embedded JPEG preview                                                                                                                                                                |
+| ffmpeg patent-encumbered codecs                                                                                                                 | Distribution                           | Ship LGPL build without non-free codecs; use OS decoders where possible                                                                                                                                                  |
+| Google Photos API restrictions (since 2025, apps can only read back their own uploads)                                                          | Limited plugin                         | Position Google Photos as upload-only target                                                                                                                                                                             |
+| Sidecar write conflicts with other apps                                                                                                         | Data loss                              | Merge-on-write (read-modify-write preserving unknown fields), file locks, backup previous sidecar                                                                                                                        |
+| Large libraries on slow/network drives                                                                                                          | Slow scans                             | Cache by mtime+size, hash lazily, throttle IO, pause on metered/battery                                                                                                                                                  |
+| Scope creep                                                                                                                                     | Never ships                            | Strict phase gates with acceptance criteria above                                                                                                                                                                        |
 
 ---
 

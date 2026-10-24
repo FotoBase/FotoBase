@@ -22,6 +22,13 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 fast_image_resize = "5"
 sha2 = "0.10"
 tokio = { version = "1", features = ["rt"] }
+# TASK-02-001: all color transforms go through lcms2 (LittleCMS) — the task
+# spec forbids hand-rolled color math. The lcms2-sys backing crate builds the
+# C library from source on Linux/macOS/Windows, so no system lcms2 is needed.
+lcms2 = "6"
+# PNG iCCP inflation (TASK-02-001); already in the tree via the png backend
+# of `image`, declared explicitly because icc.rs calls it directly.
+miniz_oxide = "0.8"
 
 # libheif-rs builds an embedded libheif (static) on non-Windows targets, so
 # decode needs no system libheif — only the codec plugins it links against
@@ -32,6 +39,7 @@ libheif-rs = { version = "3", default-features = false, features = ["embedded-li
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
 tempfile = "3"
+miniz_oxide = "0.8"
 
 [lints]
 workspace = true

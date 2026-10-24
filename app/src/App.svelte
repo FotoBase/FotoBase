@@ -214,6 +214,26 @@
     return () => unlisten?.();
   });
 
+  // Display-profile switch (TASK-02-001): the backend re-reads the display
+  // ICC profile every few seconds and emits `display-profile-changed` when
+  // it changes. Bumping every hash's version re-requests each on-screen
+  // thumbnail, which now resolves into the new profile's cache entries —
+  // the whole grid re-colors without an app restart.
+  $effect(() => {
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen("display-profile-changed", () => {
+          gridState.bumpAllThumbVersions();
+        });
+      } catch {
+        // Browser dev: no backend, no events.
+      }
+    })();
+    return () => unlisten?.();
+  });
+
   // Watched-folder scans can land after the startup load (cold start: the
   // first scan of a 50k folder takes seconds; live: files dropped into a
   // watched folder while the app runs). The backend announces every
