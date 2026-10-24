@@ -109,7 +109,7 @@ pub fn transform_rgb(
     }
     // transform_in_place wants a slice of the pixel type; repack u8 triples
     // into [u8; 3] (a plain copy, not color math).
-    let mut px: Vec<[u8; 3]> = rgb.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect();
+    let mut px: Vec<[u8; 3]> = rgb.as_chunks::<3>().0.to_vec();
     let t = Transform::new(
         &src,
         PixelFormat::RGB_8,
@@ -118,7 +118,7 @@ pub fn transform_rgb(
         Intent::RelativeColorimetric,
     )?;
     t.transform_in_place(&mut px);
-    for (out, p) in rgb.chunks_exact_mut(3).zip(px) {
+    for (out, p) in rgb.as_chunks_mut::<3>().0.iter_mut().zip(px) {
         out.copy_from_slice(&p);
     }
     Ok(())
