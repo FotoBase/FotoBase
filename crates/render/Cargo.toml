@@ -15,6 +15,7 @@ heif = ["dep:libheif-rs"]
 
 [dependencies]
 fotobase-jobs = { path = "../jobs" }
+fotobase-video = { path = "../video" }
 tracing.workspace = true
 thiserror.workspace = true
 zune-jpeg = "0.4"

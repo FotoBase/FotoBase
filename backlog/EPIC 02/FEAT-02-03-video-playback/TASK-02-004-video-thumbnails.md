@@ -1,6 +1,6 @@
 # task: video thumbnails via ffmpeg frame extraction
 
-**Feature:** [FEAT-02-03-video-playback](FEAT-02-03-video-playback.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** todo
+**Feature:** [FEAT-02-03-video-playback](FEAT-02-03-video-playback.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in review (2026-10-26)
 
 ## Description
 Extract video thumbnail frames with ffmpeg into the same thumbnail store as images, served by the same `thumb://` scheme, at lower queue priority than visible images (PLAN §2 Video strategy, thumbnails bullet).
@@ -19,6 +19,6 @@ Extract video thumbnail frames with ffmpeg into the same thumbnail store as imag
 - Integration: fixture clip produces a cached thumbnail via `thumb://`; corrupt clip yields placeholder, no crash.
 
 ## Acceptance criteria
-- [ ] 02-004: videos get thumbnails in the shared cache via `thumb://`.
-- [ ] 02-004: video thumbnail jobs run at lower priority than visible image jobs.
-- [ ] 02-004: corrupt videos fall back to a placeholder without errors surfacing to the user.
+- [x] 02-004: videos get thumbnails in the shared cache via `thumb://`.
+- [x] 02-004: video thumbnail jobs run at lower priority than visible image jobs.
+- [x] 02-004: corrupt videos fall back to a placeholder without errors surfacing to the user.

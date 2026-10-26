@@ -305,6 +305,18 @@ impl Catalog {
         Ok(paths.flatten().collect())
     }
 
+    /// Source paths and their media types (`image` / `video`) whose content
+    /// hash matches (TASK-02-004): the `thumb://` miss handler routes images
+    /// to the visible render job and videos to the background extraction job
+    /// based on this. Ordered by path, same as [`Catalog::paths_for_hash`].
+    pub fn path_types_for_hash(&self, hash: &str) -> Result<Vec<(String, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT path, media_type FROM files WHERE hash = ?1 ORDER BY path")?;
+        let rows = stmt.query_map([hash], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.flatten().collect())
+    }
+
     /// The catalog row for one on-disk path (TASK-01-025): routing a
     /// file the OS opened with Fotobase into the viewer needs the path →
     /// grid-item lookup. `files.path` is UNIQUE, so this is one indexed

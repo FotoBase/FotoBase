@@ -10,7 +10,7 @@
 - Shipped ffmpeg is LGPL with no non-free codecs; codec probe results are visible for debugging.
 
 - [x] `02-003` (M) `video` crate: ffprobe metadata (duration, codec, rotation) at scan time into catalog `metadata`; ffmpeg sidecar packaging (LGPL build, no non-free codecs).
-- [ ] `02-004` (M) Video thumbnails: ffmpeg frame extraction into the same thumbnail cache, lower priority in job queue.
+- [x] `02-004` (M) Video thumbnails: ffmpeg frame extraction into the same thumbnail cache, lower priority in job queue.
 - [ ] `02-005` (M) Startup codec-capability probe; HTML5 `<video>` first.
 - [ ] `02-006` (L) `stream://` custom URI scheme: on-the-fly transcode fallback (H.264/mp4 or VP9/webm) for unsupported codecs, streamed to player.
 - [ ] `02-007` (M) Video player UI in grid/viewer; rotation honored.

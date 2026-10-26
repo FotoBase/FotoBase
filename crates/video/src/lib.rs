@@ -112,6 +112,81 @@ fn tool_bin(env_key: &str, default: &str) -> (String, String) {
 #[derive(Debug, Clone, Default)]
 pub struct Ffprobe;
 
+/// Frame extraction (TASK-02-004, PLAN §2 Video strategy thumbnails bullet):
+/// pull one frame at ~10% of the clip's duration out of a video file as a
+/// JPEG, to be resized into the shared thumbnail cache by the render crate.
+///
+/// The prober and the binary are injectable so tests can pin builds or fake
+/// failure modes without touching the process environment. A missing binary,
+/// a failed probe, or a nonzero ffmpeg exit is an [`Err`] — never a panic.
+#[derive(Default)]
+pub struct Ffmpeg {
+    bin: Option<String>,
+    prober: Option<Box<dyn VideoProbe + Send + Sync>>,
+}
+
+impl std::fmt::Debug for Ffmpeg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Ffmpeg").field("bin", &self.bin).finish_non_exhaustive()
+    }
+}
+
+/// The ffmpeg argument vector for one frame grab: seek to `duration * 0.1`
+/// seconds (clamped to a finite, non-negative offset), decode a single video
+/// frame, write it as a JPEG (`-q:v 2` ≈ high quality still).
+pub fn frame_seek_args(duration_secs: f64, src: &Path, out: &Path) -> Vec<String> {
+    let seek = if duration_secs.is_finite() { (duration_secs * 0.1).max(0.0) } else { 0.0 };
+    vec![
+        "-hide_banner".into(),
+        "-loglevel".into(),
+        "error".into(),
+        "-ss".into(),
+        format!("{seek:.3}"),
+        "-i".into(),
+        src.to_string_lossy().into_owned(),
+        "-frames:v".into(),
+        "1".into(),
+        "-q:v".into(),
+        "2".into(),
+        "-y".into(),
+        out.to_string_lossy().into_owned(),
+    ]
+}
+
+impl Ffmpeg {
+    /// An extractor with an explicit binary path and prober (tests pin builds
+    /// or fake failure modes without touching the shared environment).
+    pub fn with_parts(bin: &str, prober: Box<dyn VideoProbe + Send + Sync>) -> Self {
+        Ffmpeg { bin: Some(bin.to_owned()), prober: Some(prober) }
+    }
+}
+
+/// Anything that can pull one preview frame out of a video file. Implemented
+/// by [`Ffmpeg`]; the render crate takes `&dyn FrameExtractor` so tests can
+/// fake extraction without a real binary.
+pub trait FrameExtractor {
+    fn extract_frame(&self, video: &Path, out: &Path) -> Result<(), VideoError>;
+}
+
+impl FrameExtractor for Ffmpeg {
+    fn extract_frame(&self, video: &Path, out: &Path) -> Result<(), VideoError> {
+        let prober: &dyn VideoProbe = self.prober.as_deref().unwrap_or(&Ffmpeg::DEFAULT_PROBER);
+        let meta = prober.probe(video)?;
+        let bin: String = match &self.bin {
+            Some(b) => b.clone(),
+            None => tool_bin("FB_FFMPEG", "ffmpeg").1,
+        };
+        let args = frame_seek_args(meta.duration_secs, video, out);
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        run(&bin, "ffmpeg", &refs, None)?;
+        Ok(())
+    }
+}
+
+impl Ffmpeg {
+    const DEFAULT_PROBER: Ffprobe = Ffprobe;
+}
+
 impl VideoProbe for Ffprobe {
     fn probe(&self, path: &Path) -> Result<VideoMeta, VideoError> {
         let (_, bin) = tool_bin("FB_FFPROBE", "ffprobe");

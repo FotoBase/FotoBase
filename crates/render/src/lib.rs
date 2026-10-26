@@ -349,6 +349,127 @@ pub fn thumbnail_job(
     })
 }
 
+/// Render (or fetch from cache) the thumbnail for a video file
+/// (TASK-02-004, PLAN §2 Video strategy thumbnails bullet).
+///
+/// One frame is extracted at ~10% of the clip's duration and fed through the
+/// exact same resize/encode/cache pipeline as images — same cache-key scheme
+/// (the content hash of the *video* file, matching the catalog's stored hash
+/// and the `thumb://` key), same `<hash>.jpg` layout, same atomic `.tmp` +
+/// rename write. No new serve path: the existing `thumb://` handler serves
+/// video thumbnails indistinguishably from image ones.
+///
+/// A failed extraction (corrupt/unsupported media, missing ffmpeg) is an
+/// [`Err`] — the scheme layer serves the placeholder instead of an error
+/// dialog, and the cache is left untouched so a fixed file can be re-rendered.
+pub fn video_thumbnail(
+    src: &Path,
+    cache_dir: &Path,
+    opts: ThumbOptions,
+    extractor: &dyn fotobase_video::FrameExtractor,
+) -> Result<Thumbnail, RenderError> {
+    // Same key derivation as the catalog (`content_hash`): streamed SHA-256,
+    // first 16 bytes — camera cards hold multi-gigabyte clips, nothing is
+    // read whole.
+    use sha2::Digest;
+    let mut file = std::fs::File::open(src)?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher)?;
+    let hash: String = hasher.finalize()[..16].iter().fold(String::new(), |mut acc, b| {
+        use std::fmt::Write;
+        let _ = write!(acc, "{b:02x}");
+        acc
+    });
+
+    let profile_tag = color::thumb_profile_tag(opts.display_profile.as_deref());
+    let cached = match (&opts.cache_tag, profile_tag.is_empty()) {
+        (Some(tag), _) => cache_dir.join(format!("{hash}{tag}{profile_tag}.jpg")),
+        (None, false) => cache_dir.join(format!("{hash}{profile_tag}.jpg")),
+        (None, true) => cache_dir.join(format!("{hash}.jpg")),
+    };
+    if let Some((w, h)) = cached_dimensions(&cached) {
+        return Ok(Thumbnail { path: cached, width: w, height: h, from_cache: true });
+    }
+
+    // Extract one frame next to the cache, then decode it through the plain
+    // image pipeline (the frame is a JPEG — the sniff table handles it). The
+    // cache directory must exist before the extractor writes into it.
+    std::fs::create_dir_all(cache_dir)?;
+    let frame = cache_dir.join(format!("{hash}.frame.jpg"));
+    extractor
+        .extract_frame(src, &frame)
+        .map_err(|e| RenderError::Decode { path: src.to_path_buf(), detail: e.to_string() })?;
+    let frame_bytes = match std::fs::read(&frame) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            let _ = std::fs::remove_file(&frame);
+            return Err(e.into());
+        }
+    };
+    let _ = std::fs::remove_file(&frame);
+
+    let (mut rgb, src_w, src_h) = decode(&frame_bytes, src)?;
+    if let Some(dst) = opts.display_profile.as_deref() {
+        // Extracted frames carry no ICC profile; ffmpeg wrote sRGB pixels, so
+        // the transform runs with no embedded source profile (same as an
+        // untagged image).
+        transform_rgb(&mut rgb, None, dst)
+            .map_err(|e| RenderError::Decode { path: src.to_path_buf(), detail: e.to_string() })?;
+    }
+    let (dst_w, dst_h) = fit(src_w, src_h, opts.max_edge);
+    let resized = resize(&rgb, src_w, src_h, dst_w, dst_h);
+    let mut encoded = encode_jpeg(&resized, dst_w, dst_h, opts.quality);
+    if let Some(profile) = &opts.display_profile {
+        icc::attach_to_jpeg(&mut encoded, profile);
+    }
+
+    let tmp = cache_dir.join(format!("{hash}.jpg.tmp"));
+    std::fs::write(&tmp, &encoded)?;
+    if let Err(e) = std::fs::rename(&tmp, &cached) {
+        let _ = std::fs::remove_file(&tmp);
+        if !cached.exists() {
+            return Err(e.into());
+        }
+        // Lost a race with another worker that wrote the same entry: fine.
+    }
+    Ok(Thumbnail { path: cached, width: dst_w, height: dst_h, from_cache: false })
+}
+
+/// [`video_thumbnail`] as a queue job (PLAN §3 rule 4): video thumbnails run
+/// in the *background* priority class — below every visible-image thumbnail,
+/// never blocking the grid — with cooperative cancellation before the
+/// extraction starts. Errors are results, not queue failures (§9).
+pub fn video_thumbnail_job(
+    src: PathBuf,
+    cache_dir: PathBuf,
+    opts: ThumbOptions,
+    extractor: std::sync::Arc<dyn fotobase_video::FrameExtractor + Send + Sync>,
+) -> Job<Result<Thumbnail, RenderError>> {
+    job(move |ctx| {
+        let src = src.clone();
+        let cache_dir = cache_dir.clone();
+        let opts = opts.clone();
+        let extractor = extractor.clone();
+        async move {
+            if ctx.is_cancelled() {
+                return Outcome::Cancelled;
+            }
+            // ffmpeg extraction is blocking work (a subprocess run that can
+            // take hundreds of ms): push it off the async worker so a video
+            // thumbnail never stalls other queued jobs on the same runtime.
+            let join = tokio::task::spawn_blocking(move || {
+                video_thumbnail(&src, &cache_dir, opts, extractor.as_ref())
+            });
+            match join.await {
+                Ok(outcome) => Outcome::Done(outcome),
+                // The blocking task only panics if the closure panicked; a
+                // panicking extractor is a failed job, not a queue failure.
+                Err(join_err) => Outcome::Failed(format!("video thumbnail panicked: {join_err}")),
+            }
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
