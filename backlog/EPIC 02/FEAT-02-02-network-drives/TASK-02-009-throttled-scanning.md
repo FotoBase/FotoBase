@@ -1,6 +1,6 @@
 # task: throttled scanning for network folders
 
-**Feature:** [FEAT-02-02-network-drives](FEAT-02-02-network-drives.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in progress (2026-10-26)
+**Feature:** [FEAT-02-02-network-drives](FEAT-02-02-network-drives.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in review (2026-10-26)
 
 ## Description
 Make network-folder scans non-destructive to UX: IO limits, pause on disconnect, clean resume, lazy hashing (PLAN §6 P1.5 acceptance: mid-scan unplug pauses cleanly, resumes on reconnect, no UI hang).
