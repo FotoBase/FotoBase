@@ -1,6 +1,6 @@
 # task: golden-image tests for the display transform
 
-**Feature:** [FEAT-02-01-color-management](FEAT-02-01-color-management.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** todo
+**Feature:** [FEAT-02-01-color-management](FEAT-02-01-color-management.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in review (2026-10-26)
 
 ## Description
 Add golden-image tests covering sRGB, Display-P3, and Adobe RGB sources through the display transform (PLAN §9 "Render fidelity: golden images per recipe op"), plus a documented visual-comparison protocol against OS viewers. Guards the 02-001 implementation against regressions.
@@ -19,6 +19,6 @@ Add golden-image tests covering sRGB, Display-P3, and Adobe RGB sources through 
 - Integration: full matrix (3 source profiles × sRGB + P3 display profiles) runs in CI in seconds (small fixtures).
 
 ## Acceptance criteria
-- [ ] 02-002: golden-image tests for sRGB, Display-P3, Adobe RGB pass in CI.
-- [ ] 02-002: a mutated transform is caught by the test (verified once, noted in PR).
-- [ ] 02-002: visual-comparison protocol vs OS viewers is documented in the repo.
+- [x] 02-002: golden-image tests for sRGB, Display-P3, Adobe RGB pass in CI.
+- [x] 02-002: a mutated transform is caught by the test (verified once, noted in PR).
+- [x] 02-002: visual-comparison protocol vs OS viewers is documented in the repo.
