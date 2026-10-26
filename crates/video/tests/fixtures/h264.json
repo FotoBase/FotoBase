@@ -1,0 +1,24 @@
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_name": "h264",
+      "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+      "profile": "High",
+      "codec_type": "video",
+      "width": 1920,
+      "height": 1080,
+      "pix_fmt": "yuv420p",
+      "r_frame_rate": "30/1",
+      "duration": "6.033333",
+      "nb_frames": "181"
+    }
+  ],
+  "format": {
+    "filename": "clip.mp4",
+    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+    "duration": "6.033333",
+    "size": "2458617",
+    "format_version": 2
+  }
+}

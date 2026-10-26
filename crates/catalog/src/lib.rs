@@ -77,6 +77,21 @@ impl ScanMode {
     }
 }
 
+/// Scan-time video metadata cached in the `metadata` table (TASK-02-003,
+/// PLAN §2 Video strategy). Extracted by ffprobe; the catalog is a rebuildable
+/// cache — re-probing the files repopulates it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct VideoMeta {
+    /// Duration in seconds.
+    pub duration_secs: f64,
+    /// Codec name, e.g. `h264`, `hevc`, `vp9`.
+    pub codec: String,
+    /// Codec profile, e.g. `High`, `Main 10` — `None` when none is reported.
+    pub profile: Option<String>,
+    /// Display rotation in degrees, normalized to 0/90/180/270.
+    pub rotation_deg: u32,
+}
+
 /// One photo's info-pane payload (TASK-01-020, PLAN §2D): file properties
 /// from the `files` row plus the EXIF fields cached in the `metadata` table
 /// at scan time (`None`s until the metadata crate's extraction lands). No
@@ -435,6 +450,172 @@ impl Catalog {
             rusqlite::params![hash, file_id],
         )?;
         Ok(())
+    }
+
+    /// Store a successful ffprobe result for one video (TASK-02-003). The
+    /// `metadata` row is created if missing; `video_probe_ok` flips to 1 and
+    /// `video_probe_mtime` records the probed mtime so unchanged files are
+    /// not re-probed on the next scan.
+    pub fn set_video_metadata(
+        &mut self,
+        file_id: i64,
+        meta: &VideoMeta,
+        probed_mtime: f64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO metadata(file_id, video_duration, video_codec, video_profile,
+                                  video_rotation, video_probe_ok, video_probe_mtime)
+             VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6)
+             ON CONFLICT(file_id) DO UPDATE SET
+                video_duration = excluded.video_duration,
+                video_codec = excluded.video_codec,
+                video_profile = excluded.video_profile,
+                video_rotation = excluded.video_rotation,
+                video_probe_ok = 1,
+                video_probe_mtime = excluded.video_probe_mtime",
+            rusqlite::params![
+                file_id,
+                meta.duration_secs,
+                meta.codec,
+                meta.profile,
+                meta.rotation_deg as i64,
+                probed_mtime,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Mark one video's probe as failed (corrupt/unsupported file): the file
+    /// is marked, the scan continues — never fatal (PLAN §9). `probed_mtime`
+    /// still records the file, so a *changed* file is re-probed later but an
+    /// unchanged corrupt one is not hammered on every scan.
+    pub fn mark_video_probe_failed(&mut self, file_id: i64, probed_mtime: f64) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO metadata(file_id, video_probe_ok, video_probe_mtime)
+             VALUES (?1, 0, ?2)
+             ON CONFLICT(file_id) DO UPDATE SET
+                video_probe_ok = 0,
+                video_probe_mtime = excluded.video_probe_mtime",
+            rusqlite::params![file_id, probed_mtime],
+        )?;
+        Ok(())
+    }
+
+    /// The stored ffprobe result for one video, if probed successfully.
+    pub fn video_metadata(&self, file_id: i64) -> Result<Option<VideoMeta>> {
+        self.conn
+            .query_row(
+                "SELECT video_duration, video_codec, video_profile, video_rotation
+                 FROM metadata
+                 WHERE file_id = ?1 AND video_probe_ok = 1",
+                [file_id],
+                |r| {
+                    Ok(VideoMeta {
+                        duration_secs: r.get(0)?,
+                        codec: r.get(1)?,
+                        profile: r.get(2)?,
+                        rotation_deg: r.get::<_, Option<i64>>(3)?.unwrap_or(0) as u32,
+                    })
+                },
+            )
+            .map(Some)
+            .or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(other.into()),
+            })
+    }
+
+    /// Probe outcome for one video: `Some(1)` ok, `Some(0)` failed, `None` not
+    /// probed yet.
+    pub fn video_probe_ok(&self, file_id: i64) -> Result<Option<i64>> {
+        self.conn
+            .query_row("SELECT video_probe_ok FROM metadata WHERE file_id = ?1", [file_id], |r| {
+                r.get(0)
+            })
+            .map(Some)
+            .or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(other.into()),
+            })
+    }
+
+    /// The file mtime recorded at probe time, if the file was ever probed.
+    pub fn video_probe_mtime(&self, file_id: i64) -> Result<Option<f64>> {
+        self.conn
+            .query_row(
+                "SELECT video_probe_mtime FROM metadata WHERE file_id = ?1",
+                [file_id],
+                |r| r.get(0),
+            )
+            .map(Some)
+            .or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(other.into()),
+            })
+    }
+
+    /// Videos still needing a probe: `media_type = 'video'` files never
+    /// probed, or probed at a stale mtime (the file changed since). Returns
+    /// `(file_id, path, current_mtime)` up to `limit` rows — the scanner
+    /// batches through these so a huge library cannot stall one scan pass.
+    pub fn videos_needing_probe(&self, limit: usize) -> Result<Vec<(i64, String, f64)>> {
+        Self::videos_needing_probe_query(
+            &self.conn,
+            "SELECT f.id, f.path, f.mtime
+             FROM files f
+             LEFT JOIN metadata m ON m.file_id = f.id
+             WHERE f.media_type = 'video'
+               AND (m.file_id IS NULL
+                    OR m.video_probe_ok IS NULL
+                    OR m.video_probe_mtime IS NULL
+                    OR m.video_probe_mtime != f.mtime)
+             ORDER BY f.id
+             LIMIT ?1",
+            limit,
+            None,
+        )
+    }
+
+    /// [`videos_needing_probe`] restricted to one scanned subtree — the
+    /// scanner probes only the videos it just touched.
+    pub fn videos_needing_probe_under(
+        &self,
+        root: &str,
+        limit: usize,
+    ) -> Result<Vec<(i64, String, f64)>> {
+        let sep = std::path::MAIN_SEPARATOR.to_string();
+        Self::videos_needing_probe_query(
+            &self.conn,
+            "SELECT f.id, f.path, f.mtime
+             FROM files f
+             JOIN folders d ON d.id = f.folder_id
+             LEFT JOIN metadata m ON m.file_id = f.id
+             WHERE f.media_type = 'video'
+               AND (d.path = ?1 OR d.path LIKE ?1 || ?2 || '%')
+               AND (m.file_id IS NULL
+                    OR m.video_probe_ok IS NULL
+                    OR m.video_probe_mtime IS NULL
+                    OR m.video_probe_mtime != f.mtime)
+             ORDER BY f.id
+             LIMIT ?3",
+            limit,
+            Some((root.to_owned(), sep)),
+        )
+    }
+
+    fn videos_needing_probe_query(
+        conn: &Connection,
+        sql: &str,
+        limit: usize,
+        root: Option<(String, String)>,
+    ) -> Result<Vec<(i64, String, f64)>> {
+        let mut stmt = conn.prepare(sql)?;
+        let map = |r: &rusqlite::Row| Ok((r.get(0)?, r.get(1)?, r.get(2)?));
+        let rows = match root {
+            Some((root, sep)) => stmt.query_map(rusqlite::params![root, sep, limit as i64], map)?,
+            None => stmt.query_map([limit as i64], map)?,
+        };
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
     /// The info pane's data for one photo (TASK-01-020, PLAN §2D): the file

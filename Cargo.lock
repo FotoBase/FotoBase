@@ -1267,10 +1267,22 @@ version = "0.1.0"
 dependencies = [
  "filetime",
  "fotobase-catalog",
+ "fotobase-video",
  "nix",
  "notify",
  "rusqlite",
  "sha2",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
+name = "fotobase-video"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.21",
  "tracing",

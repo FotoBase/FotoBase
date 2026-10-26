@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use fotobase_catalog::{Catalog, Result};
+use fotobase_video::VideoMeta as ProbeMeta;
 
 mod polling;
 pub use polling::{
@@ -30,6 +31,10 @@ pub use network::{
 
 mod watcher;
 pub use watcher::{ScanHook, Watcher, WatcherError, DEFAULT_DEBOUNCE};
+
+/// Video probe integration (TASK-02-003): the scanner calls ffprobe (via
+/// [`fotobase_video`]) for `media_type = video` files at scan time.
+pub use fotobase_video::{Ffprobe as DefaultVideoProbe, VideoError, VideoProbe};
 
 pub mod import;
 pub use import::{
@@ -155,6 +160,23 @@ pub fn scan_folder_with(
     options: &ScanOptions,
     progress: &dyn Fn(ScanProgress),
 ) -> Result<ScanReport> {
+    scan_folder_with_probes(catalog, root, cancel, options, progress, &DefaultVideoProbe)
+}
+
+/// [`scan_folder_with`] with an injected video probe. The default scan uses
+/// real ffprobe ([`Ffprobe`]); tests inject fixtures and failure modes. The
+/// probe runs inside the scan transaction: every added/updated video file is
+/// probed, successful results land in `metadata`, and a failed probe is
+/// logged and *marked* (`video_probe_ok = 0`) — a corrupt video never fails
+/// the scan (PLAN §9).
+pub fn scan_folder_with_probes(
+    catalog: &mut Catalog,
+    root: &Path,
+    cancel: &AtomicBool,
+    options: &ScanOptions,
+    progress: &dyn Fn(ScanProgress),
+    video_probe: &dyn VideoProbe,
+) -> Result<ScanReport> {
     if cancel.load(Ordering::Relaxed) {
         return Ok(ScanReport { cancelled: true, ..ScanReport::default() });
     }
@@ -172,7 +194,8 @@ pub fn scan_folder_with(
     }
 
     catalog.begin_uncommitted_batch()?;
-    let result = scan_inner(catalog, root, &dirs, &files, options.full);
+    let result = scan_inner(catalog, root, &dirs, &files, options.full)
+        .and_then(|report| probe_videos(catalog, root, cancel, video_probe).map(|_| report));
     match result {
         Ok(report) => {
             catalog.commit_batch()?;
@@ -328,6 +351,83 @@ fn existing_folders(catalog: &Catalog, root_str: &str) -> Result<Vec<String>> {
         .prepare("SELECT path FROM folders WHERE path != ?1 AND path LIKE ?1 || ?2 || '%'")?;
     let rows = stmt.query_map(rusqlite::params![root_str, sep], |r| r.get::<_, String>(0))?;
     Ok(rows.flatten().collect())
+}
+
+/// Probe the videos this scan touched. Runs inside the scan transaction:
+/// each added/updated video gets one ffprobe call, a successful result is
+/// stored (`catalog::set_video_metadata`) and a failure is logged with the
+/// file marked (`mark_video_probe_failed`) — corrupt media never aborts the
+/// scan (PLAN §9: malformed files must never crash).
+fn probe_videos(
+    catalog: &mut Catalog,
+    root: &Path,
+    cancel: &AtomicBool,
+    video_probe: &dyn VideoProbe,
+) -> Result<()> {
+    let root_str = root.to_string_lossy().into_owned();
+    let pending = catalog.videos_needing_probe_under(&root_str, PROBE_BATCH)?;
+    for (file_id, path, mtime) in pending {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        match video_probe.probe(Path::new(&path)) {
+            Ok(meta) => {
+                catalog.set_video_metadata(file_id, &to_catalog_meta(&meta), mtime)?;
+            }
+            Err(e) => {
+                tracing::warn!(file = %path, error = %e, "video probe failed; file marked");
+                catalog.mark_video_probe_failed(file_id, mtime)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Per-scan probe batch: a scan never grows unboundedly (§3 rule 4). A
+/// library with more unprobed videos than this finishes via
+/// [`refresh_video_metadata`] passes driven by the job queue.
+const PROBE_BATCH: usize = 4096;
+
+fn to_catalog_meta(meta: &ProbeMeta) -> fotobase_catalog::VideoMeta {
+    fotobase_catalog::VideoMeta {
+        duration_secs: meta.duration_secs,
+        codec: meta.codec.clone(),
+        profile: meta.profile.clone(),
+        rotation_deg: meta.rotation_deg,
+    }
+}
+
+/// Bounded standalone pass over every catalogued video still needing a probe
+/// (never-probed, or probed at a stale mtime). The app drives this after a
+/// scan that changed something and on schema upgrade, so a library scanned
+/// before this feature gains its video metadata without a full rescan.
+/// Returns how many videos were probed this pass; `0` means done, the
+/// caller's stop signal — same contract as [`backfill_hashes`]. Probe
+/// failures are logged and marked, never fatal.
+pub fn refresh_video_metadata(
+    catalog: &mut Catalog,
+    batch: usize,
+    cancel: &AtomicBool,
+    video_probe: &dyn VideoProbe,
+) -> Result<usize> {
+    let pending = catalog.videos_needing_probe(batch)?;
+    let mut probed = 0usize;
+    for (file_id, path, mtime) in pending {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        match video_probe.probe(Path::new(&path)) {
+            Ok(meta) => {
+                catalog.set_video_metadata(file_id, &to_catalog_meta(&meta), mtime)?;
+                probed += 1;
+            }
+            Err(e) => {
+                tracing::warn!(file = %path, error = %e, "video probe failed; file marked");
+                catalog.mark_video_probe_failed(file_id, mtime)?;
+            }
+        }
+    }
+    Ok(probed)
 }
 
 fn upsert_file(catalog: &Catalog, f: &WalkedFile) -> Result<()> {

@@ -1,0 +1,21 @@
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_name": "h264",
+      "profile": "Main",
+      "codec_type": "video",
+      "width": 640,
+      "height": 480,
+      "duration": "2.000000",
+      "tags": {
+        "rotate": "180"
+      }
+    }
+  ],
+  "format": {
+    "filename": "legacy.avi",
+    "format_name": "avi",
+    "duration": "2.000000"
+  }
+}

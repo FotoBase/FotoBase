@@ -181,23 +181,24 @@ fn detailed_search_intersects_with_folder_selection() {
 
 #[test]
 fn fts_backfills_existing_rows_on_migration() {
-    // A v1 catalog (pre-01-008) already holds files; migration v2 must index
-    // them, not only future inserts.
+    // A genuine v1 catalog (pre-01-008) already holds files; migration v2
+    // must index them, not only future inserts. Build the v1 schema from the
+    // recorded migration SQL, insert via plain SQL, then let `Catalog::open`
+    // run migrations v2+.
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("catalog.db");
     {
-        let mut cat = Catalog::open(&path).unwrap();
-        add_file(&mut cat, "/photos/2024", "beach.jpg");
-        // Simulate the old build: strip triggers + wipe the index.
-        cat.conn()
-            .execute_batch(
-                "DROP TRIGGER files_fts_insert;
-             DROP TRIGGER files_fts_update;
-             DROP TRIGGER files_fts_delete;
-             DELETE FROM files_fts;
-             PRAGMA user_version = 1;",
-            )
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(fotobase_catalog::MIGRATIONS[0]).unwrap();
+        conn.execute_batch("PRAGMA user_version = 1").unwrap();
+        conn.execute("INSERT INTO folders(path, scan_mode) VALUES ('/photos/2024', 'once')", [])
             .unwrap();
+        conn.execute(
+            "INSERT INTO files(folder_id, path, filename, size, mtime, media_type)
+             VALUES (1, '/photos/2024/beach.jpg', 'beach.jpg', 1, 0.0, 'image')",
+            [],
+        )
+        .unwrap();
     }
     let reopened = Catalog::open(&path).expect("reopen");
     assert_eq!(reopened.search_files("beach", 100).unwrap().len(), 1);
