@@ -137,6 +137,21 @@ fn local_paths_are_not_network() {
     assert!(!is_network_path(tmp.path()), "tmpdir is a local filesystem");
 }
 
+/// Windows regression: `fs::canonicalize` returns extended-length paths
+/// (`\\?\C:\...`); those are local drives and must not match the `\\`
+/// UNC prefix check — CI (run 40353505615) classified every canonicalized
+/// root as network, so local roots got the poller and `notify` tests starved.
+#[cfg(windows)]
+#[test]
+fn windows_canonicalized_local_paths_are_not_network() {
+    let tmp = tempfile::tempdir().unwrap();
+    let canon = std::fs::canonicalize(tmp.path()).unwrap();
+    assert!(!is_network_path(&canon), "\\\\?\\C:\\... is a local drive");
+    assert!(!is_network_path(tmp.path()));
+    assert!(is_network_path(std::path::Path::new("\\\\server\\share")));
+    assert!(is_network_path(std::path::Path::new("\\\\?\\UNC\\server\\share")));
+}
+
 /// Selection criterion: a network-classified root is served by the polling
 /// backend, not `notify`. Driven through the watcher's backend decision with
 /// a forced network classification (a real SMB mount is not available in

@@ -300,6 +300,15 @@ fn is_network_path_windows(path: &Path) -> bool {
     // UNC paths (\\server\share or \\?\UNC\...) are network by definition;
     // mapped drives would need WNetGetConnection (extra FFI) — UNC detection
     // covers the common NAS case and keeps this std-only.
+    //
+    // Careful: fs::canonicalize on Windows returns extended-length paths like
+    // \\?\C:\Users\... — those start with \\?\ but are LOCAL drives and must
+    // not be classified as network (they start with a drive specifier, not
+    // UNC\). Network is exactly: \\server\share, or \\?\UNC\server\share.
     let s = path.as_os_str().to_string_lossy();
-    s.starts_with("\\\\") && !s.starts_with("\\\\?\\UNC\\") || s.starts_with("\\\\?\\UNC\\")
+    if let Some(rest) = s.strip_prefix("\\\\?\\UNC\\") {
+        let _ = rest;
+        return true;
+    }
+    s.starts_with("\\\\") && !s.starts_with("\\\\?\\")
 }
