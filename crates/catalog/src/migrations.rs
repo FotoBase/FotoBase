@@ -6,7 +6,7 @@
 //! rejected (`CatalogError::NewerSchema`) — we never downgrade.
 
 /// Ordered migration SQL. Index 0 upgrades a version-0 database to version 1.
-pub const MIGRATIONS: &[&str] = &[MIGRATION_V1, MIGRATION_V2];
+pub const MIGRATIONS: &[&str] = &[MIGRATION_V1, MIGRATION_V2, MIGRATION_V3];
 
 const MIGRATION_V1: &str = "
 CREATE TABLE folders (
@@ -102,6 +102,23 @@ INSERT INTO files_fts(rowid, filename, folder)
 ";
 
 use rusqlite::Connection;
+
+/// TASK-02-003: ffprobe-derived video metadata lives in the same `metadata`
+/// row as the EXIF cache (PLAN §2 Video strategy: "extracted at scan time via
+/// ffprobe, stored in the catalog `metadata` table"). `video_probe_ok` marks
+/// the probe outcome (`NULL` = not probed yet, `1` = ok, `0` = corrupt /
+/// failed — a failed probe is logged and marked, never fatal, PLAN §9) and
+/// `video_probe_mtime` records the file mtime probed, so a later scan only
+/// re-probes videos whose (mtime, size) changed.
+const MIGRATION_V3: &str = "
+ALTER TABLE metadata ADD COLUMN video_duration REAL;
+ALTER TABLE metadata ADD COLUMN video_codec TEXT;
+ALTER TABLE metadata ADD COLUMN video_profile TEXT;
+ALTER TABLE metadata ADD COLUMN video_rotation INTEGER;
+ALTER TABLE metadata ADD COLUMN video_probe_ok INTEGER;
+ALTER TABLE metadata ADD COLUMN video_probe_mtime REAL;
+CREATE INDEX idx_metadata_video_probe ON metadata(video_probe_ok, video_probe_mtime);
+";
 
 /// Apply all pending migrations, in order, each in its own transaction.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {

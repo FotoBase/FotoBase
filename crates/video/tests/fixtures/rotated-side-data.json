@@ -1,0 +1,23 @@
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_name": "h264",
+      "profile": "High",
+      "codec_type": "video",
+      "width": 4032,
+      "height": 3024,
+      "duration": "3.200000",
+      "side_data_list": [
+        {
+          "rotation": -90
+        }
+      ]
+    }
+  ],
+  "format": {
+    "filename": "rotated.mov",
+    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+    "duration": "3.200000"
+  }
+}

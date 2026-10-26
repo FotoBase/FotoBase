@@ -1,6 +1,6 @@
 # task: ffprobe metadata extraction and ffmpeg sidecar packaging
 
-**Feature:** [FEAT-02-03-video-playback](FEAT-02-03-video-playback.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** todo
+**Feature:** [FEAT-02-03-video-playback](FEAT-02-03-video-playback.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in review (2026-10-26)
 
 ## Description
 Create the `video` crate (PLAN §3 module layout): extract duration, codec, and rotation via ffprobe at scan time into the catalog `metadata` table (PLAN §2 Video strategy), and package an LGPL ffmpeg sidecar binary with no non-free codecs.
@@ -22,6 +22,6 @@ Create the `video` crate (PLAN §3 module layout): extract duration, codec, and 
 - Integration: bundled ffmpeg reports expected version and no non-free encoders (`-encoders` output checked in CI).
 
 ## Acceptance criteria
-- [ ] 02-003: duration, codec, rotation extracted at scan time into catalog `metadata`.
-- [ ] 02-003: corrupt video files don't crash the scanner.
-- [ ] 02-003: LGPL ffmpeg sidecar packaged for all three OSes, license documented.
+- [x] 02-003: duration, codec, rotation extracted at scan time into catalog `metadata`.
+- [x] 02-003: corrupt video files don't crash the scanner.
+- [x] 02-003: LGPL ffmpeg sidecar packaged for all three OSes, license documented.

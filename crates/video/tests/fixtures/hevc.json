@@ -1,0 +1,27 @@
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_name": "hevc",
+      "codec_long_name": "H.265 / HEVC (High Efficiency Video Coding)",
+      "profile": "Main 10",
+      "codec_type": "video",
+      "width": 3840,
+      "height": 2160,
+      "pix_fmt": "yuv420p10le",
+      "r_frame_rate": "60/1",
+      "duration": "12.500000"
+    },
+    {
+      "index": 1,
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "duration": "12.480000"
+    }
+  ],
+  "format": {
+    "filename": "clip.mov",
+    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+    "duration": "12.500000"
+  }
+}

@@ -1,0 +1,82 @@
+name: ffmpeg-sidecar
+
+# TASK-02-003: build the pinned LGPL ffmpeg sidecar and verify it has no
+# non-free codecs, on all three OSes (PLAN §2 Video strategy, §10 risk row,
+# tools/ffmpeg-sidecar/README.md). Runs on PRs touching the sidecar tooling
+# and on release tags, so a license drift fails CI instead of shipping.
+
+"on":
+  pull_request:
+    paths:
+      - "tools/ffmpeg-sidecar/**"
+      - ".github/workflows/ffmpeg-sidecar.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/ffmpeg-sidecar/**"
+      - ".github/workflows/ffmpeg-sidecar.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ffmpeg-sidecar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+          - os: windows-latest
+          - os: macos-15
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build prerequisites (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential yasm nasm pkg-config
+
+      - name: Install build prerequisites (macOS)
+        if: runner.os == 'macOS'
+        run: brew install yasm nasm
+
+      - name: Install build prerequisites (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          update: false
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-gcc
+            make
+            yasm
+            nasm
+            diffutils
+            pkg-config
+
+      - name: Build pinned LGPL ffmpeg
+        if: runner.os != 'Windows'
+        shell: bash
+        run: tools/ffmpeg-sidecar/build.sh ./sidecar
+
+      # configure needs the msys2/mingw toolchain in PATH, not Git Bash.
+      - name: Build pinned LGPL ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: tools/ffmpeg-sidecar/build.sh ./sidecar
+
+      - name: Verify LGPL / no non-free codecs
+        shell: bash
+        run: tools/ffmpeg-sidecar/check.sh ./sidecar/ffmpeg
+
+      - name: Verify pinned version
+        shell: bash
+        run: |
+          version="$(./sidecar/ffmpeg -version | head -1)"
+          echo "$version"
+          echo "$version" | grep -q "ffmpeg version 7.1.1" || {
+            echo "::error::sidecar ffmpeg version drift (pinned 7.1.1)"; exit 1;
+          }

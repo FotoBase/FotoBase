@@ -7,6 +7,7 @@ members = [
     "crates/metadata",
     "crates/render",
     "crates/jobs",
+    "crates/video",
     "app/src-tauri",
 ]
 

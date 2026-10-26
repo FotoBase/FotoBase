@@ -8,6 +8,7 @@ description = "Folder walk, notify watcher, import"
 
 [dependencies]
 fotobase-catalog = { path = "../catalog" }
+fotobase-video = { path = "../video" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 notify = "6"
 sha2 = "0.10"
