@@ -13,7 +13,7 @@ Each item is independently shippable. Ordered: color management → video → NA
 ## feat: color management (P1.5 display scope)
 
 - [x] `02-001` (M) Read display ICC profile (macOS/Windows); color-managed preview path in render crate; sRGB fallback on Linux.
-- [ ] `02-002` (S) Golden-image tests for display transform; visual comparison vs OS viewers.
+- [x] `02-002` (S) Golden-image tests for display transform; visual comparison vs OS viewers.
 
 ## feat: video playback (§2 Video strategy)
 
