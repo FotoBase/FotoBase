@@ -48,7 +48,9 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           update: false
+          msystem: MINGW64
           install: >-
+            mingw-w64-x86_64-gcc
             make
             yasm
             nasm
@@ -56,7 +58,14 @@ jobs:
             pkg-config
 
       - name: Build pinned LGPL ffmpeg
+        if: runner.os != 'Windows'
         shell: bash
+        run: tools/ffmpeg-sidecar/build.sh ./sidecar
+
+      # configure needs the msys2/mingw toolchain in PATH, not Git Bash.
+      - name: Build pinned LGPL ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
         run: tools/ffmpeg-sidecar/build.sh ./sidecar
 
       - name: Verify LGPL / no non-free codecs
