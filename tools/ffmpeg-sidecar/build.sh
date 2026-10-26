@@ -20,7 +20,12 @@ trap 'rm -rf "$work"' EXIT
 
 echo ">> downloading ffmpeg ${FFMPEG_VERSION}"
 curl -sSL -o "$work/ffmpeg.tar.xz" "$URL"
-echo "$FFMPEG_SHA256  $work/ffmpeg.tar.xz" | shasum -a 256 -c -
+# macOS ships shasum, Git Bash/msys2 ships sha256sum — use whichever exists.
+if command -v sha256sum >/dev/null 2>&1; then
+    echo "$FFMPEG_SHA256  $work/ffmpeg.tar.xz" | sha256sum -c -
+else
+    echo "$FFMPEG_SHA256  $work/ffmpeg.tar.xz" | shasum -a 256 -c -
+fi
 
 tar -xf "$work/ffmpeg.tar.xz" -C "$work"
 cd "$work/ffmpeg-${FFMPEG_VERSION}"
