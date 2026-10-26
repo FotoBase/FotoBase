@@ -1,6 +1,6 @@
 # task: throttled scanning for network folders
 
-**Feature:** [FEAT-02-02-network-drives](FEAT-02-02-network-drives.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** todo
+**Feature:** [FEAT-02-02-network-drives](FEAT-02-02-network-drives.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in progress (2026-10-26)
 
 ## Description
 Make network-folder scans non-destructive to UX: IO limits, pause on disconnect, clean resume, lazy hashing (PLAN §6 P1.5 acceptance: mid-scan unplug pauses cleanly, resumes on reconnect, no UI hang).
@@ -22,7 +22,7 @@ Make network-folder scans non-destructive to UX: IO limits, pause on disconnect,
 - Unit: hash is not computed during scan of a network folder (spy on the hashing function).
 
 ## Acceptance criteria
-- [ ] 02-009: mid-scan disconnect pauses cleanly; UI stays responsive.
-- [ ] 02-009: reconnect resumes the scan with no duplicated work.
-- [ ] 02-009: hashing is lazy for network folders.
-- [ ] 02-009: IO throttling keeps interactive browsing responsive during a scan.
+- [x] 02-009: mid-scan disconnect pauses cleanly; UI stays responsive.
+- [x] 02-009: reconnect resumes the scan with no duplicated work.
+- [x] 02-009: hashing is lazy for network folders.
+- [x] 02-009: IO throttling keeps interactive browsing responsive during a scan.

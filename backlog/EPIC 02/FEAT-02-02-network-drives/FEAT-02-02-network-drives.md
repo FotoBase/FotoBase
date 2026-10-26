@@ -9,7 +9,7 @@
 - Disconnect/reconnect harness (CI virtual SMB or documented manual protocol) passes repeatedly.
 
 - [x] `02-008` (M) Polling watcher for SMB/NFS paths (adaptive interval, mtime+size) — `notify` never fires over network FS.
-- [ ] `02-009` (M) Throttled scanning for network folders: IO limits, pause-on-disconnect, clean resume, no UI hang; hash lazily.
+- [x] `02-009` (M) Throttled scanning for network folders: IO limits, pause-on-disconnect, clean resume, no UI hang; hash lazily.
 - [ ] `02-010` (S) Disconnect/reconnect test harness with virtual SMB share in CI (or documented manual protocol).
 
 ## Tasks
