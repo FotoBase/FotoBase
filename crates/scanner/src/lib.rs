@@ -22,6 +22,12 @@ pub use polling::{
     DEFAULT_POLL_MAX, DEFAULT_POLL_MIN, DEFAULT_SLOW_THRESHOLD,
 };
 
+mod network;
+pub use network::{
+    scan_network_folder, EntryMeta, FsOps, NetworkScanOptions, NetworkScanReport, NetworkScanState,
+    RealFs,
+};
+
 mod watcher;
 pub use watcher::{ScanHook, Watcher, WatcherError, DEFAULT_DEBOUNCE};
 
