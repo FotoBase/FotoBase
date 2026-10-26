@@ -1,6 +1,6 @@
 # task: polling watcher for SMB/NFS paths
 
-**Feature:** [FEAT-02-02-network-drives](FEAT-02-02-network-drives.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** todo
+**Feature:** [FEAT-02-02-network-drives](FEAT-02-02-network-drives.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in review (2026-10-26)
 
 ## Description
 Add a polling watcher for SMB/NFS-watched folders, because `notify` (inotify/FSEvents) never fires over network filesystems (PLAN §6 P1.5). Polls mtime+size with an adaptive interval; feeds the existing scanner pipeline.
@@ -22,6 +22,6 @@ Add a polling watcher for SMB/NFS-watched folders, because `notify` (inotify/FSE
 - Integration: an SMB mount (test harness from 02-010) sees an added file appear in the catalog within one poll cycle.
 
 ## Acceptance criteria
-- [ ] 02-008: network-watched folders use polling, not `notify`.
-- [ ] 02-008: add/change/delete on the share is reflected in the library without restart.
-- [ ] 02-008: poll interval adapts to share responsiveness within configured bounds.
+- [x] 02-008: network-watched folders use polling, not `notify`.
+- [x] 02-008: add/change/delete on the share is reflected in the library without restart.
+- [x] 02-008: poll interval adapts to share responsiveness within configured bounds.

@@ -31,6 +31,7 @@ use std::time::{Duration, Instant};
 use fotobase_catalog::Catalog;
 use notify::Watcher as NotifyWatcher;
 
+use crate::polling::{is_network_path, PollConfig, Poller};
 use crate::scan_folder;
 use crate::ScanReport;
 
@@ -62,6 +63,13 @@ enum Cmd {
     /// the root's watcher is dropped — otherwise a file written immediately
     /// after the call could still be picked up by the not-yet-removed watch.
     Remove(PathBuf, Sender<()>),
+}
+
+/// Which backend watches a root (TASK-02-008): `notify` for local
+/// filesystems, polling for SMB/NFS where inotify/FSEvents never fire.
+enum Backend {
+    Notify(notify::RecommendedWatcher),
+    Poll(Poller),
 }
 
 /// Canonicalize an event path; for vanished files fall back to
@@ -132,68 +140,103 @@ impl Watcher {
 
         let mut threads = Vec::new();
 
-        // Watch thread: one notify watcher per root (recommending a shared
-        // watcher is unreliable — on macOS the FSEvents backend restarts the
-        // whole stream on every watch() call, losing or replaying events);
-        // maps raw event paths back to the root as given and forwards the
-        // root to the debouncer.
+        // Watch thread: one backend per root. Local filesystems get a notify
+        // watcher (one per root — recommending a shared watcher is
+        // unreliable: on macOS the FSEvents backend restarts the whole
+        // stream on every watch() call, losing or replaying events);
+        // network-classified roots (SMB/NFS, where inotify/FSEvents never
+        // fire) get the adaptive polling watcher (TASK-02-008). Both
+        // backends feed the same event channel, so debounce and the serial
+        // scan worker are unchanged.
         {
             let event_tx = event_tx.clone();
-            let mut watchers: HashMap<PathBuf, notify::RecommendedWatcher> = HashMap::new();
+            let mut watchers: HashMap<PathBuf, Backend> = HashMap::new();
             for root in roots {
                 let canon = fs::canonicalize(root)?;
                 let given = root.clone();
-                let mut w = make_root_watcher(canon.clone(), given, event_tx.clone())?;
-                w.watch(&canon, notify::RecursiveMode::Recursive)?;
-                watchers.insert(canon, w);
+                let mut backend = if is_network_path(&canon) {
+                    Backend::Poll(Poller::spawn(
+                        given.clone(),
+                        event_tx.clone(),
+                        PollConfig::default(),
+                    ))
+                } else {
+                    Backend::Notify(make_root_watcher(canon.clone(), given, event_tx.clone())?)
+                };
+                if let Backend::Notify(w) = &mut backend {
+                    w.watch(&canon, notify::RecursiveMode::Recursive)?;
+                }
+                watchers.insert(canon, backend);
             }
             threads.push(thread::Builder::new().name("fb-watch".into()).spawn(move || {
                 for cmd in cmd_rx {
                     match cmd {
                         Cmd::Add(given, reply) => {
                             match fs::canonicalize(&given) {
-                                Ok(canon) => match make_root_watcher(
-                                    canon.clone(),
-                                    given.clone(),
-                                    event_tx.clone(),
-                                ) {
-                                    Ok(mut w) => {
-                                        if w.watch(&canon, notify::RecursiveMode::Recursive).is_ok()
-                                        {
-                                            watchers.insert(canon, w);
-                                            // Watcher arming is asynchronous on some
-                                            // backends (FSEvents schedules its runloop
-                                            // off-thread), so events in the arming gap
-                                            // can be missed. An immediate incremental
-                                            // scan through the debounce pipeline closes
-                                            // that gap; it is a fast no-op when nothing
-                                            // changed.
-                                            let _ = event_tx.send(given);
-                                        } else {
-                                            tracing::warn!(path = %given.display(), "cannot watch folder");
+                                Ok(canon) => {
+                                    if is_network_path(&canon) {
+                                        // Polling backend (TASK-02-008):
+                                        // notify never fires over SMB/NFS.
+                                        // The poller's first cycle establishes
+                                        // its baseline; a closing incremental
+                                        // scan through the debounce pipeline
+                                        // closes the arming gap, same as for
+                                        // notify.
+                                        watchers.insert(
+                                            canon,
+                                            Backend::Poll(Poller::spawn(
+                                                given.clone(),
+                                                event_tx.clone(),
+                                                PollConfig::default(),
+                                            )),
+                                        );
+                                        let _ = event_tx.send(given.clone());
+                                        let _ = reply.send(());
+                                    } else {
+                                        match make_root_watcher(
+                                            canon.clone(),
+                                            given.clone(),
+                                            event_tx.clone(),
+                                        ) {
+                                            Ok(mut w) => {
+                                                if w.watch(&canon, notify::RecursiveMode::Recursive).is_ok()
+                                                {
+                                                    watchers.insert(canon, Backend::Notify(w));
+                                                    // Watcher arming is asynchronous on some
+                                                    // backends (FSEvents schedules its runloop
+                                                    // off-thread), so events in the arming gap
+                                                    // can be missed. An immediate incremental
+                                                    // scan through the debounce pipeline closes
+                                                    // that gap; it is a fast no-op when nothing
+                                                    // changed.
+                                                    let _ = event_tx.send(given.clone());
+                                                } else {
+                                                    tracing::warn!(path = %given.display(), "cannot watch folder");
+                                                }
+                                            }
+                                            Err(e) => tracing::warn!(
+                                                path = %given.display(),
+                                                error = %e,
+                                                "cannot watch folder"
+                                            ),
                                         }
+                                        let _ = reply.send(());
                                     }
-                                    Err(e) => tracing::warn!(
-                                        path = %given.display(),
-                                        error = %e,
-                                        "cannot watch folder"
-                                    ),
-                                },
-                                Err(e) => tracing::warn!(
-                                    path = %given.display(),
-                                    error = %e,
-                                    "cannot watch folder"
-                                ),
+                                }
+                                Err(_) => {
+                                    let _ = reply.send(());
+                                }
                             }
-                            // Ack after the watcher is armed (or failed): the
-                            // caller may rely on the root being watched, and on
-                            // the closing incremental scan being enqueued.
-                            let _ = reply.send(());
                         }
                         Cmd::Remove(given, reply) => {
                             if let Ok(canon) = fs::canonicalize(&given) {
-                                // Dropping the watcher stops its stream.
-                                watchers.remove(&canon);
+                                // Dropping the watcher stops its stream; a
+                                // poll backend is stopped explicitly so its
+                                // thread joins (the notify watcher needs only
+                                // to be dropped).
+                                if let Some(Backend::Poll(poller)) = watchers.remove(&canon) {
+                                    poller.stop();
+                                }
                             }
                             // Ack after the watcher is dropped: past this point
                             // no further events for the root can be captured.
