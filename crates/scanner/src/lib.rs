@@ -16,6 +16,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use fotobase_catalog::{Catalog, Result};
 
+mod polling;
+pub use polling::{
+    is_network_path, AdaptiveInterval, PollConfig, Poller, DEFAULT_FAST_THRESHOLD,
+    DEFAULT_POLL_MAX, DEFAULT_POLL_MIN, DEFAULT_SLOW_THRESHOLD,
+};
+
 mod watcher;
 pub use watcher::{ScanHook, Watcher, WatcherError, DEFAULT_DEBOUNCE};
 
