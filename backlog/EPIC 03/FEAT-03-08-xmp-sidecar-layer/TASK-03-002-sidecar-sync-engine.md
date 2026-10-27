@@ -1,6 +1,6 @@
 # task: sidecar sync engine — catalog ↔ sidecar authority
 
-**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-27)
+**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-27)
 
 ## Description
 The sync engine implementing PLAN §5 authority rules: sidecars are authoritative for user data (rating, tags, caption, GPS, faces, recipe, stack membership, hidden flag — §11 Q5/Q6); the catalog is derived cache. Write-through on every user-data mutation; sidecar wins on conflict. Depends on 03-001 and the 00-010 design doc (hard gate for EPIC-03).
