@@ -1,6 +1,6 @@
 # task: metadata crate — own exiv2 bindings and sidecar read/write
 
-**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-27)
 
 ## Description
 Build the `metadata` crate: own exiv2 bindings (rexiv2 fork per PLAN §10 mitigation), read/write XMP sidecars next to originals, with merge-on-write per the 00-010 design doc ([`docs/sidecar-merge-on-write.md`](../../../docs/sidecar-merge-on-write.md) — gate satisfied 2026-10-20). Merge-on-write preserves unknown fields and backs up the previous sidecar version before every write (§5).
@@ -23,7 +23,7 @@ Build the `metadata` crate: own exiv2 bindings (rexiv2 fork per PLAN §10 mitiga
 - Integration: read → write → read round-trip preserves field order/unknowns byte-stably where possible.
 
 ## Acceptance criteria
-- [ ] 03-001: own exiv2 bindings (rexiv2 fork) with swappable backend trait.
-- [ ] 03-001: merge-on-write preserves unknown fields; previous version backed up.
-- [ ] 03-001: malformed sidecars never crash the scanner.
+- [x] 03-001: own exiv2 bindings (rexiv2 fork) with swappable backend trait.
+- [x] 03-001: merge-on-write preserves unknown fields; previous version backed up.
+- [x] 03-001: malformed sidecars never crash the scanner.
 - [x] 03-001: 00-010 design doc landed before implementation (hard gate).

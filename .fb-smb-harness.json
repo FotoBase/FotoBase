@@ -1,0 +1,7 @@
+{
+  "mounted": true,
+  "mountpoint": "/tmp/fb-smb-harness",
+  "port": "1445",
+  "container": "fb-smb-harness",
+  "populated": true
+}
