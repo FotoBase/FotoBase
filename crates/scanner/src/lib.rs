@@ -18,6 +18,7 @@ use fotobase_catalog::{Catalog, Result};
 use fotobase_video::VideoMeta as ProbeMeta;
 
 mod polling;
+pub mod reassoc;
 pub use polling::{
     is_network_path, AdaptiveInterval, PollConfig, Poller, DEFAULT_FAST_THRESHOLD,
     DEFAULT_POLL_MAX, DEFAULT_POLL_MIN, DEFAULT_SLOW_THRESHOLD,
@@ -36,6 +37,9 @@ pub use watcher::{ScanHook, Watcher, WatcherError, DEFAULT_DEBOUNCE};
 /// [`fotobase_video`]) for `media_type = video` files at scan time.
 pub use fotobase_video::{Ffprobe as DefaultVideoProbe, VideoError, VideoProbe};
 
+pub use fotobase_catalog::MissingFile;
+pub use reassoc::{follow_sidecar, match_missing, try_reassociate, ReassocOutcome};
+
 pub mod import;
 pub use import::{
     content_hash, copy_file, import_folder, ImportOptions, ImportProgress, ImportReport, Naming,
@@ -52,6 +56,13 @@ pub struct ScanReport {
     pub updated: usize,
     pub skipped: usize,
     pub removed: usize,
+    /// New-looking paths re-associated with vanished files by
+    /// (size, mtime, hash) matching (TASK-03-003, 00-010 §4). Not counted in
+    /// `added`: the file is not new, its user data was restored.
+    pub reassociated: usize,
+    /// Byte-identical candidates that could not be told apart — surfaced,
+    /// never silently resolved (00-010 §4.4). The file is added as new.
+    pub ambiguous: usize,
     /// True if the cancel flag stopped the walk early.
     pub cancelled: bool,
 }
@@ -61,7 +72,7 @@ impl ScanReport {
     /// matched by mtime+size) must not wake the UI — the `library-changed`
     /// event only fires for real changes.
     pub fn changed(&self) -> bool {
-        self.added + self.updated + self.removed > 0
+        self.added + self.updated + self.removed + self.reassociated > 0
     }
 }
 
@@ -225,7 +236,20 @@ fn scan_inner(
     let existing = existing_files(catalog, &root_str)?;
 
     let mut report = ScanReport::default();
+
+    // Snapshot vanished files and delete them first, so the same scan can
+    // already re-associate the moved/renamed file that replaced them
+    // (00-010 §4: matching happens against the missing-file set).
     let walked: HashSet<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    let vanished: Vec<String> =
+        existing.keys().filter(|p| !walked.contains(p.as_str())).cloned().collect();
+    if !vanished.is_empty() {
+        catalog.snapshot_missing(&vanished)?;
+    }
+    for path in &vanished {
+        catalog.conn().execute("DELETE FROM files WHERE path = ?1", [path.as_str()])?;
+        report.removed += 1;
+    }
 
     for f in files {
         match existing.get(f.path.as_str()) {
@@ -237,16 +261,22 @@ fn scan_inner(
                 report.updated += 1;
             }
             None => {
-                upsert_file(catalog, f)?;
-                report.added += 1;
+                // The old file may be back at its original location (moved
+                // away and returned): forget the missing record either way.
+                catalog.drop_missing(&f.path)?;
+                match try_reassociate(catalog, &f.path, &f.dir, f.size, f.mtime, f.media_type)? {
+                    ReassocOutcome::Match(_) => report.reassociated += 1,
+                    ReassocOutcome::Ambiguous(_) => {
+                        report.ambiguous += 1;
+                        upsert_file(catalog, f)?;
+                        report.added += 1;
+                    }
+                    ReassocOutcome::NoMatch => {
+                        upsert_file(catalog, f)?;
+                        report.added += 1;
+                    }
+                }
             }
-        }
-    }
-
-    for path in existing.keys() {
-        if !walked.contains(path.as_str()) {
-            catalog.conn().execute("DELETE FROM files WHERE path = ?1", [path.as_str()])?;
-            report.removed += 1;
         }
     }
 

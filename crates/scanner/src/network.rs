@@ -30,6 +30,7 @@ use std::time::{Duration, Instant};
 
 use fotobase_catalog::Catalog;
 
+use crate::reassoc::{try_reassociate, ReassocOutcome};
 use crate::{media_type, ScanProgress};
 
 /// One directory entry as the scan needs it: path, kind, size and mtime.
@@ -138,6 +139,12 @@ pub struct NetworkScanReport {
     pub updated: usize,
     pub skipped: usize,
     pub removed: usize,
+    /// New-looking paths re-associated with vanished files by
+    /// (size, mtime, hash) matching (TASK-03-003); not counted in `added`.
+    pub reassociated: usize,
+    /// Byte-identical candidates that could not be told apart — surfaced,
+    /// never silently resolved (00-010 §4.4). The file is added as new.
+    pub ambiguous: usize,
     /// Aggregated IO error count (not per-file error details).
     pub errors: usize,
     /// Directory paths committed so far (carried-over + this pass). Pass
@@ -151,7 +158,7 @@ impl NetworkScanReport {
     /// Did this scan change the catalog at all? (Mirrors
     /// [`crate::ScanReport::changed`].)
     pub fn changed(&self) -> bool {
-        self.added + self.updated + self.removed > 0
+        self.added + self.updated + self.removed + self.reassociated > 0
     }
 }
 
@@ -380,12 +387,34 @@ fn process_directory(
         .collect();
     drop(stmt);
 
-    let mut walked: HashSet<String> = HashSet::new();
+    // Existing media paths seen in this directory's listing — computed up
+    // front so the vanished snapshot below cannot mistake a file that Samba
+    // lists late (retry pacing, slow metadata) for a vanished one.
+    let walked_now: HashSet<String> = entries
+        .iter()
+        .filter(|e| !e.is_dir && media_type(&e.path).is_some())
+        .map(|e| e.path.to_string_lossy().into_owned())
+        .collect();
+
+    // Snapshot this directory's vanished files before deleting them, so the
+    // same pass can re-associate moved/renamed files with their user data
+    // (00-010 §4). Network files are matched without reading contents: the
+    // rate limiter paces every op, and the lazy hash of the new file is the
+    // only read that may happen.
+    let vanished: Vec<String> =
+        existing.keys().filter(|p| !walked_now.contains(p.as_str())).cloned().collect();
+    if !vanished.is_empty() {
+        catalog.snapshot_missing(&vanished)?;
+    }
+    for path in &vanished {
+        catalog.conn().execute("DELETE FROM files WHERE path = ?1", [path.as_str()])?;
+        report.removed += 1;
+    }
+
     for entry in entries.iter().filter(|e| !e.is_dir) {
         limiter.acquire();
         let path_str = entry.path.to_string_lossy().into_owned();
         let Some(media) = media_type(&entry.path) else { continue };
-        walked.insert(path_str.clone());
         match existing.get(&path_str) {
             Some((size, mtime)) if *size == entry.size as i64 && *mtime == entry.mtime => {
                 report.skipped += 1;
@@ -395,18 +424,30 @@ fn process_directory(
                 report.updated += 1;
             }
             None => {
-                upsert(catalog, folder_id, &path_str, entry, media)?;
-                report.added += 1;
+                catalog.drop_missing(&path_str)?;
+                match try_reassociate(
+                    catalog,
+                    &path_str,
+                    &dir_str,
+                    entry.size as i64,
+                    entry.mtime,
+                    media,
+                )? {
+                    ReassocOutcome::Match(_) => report.reassociated += 1,
+                    ReassocOutcome::Ambiguous(_) => {
+                        report.ambiguous += 1;
+                        upsert(catalog, folder_id, &path_str, entry, media)?;
+                        report.added += 1;
+                    }
+                    ReassocOutcome::NoMatch => {
+                        upsert(catalog, folder_id, &path_str, entry, media)?;
+                        report.added += 1;
+                    }
+                }
             }
         }
     }
 
-    for path in existing.keys() {
-        if !walked.contains(path) {
-            catalog.conn().execute("DELETE FROM files WHERE path = ?1", [path.as_str()])?;
-            report.removed += 1;
-        }
-    }
     Ok(())
 }
 

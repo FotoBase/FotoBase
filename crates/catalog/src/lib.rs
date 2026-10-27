@@ -6,9 +6,11 @@
 //! trigger the rebuild-from-sidecars recovery path.
 
 pub mod migrations;
+pub mod missing;
 pub mod sync;
 
 pub use migrations::MIGRATIONS;
+pub use missing::MissingFile;
 pub use sync::{sidecar_path, SyncError, SyncStats};
 
 use std::path::{Path, PathBuf};

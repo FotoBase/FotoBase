@@ -6,7 +6,8 @@
 //! rejected (`CatalogError::NewerSchema`) — we never downgrade.
 
 /// Ordered migration SQL. Index 0 upgrades a version-0 database to version 1.
-pub const MIGRATIONS: &[&str] = &[MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4];
+pub const MIGRATIONS: &[&str] =
+    &[MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5];
 
 const MIGRATION_V1: &str = "
 CREATE TABLE folders (
@@ -111,6 +112,38 @@ const MIGRATION_V4: &str = "
 ALTER TABLE files ADD COLUMN sidecar_mtime INTEGER;
 ALTER TABLE files ADD COLUMN sidecar_size INTEGER;
 CREATE INDEX idx_files_sidecar_sync ON files(sidecar_mtime, sidecar_size);
+";
+
+/// TASK-03-003: missing-file records for move/rename re-association
+/// (00-010 design §4). When the scanner deletes rows for vanished files it
+/// first snapshots them here; a later scan matches new-looking paths against
+/// this set by (size, mtime window, lazy hash) and re-creates the file row
+/// with the snapshotted user data, so stars/tags/captions/albums follow the
+/// file. Rows cascade away with their folder (the folder is really gone).
+const MIGRATION_V5: &str = "
+CREATE TABLE missing_files (
+    id         INTEGER PRIMARY KEY,
+    path       TEXT NOT NULL UNIQUE,
+    filename   TEXT NOT NULL,
+    folder_id  INTEGER NOT NULL,
+    size       INTEGER NOT NULL,
+    mtime      REAL NOT NULL,
+    hash       TEXT,
+    media_type TEXT NOT NULL CHECK (media_type IN ('image', 'video')),
+    rating     INTEGER,
+    caption    TEXT,
+    tags       TEXT,
+    latitude   REAL,
+    longitude  REAL,
+    missing_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE missing_file_tags (
+    missing_id INTEGER NOT NULL REFERENCES missing_files(id) ON DELETE CASCADE,
+    tag        TEXT NOT NULL,
+    PRIMARY KEY (missing_id, tag)
+);
+CREATE INDEX idx_missing_size ON missing_files(size, media_type);
+CREATE INDEX idx_missing_hash ON missing_files(hash);
 ";
 
 use rusqlite::Connection;

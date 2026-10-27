@@ -13,7 +13,7 @@
 
 - [x] `03-001` (L) `metadata` crate: exiv2 own bindings (rexiv2 fork); read/write sidecars; merge-on-write per 00-010 (preserve unknown fields, backup previous version).
 - [x] `03-002` (M) Sidecar sync engine: catalog ↔ sidecar authority rules (sidecar wins for user data, §5); write-through on every user-data mutation.
-- [ ] `03-003` (M) Move/rename re-association: (size, mtime, hash) matching; sidecar follows the original (00-010 design).
+- [x] `03-003` (M) Move/rename re-association: (size, mtime, hash) matching; sidecar follows the original (00-010 design).
 - [ ] `03-004` (M) Interop test suite: round-trip sidecars through darktable + digiKam (tags, ratings, captions, GPS) in CI.
 
 ## feat: user organization data

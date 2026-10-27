@@ -28,7 +28,7 @@ fn seed_video_file(cat: &mut Catalog, path: &str, mtime: f64) -> i64 {
 fn migration_v3_present() {
     let dir = tempdir().unwrap();
     let cat = open(dir.path());
-    assert_eq!(cat.schema_version().unwrap(), 4);
+    assert_eq!(cat.schema_version().unwrap(), 5);
     let cols: Vec<String> = {
         let mut stmt = cat
             .conn()
