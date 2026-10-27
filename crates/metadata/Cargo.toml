@@ -9,6 +9,10 @@ description = "EXIF/IPTC/XMP read/write via exiv2 bindings"
 [dependencies]
 tracing.workspace = true
 thiserror.workspace = true
+quick-xml = "0.42"
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints]
 workspace = true
