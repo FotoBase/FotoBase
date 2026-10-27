@@ -1,6 +1,6 @@
 # task: move/rename re-association by (size, mtime, hash)
 
-**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-27)
 
 ## Description
 When a file is renamed or moved outside Fotobase, re-associate it with its sidecar and user data by (size, mtime, content hash) matching instead of treating it as new (PLAN §5 authority section; P2a acceptance). Implementation follows the 00-010 design doc (hard gate for EPIC-03).
@@ -23,6 +23,6 @@ When a file is renamed or moved outside Fotobase, re-associate it with its sidec
 - Integration: rename fixture file in OS → rescan → stars/tags intact, sidecar follows, no duplicate row.
 
 ## Acceptance criteria
-- [ ] 03-003: renamed/moved-outside files re-associate by (size, mtime, hash), not treated as new.
-- [ ] 03-003: sidecar follows the original per 00-010.
-- [ ] 03-003: ambiguous matches surfaced; no false merges.
+- [x] 03-003: renamed/moved-outside files re-associate by (size, mtime, hash), not treated as new.
+- [x] 03-003: sidecar follows the original per 00-010.
+- [x] 03-003: ambiguous matches surfaced; no false merges.
