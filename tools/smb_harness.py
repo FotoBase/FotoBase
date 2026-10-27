@@ -155,10 +155,12 @@ def cmd_mount(args: argparse.Namespace) -> int:
                         "mount",
                         "-t",
                         "cifs",
-                        f"//127.0.0.1:{PORT}/{SHARE}",
+                        # mount.cifs does not accept //host:port/share — the port
+                        # goes into the port= option.
+                        f"//127.0.0.1/{SHARE}",
                         str(mp),
                         "-o",
-                        f"username={USER},password={PASS},vers=3.0,soft,_netdev",
+                        f"username={USER},password={PASS},vers=3.0,soft,_netdev,port={PORT}",
                     ]
                 )
             else:
