@@ -13,6 +13,7 @@
   import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
   import Viewer from "./lib/Viewer.svelte";
   import { deleteFromDisk, exitApp, refreshFolderThumbnails, revealInDisk } from "./lib/file-menu";
+import { reportCodecSupport } from "./lib/codec-probe";
   import { removeFolder } from "./lib/folder-manager";
   import type { FolderInfo, MenuItem } from "./lib/folder-tree";
   import { debounce, throttle, type GridItem } from "./lib/grid";
@@ -139,6 +140,10 @@
       const s = await loadSettings();
       settings = s;
       setLocale(s.language);
+      // Codec probe (TASK-02-005): fire-and-forget so it never blocks
+      // startup (functional spec); the cached matrix drives the HTML5 vs
+      // `stream://` playback decision (02-006).
+      void reportCodecSupport();
       await runUpdateFlow(s.update_mode);
       await refreshLibrary();
       await openOsFiles();
