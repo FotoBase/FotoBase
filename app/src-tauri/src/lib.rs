@@ -23,6 +23,7 @@ pub mod perf_probe;
 pub mod preview;
 pub mod rebuild;
 pub mod settings;
+pub mod stream;
 pub mod thumb;
 
 /// Crate identity, used by the workspace smoke test.
@@ -96,6 +97,10 @@ struct AppState {
     /// the playback decision before choosing HTML5 `<video>` vs `stream://`
     /// transcode (02-006). `None` until the frontend has probed.
     codec_support: Mutex<Option<codec::CodecSupport>>,
+    /// In-flight `stream://` transcodes (TASK-02-006) keyed by file-id:
+    /// `stop_stream` kills them, a superseding request kills the previous
+    /// one, and a janitor reaps idle stragglers as the backstop.
+    streams: stream::StreamRegistry,
 }
 
 /// Destination profile for the render pipeline (TASK-02-001, PLAN §6 P1.5):
@@ -347,6 +352,46 @@ fn preview_response(reply: preview::PreviewReply) -> tauri::http::Response<Vec<u
         .expect("static preview response parts are valid")
 }
 
+// --- stream:// transcode fallback (TASK-02-006, PLAN §2 Video strategy) -----
+
+fn stream_response(reply: stream::StreamReply) -> tauri::http::Response<Vec<u8>> {
+    tauri::http::Response::builder()
+        .status(reply.status)
+        .header("content-type", reply.content_type)
+        .header("access-control-allow-origin", "*")
+        // A transcode stream is per-request (the player re-requests at the
+        // current position to continue or seek); it must never be cached.
+        .header("cache-control", "no-store")
+        .body(reply.body)
+        .expect("static stream response parts are valid")
+}
+
+/// Resolve a `stream://<file-id>` request against the catalog and serve the
+/// transcode. Unknown ids and non-video files get a 404 — the player routes
+/// only video here, so anything else is a stale/malformed request.
+fn stream_reply_for(app: &tauri::AppHandle, req: stream::StreamRequest) -> stream::StreamReply {
+    let state = app.state::<AppState>();
+    let info = with_catalog(&state, |cat| cat.photo_info(req.file_id)).ok().flatten();
+    let Some(info) = info else {
+        return stream::StreamReply { status: 404, content_type: "text/plain", body: Vec::new() };
+    };
+    if info.media_type != "video" {
+        return stream::StreamReply { status: 404, content_type: "text/plain", body: Vec::new() };
+    }
+    // The target intermediate is chosen from the WebView's probe matrix
+    // (H.264/mp4 preferred, VP9/webm fallback); an unprobed matrix defaults
+    // to the H.264 best effort inside `choose_target`.
+    let support = state.codec_support.lock().ok().and_then(|g| *g);
+    let job = stream::StreamJob {
+        bin: fotobase_video::ffmpeg_bin(),
+        src: info.path.into(),
+        target: stream::choose_target(support.as_ref()),
+        start_secs: req.start_secs,
+        file_id: req.file_id,
+    };
+    stream::serve(&job, &state.streams)
+}
+
 // --- Folder Manager (TASK-01-016, PLAN §2A) ---------------------------------
 
 /// Apply a folder's scan mode: "once" scans it now and leaves it unwatched;
@@ -465,6 +510,14 @@ fn get_codec_support(
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<codec::CodecSupport>, String> {
     Ok(*state.codec_support.lock().map_err(|e| format!("codec-support mutex poisoned: {e}"))?)
+}
+
+/// Player stop/destroy (TASK-02-006): cancel the in-flight transcode for a
+/// file, killing and reaping the ffmpeg child — no orphan processes. `true`
+/// when something was actually cancelled.
+#[tauri::command]
+fn stop_stream(state: tauri::State<'_, AppState>, file_id: i64) -> Result<bool, String> {
+    Ok(state.streams.kill(file_id))
 }
 
 // --- File associations (TASK-01-025, PLAN §2M) -------------------------------
@@ -850,6 +903,29 @@ pub fn run() {
             .unwrap_or_else(|_| preview::placeholder());
             preview_response(reply)
         })
+        // TASK-02-006 (PLAN §2 Video strategy): on-the-fly transcode for
+        // codecs the WebView cannot decode. Asynchronous handler: the
+        // transcode runs on its own thread (bounded by byte cap + first-
+        // bytes budget), the catalog lookup happens there too, and the
+        // response never outlives its ffmpeg child.
+        .register_asynchronous_uri_scheme_protocol(
+            stream::STREAM_PROTOCOL,
+            |ctx, request, responder| {
+                let app = ctx.app_handle().clone();
+                let req = stream::request_from_uri(request.uri());
+                std::thread::spawn(move || {
+                    let reply = match req {
+                        Some(req) => stream_reply_for(&app, req),
+                        None => stream::StreamReply {
+                            status: 404,
+                            content_type: "text/plain",
+                            body: Vec::new(),
+                        },
+                    };
+                    responder.respond(stream_response(reply));
+                });
+            },
+        )
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -889,6 +965,7 @@ pub fn run() {
                 display_profile: Mutex::new(initial_display_profile()),
                 video_extractor: std::sync::Arc::new(fotobase_video::Ffmpeg::default()),
                 codec_support: Mutex::new(None),
+                streams: stream::StreamRegistry::new(),
             });
             // Display-profile watcher (TASK-02-001): re-read the profile
             // every [`display_profile::POLL_INTERVAL`]; on a fingerprint
@@ -919,6 +996,22 @@ pub fn run() {
                     last = fp;
                 }
             });
+            // stream:// janitor (TASK-02-006): the idle-timeout backstop —
+            // a transcode that outlived its request (hung child, aborted
+            // request) is killed and reaped even if nobody called
+            // `stop_stream`.
+            let janitor_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(stream::JANITOR_INTERVAL).await;
+                    if let Some(state) = janitor_app.try_state::<AppState>() {
+                        let killed = state.streams.kill_idle(stream::IDLE_TIMEOUT);
+                        if killed > 0 {
+                            tracing::info!("stream janitor killed {killed} idle transcode(s)");
+                        }
+                    }
+                }
+            });
             // Perf-harness hook (TASK-01-026, protocol §1): inert unless the
             // harness armed the app through the environment. Cold start with
             // an empty catalog + cache is guaranteed by the harness pointing
@@ -943,6 +1036,7 @@ pub fn run() {
             ping,
             report_codec_support,
             get_codec_support,
+            stop_stream,
             search_files,
             list_files,
             photo_info,

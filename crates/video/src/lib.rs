@@ -108,6 +108,15 @@ fn tool_bin(env_key: &str, default: &str) -> (String, String) {
     }
 }
 
+/// The ffmpeg binary the stream fallback (TASK-02-006) should spawn: the
+/// `FB_FFMPEG` override when set, else `ffmpeg` from the PATH (the shipped
+/// sidecar is placed on the PATH-equivalent lookup by the Tauri shell).
+/// A separate pub accessor so the scheme handler pins the same binary the
+/// rest of the video integration uses.
+pub fn ffmpeg_bin() -> String {
+    tool_bin("FB_FFMPEG", "ffmpeg").1
+}
+
 /// ffprobe wrapper (JSON output mode, per the task's technical spec).
 #[derive(Debug, Clone, Default)]
 pub struct Ffprobe;
