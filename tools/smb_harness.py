@@ -140,6 +140,9 @@ def cmd_mount(args: argparse.Namespace) -> int:
 
     mp = mountpoint()
     mp.parent.mkdir(parents=True, exist_ok=True)
+    # The mount target itself must exist (mount.cifs/mount_smbfs chdir into
+    # it); on a fresh CI runner nothing created it yet.
+    mp.mkdir(parents=True, exist_ok=True)
     system = platform.system()
     for attempt in range(3):
         try:
