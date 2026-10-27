@@ -613,8 +613,12 @@ impl Sidecar {
                 .map_err(|err| SidecarError::Io { path: tmp.clone(), source: err })?;
             f.sync_all().map_err(|err| SidecarError::Io { path: tmp.clone(), source: err })?;
         }
-        fs::rename(&tmp, path)
-            .map_err(|err| SidecarError::Io { path: path.to_path_buf(), source: err })
+        if let Err(err) = fs::rename(&tmp, path) {
+            // Best-effort cleanup so a failed write leaves no stray .tmp.
+            let _ = fs::remove_file(&tmp);
+            return Err(SidecarError::Io { path: path.to_path_buf(), source: err });
+        }
+        Ok(())
     }
 }
 

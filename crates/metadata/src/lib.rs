@@ -8,7 +8,9 @@ pub const CRATE_NAME: &str = "fotobase-metadata";
 
 mod sidecar;
 
-pub use sidecar::{FbNs, QuickXmlBackend, Sidecar, SidecarBackend, SidecarError, FB_NS};
+pub use sidecar::{
+    backup_path, tmp_path, FbNs, QuickXmlBackend, Sidecar, SidecarBackend, SidecarError, FB_NS,
+};
 
 #[cfg(test)]
 mod tests {

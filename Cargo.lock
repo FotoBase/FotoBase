@@ -1210,6 +1210,8 @@ dependencies = [
 name = "fotobase-catalog"
 version = "0.1.0"
 dependencies = [
+ "filetime",
+ "fotobase-metadata",
  "rusqlite",
  "serde",
  "serde_json",

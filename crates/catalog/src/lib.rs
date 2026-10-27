@@ -6,8 +6,10 @@
 //! trigger the rebuild-from-sidecars recovery path.
 
 pub mod migrations;
+pub mod sync;
 
 pub use migrations::MIGRATIONS;
+pub use sync::{sidecar_path, SyncError, SyncStats};
 
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -183,6 +185,11 @@ impl Catalog {
 
     pub fn conn(&self) -> &Connection {
         &self.conn
+    }
+
+    /// Mutable access for transaction-scoped operations (sync engine).
+    pub(crate) fn conn_mut(&mut self) -> &mut Connection {
+        &mut self.conn
     }
 
     pub fn path(&self) -> &Path {
