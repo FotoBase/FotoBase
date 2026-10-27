@@ -387,7 +387,14 @@ fn process_directory(
         .collect();
     drop(stmt);
 
-    let mut walked: HashSet<String> = HashSet::new();
+    // Existing media paths seen in this directory's listing — computed up
+    // front so the vanished snapshot below cannot mistake a file that Samba
+    // lists late (retry pacing, slow metadata) for a vanished one.
+    let walked_now: HashSet<String> = entries
+        .iter()
+        .filter(|e| !e.is_dir && media_type(&e.path).is_some())
+        .map(|e| e.path.to_string_lossy().into_owned())
+        .collect();
 
     // Snapshot this directory's vanished files before deleting them, so the
     // same pass can re-associate moved/renamed files with their user data
@@ -395,7 +402,7 @@ fn process_directory(
     // rate limiter paces every op, and the lazy hash of the new file is the
     // only read that may happen.
     let vanished: Vec<String> =
-        existing.keys().filter(|p| !walked.contains(p.as_str())).cloned().collect();
+        existing.keys().filter(|p| !walked_now.contains(p.as_str())).cloned().collect();
     if !vanished.is_empty() {
         catalog.snapshot_missing(&vanished)?;
     }
@@ -408,7 +415,6 @@ fn process_directory(
         limiter.acquire();
         let path_str = entry.path.to_string_lossy().into_owned();
         let Some(media) = media_type(&entry.path) else { continue };
-        walked.insert(path_str.clone());
         match existing.get(&path_str) {
             Some((size, mtime)) if *size == entry.size as i64 && *mtime == entry.mtime => {
                 report.skipped += 1;
