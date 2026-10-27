@@ -49,7 +49,9 @@ jobs:
           FB_SMB_CONTAINER: fb-smb-harness
         run: |
           export FB_SMB_TEST_ROOT=$(python3 -c "import json; print(json.load(open('.fb-smb-harness.json'))['mountpoint'])")
-          cargo test -p fotobase-scanner --test smb_harness -- --nocapture
+          # Single-threaded: both tests scan the same live share; parallel
+          # runs cross-contaminate the catalog counts.
+          cargo test -p fotobase-scanner --test smb_harness -- --nocapture --test-threads=1
 
       - name: Harness state on failure
         if: failure()
