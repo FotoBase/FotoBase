@@ -62,7 +62,7 @@ cat > digi-src.xmp <<'EOF'
 <?xpacket end="w"?>
 EOF
 exiv2 -M "set Xmp.digiKam.ImagePickLabel 3" digi-src.xmp
-mv digi-src.xmp digikam-fixture.xmp
+mv digi-src.xmp digikam-8-fixture.xmp
 
 # --- darktable fixture: real darktable-cli export; darktable rewrites the
 # packet in its own form (attribute simple properties, deg,min GPS, its
@@ -80,10 +80,10 @@ exiv2 -eX photo-out.jpg
 sed -E \
   -e 's/xmp:ModifyDate="[^"]*"/xmp:ModifyDate="TIMESTAMP"/' \
   -e 's/photoshop:DateCreated="[^"]*"/photoshop:DateCreated="TIMESTAMP"/' \
-  photo-out.xmp > darktable-fixture.xmp
+  photo-out.xmp > darktable-3.8.1-fixture.xmp
 
 cd - >/dev/null
-for name in darktable digikam; do
+for name in darktable-3.8.1 digikam-8; do
   src="$WORK/${name}-fixture.xmp"
   dst="$FIXDIR/${name}-fixture.xmp"
   if [[ "$UPDATE" == 1 ]]; then
