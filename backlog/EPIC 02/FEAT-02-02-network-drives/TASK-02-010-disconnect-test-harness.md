@@ -1,6 +1,6 @@
 # task: disconnect/reconnect test harness for network shares
 
-**Feature:** [FEAT-02-02-network-drives](FEAT-02-02-network-drives.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** todo
+**Feature:** [FEAT-02-02-network-drives](FEAT-02-02-network-drives.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in review (2026-10-27)
 
 ## Description
 Provide the repeatable test harness that 02-008/02-009 rely on: a virtual SMB share that can be disconnected/reconnected on demand, in CI where possible, otherwise as a documented manual protocol (PLAN §6 P1.5 acceptance).
@@ -19,6 +19,6 @@ Provide the repeatable test harness that 02-008/02-009 rely on: a virtual SMB sh
 - The manual protocol doc includes the exact pass/fail observations (UI responsive, no dup work, clean resume).
 
 ## Acceptance criteria
-- [ ] 02-010: harness can disconnect/reconnect a share on demand, scripted.
-- [ ] 02-010: pause/resume scenario passes repeatedly.
-- [ ] 02-010: CI integration or documented manual protocol exists in the repo.
+- [x] 02-010: harness can disconnect/reconnect a share on demand, scripted.
+- [x] 02-010: pause/resume scenario passes repeatedly.
+- [x] 02-010: CI integration or documented manual protocol exists in the repo.
