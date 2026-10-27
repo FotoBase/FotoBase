@@ -1,0 +1,58 @@
+name: smb-harness
+
+# TASK-02-010: scripted disconnect/reconnect cycle against a containerized
+# Samba share, 3 consecutive cycles in one job (PLAN §6 P1.5 acceptance).
+# The manual fallback protocol lives in
+# docs/workflows/disconnect-reconnect-protocol.md.
+
+on:
+  pull_request:
+    paths:
+      - "tools/smb_harness.py"
+      - "crates/scanner/tests/smb_harness.rs"
+      - "crates/scanner/src/network.rs"
+      - ".github/workflows/smb-harness.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: smb-harness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scripted-cycle:
+    # Containerized SMB is only feasible on Linux runners (mount.cifs needs
+    # privileged containers; macOS runners fall back to the manual protocol).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mount CIFS for the harness (runner kernel has cifs)
+        run: |
+          sudo apt-get update && sudo apt-get install -y cifs-utils
+          # The harness needs a passwordless sudo for mount/umount.
+          sudo sh -c 'echo "runner ALL=(root) NOPASSWD: /usr/sbin/mount.cifs, /bin/mount, /bin/umount" > /etc/sudoers.d/fb-smb-harness'
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Start containerized Samba share
+        run: |
+          python3 tools/smb_harness.py mount
+
+      - name: Populate fixture tree
+        run: |
+          python3 tools/smb_harness.py populate
+
+      - name: Scripted cycle (mount → scan → disconnect → paused → reconnect → complete) x3
+        env:
+          FB_SMB_CONTAINER: fb-smb-harness
+        run: |
+          export FB_SMB_TEST_ROOT=$(python3 -c "import json; print(json.load(open('.fb-smb-harness.json'))['mountpoint'])")
+          cargo test -p fotobase-scanner --test smb_harness -- --nocapture
+
+      - name: Harness state on failure
+        if: failure()
+        run: |
+          python3 tools/smb_harness.py state || true
+          docker ps -a || true
