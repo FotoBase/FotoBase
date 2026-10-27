@@ -280,6 +280,18 @@ fn photo_info(
     with_catalog(&state, |cat| cat.photo_info(file_id))
 }
 
+/// Player payload for one video (TASK-02-007): path + ffprobe result. The
+/// viewer calls this for the item it is about to display; `None` means it is
+/// an image (or unknown) and the normal `preview://` path applies. No media
+/// bytes — the path feeds the asset-protocol URL, `stream://` takes the id.
+#[tauri::command]
+fn video_info(
+    file_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<fotobase_catalog::VideoInfo>, String> {
+    with_catalog(&state, |cat| cat.video_info(file_id))
+}
+
 /// The Folders-view tree data (TASK-01-015, PLAN §2B): every catalog folder
 /// with the year its newest file falls in. Ids + paths only — no image
 /// bytes, and the UI derives display names from the paths.
@@ -1040,6 +1052,7 @@ pub fn run() {
             search_files,
             list_files,
             photo_info,
+            video_info,
             list_folders,
             prioritize_visible,
             get_settings,

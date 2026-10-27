@@ -12,6 +12,7 @@ import { flushSync } from "svelte";
 import { cleanup, render, screen, fireEvent } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Viewer from "./Viewer.svelte";
+import { probeAndCache } from "./codec-probe";
 import { nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
 import type { GridItem } from "./grid";
 
@@ -78,6 +79,55 @@ vi.mock("@tauri-apps/api/window", () => {
   };
 });
 
+// TASK-02-007: the viewer asks the backend for the player payload of the
+// current item (`video_info`) and builds the direct-play URL with
+// `convertFileSrc`. Mocked here: `invoke` answers from a map, the asset
+// URL is a plain marker string.
+vi.mock("@tauri-apps/api/core", () => {
+  const invoke = vi.fn();
+  const convertFileSrc = (path: string) => `asset://test${path}`;
+  return {
+    invoke,
+    convertFileSrc,
+    __invoke: invoke,
+    __convertFileSrc: convertFileSrc,
+  };
+});
+
+import * as tauriCore from "@tauri-apps/api/core";
+const invokeMock = (tauriCore as unknown as { __invoke: ReturnType<typeof vi.fn> }).__invoke;
+const convertFileSrcMock = (
+  tauriCore as unknown as { __convertFileSrc: (p: string) => string }
+).__convertFileSrc;
+
+const VIDEO_META = {
+  duration_secs: 12.5,
+  codec: "h264",
+  profile: null,
+  rotation_deg: 90,
+};
+
+function videoItem(id: number): GridItem {
+  return { id, filename: `clip-${id}.mov`, hash: HASH(id), media_type: "video" };
+}
+
+async function renderVideoViewer(): Promise<{ container: HTMLElement }> {
+  // Seed the codec cache: this WebView reports H.264 support, so the
+  // resolver takes the html5 path.
+  probeAndCache((type) => (type.includes("avc1") ? "probably" : ""));
+  invokeMock.mockImplementation((_cmd: string, args: { fileId: number }) =>
+    Promise.resolve(args.fileId === 1 ? { path: "/lib/clip.mov", meta: VIDEO_META } : null),
+  );
+  const result = render(Viewer, {
+    items: [makeItems(3)[0], videoItem(1), makeItems(3)[2]],
+    startIndex: 1,
+  });
+  // The video_info round-trip resolves on a microtask.
+  await new Promise((r) => setTimeout(r, 0));
+  flushSync();
+  return result;
+}
+
 // The mock factory's exports are what the component imports; grab the spy
 // through the mocked module for assertions.
 import * as tauriWindow from "@tauri-apps/api/window";
@@ -102,6 +152,8 @@ function mainSrc(): string {
 
 beforeEach(() => {
   setFullscreenMock.mockClear();
+  invokeMock.mockReset();
+  invokeMock.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -232,6 +284,70 @@ describe("Viewer", () => {
       renderViewer(makeItems(3), { startIndex: 0 });
       // Neighbors of index 0: photo 2 (wrap) and photo 1.
       expect(loads).toEqual([`preview://${HASH(2)}`, `preview://${HASH(1)}`]);
+    } finally {
+      (window as unknown as { Image: unknown }).Image = origImage;
+    }
+  });
+
+  // --- Video (TASK-02-007) ---------------------------------------------------
+
+  it("renders the video player for a video item instead of the image", async () => {
+    const { container } = await renderVideoViewer();
+
+    expect(container.querySelector("[data-testid='video-player']")).not.toBeNull();
+    expect(container.querySelector("[data-testid='viewer-main']")).toBeNull();
+    // Direct-play URL through the asset protocol for the supported codec.
+    const video = container.querySelector("video");
+    expect(video?.getAttribute("src")).toBe(convertFileSrcMock("/lib/clip.mov"));
+    // Rotation from ffprobe metadata, applied as a CSS transform.
+    expect(
+      container
+        .querySelector("[data-testid='video-stage']")
+        ?.getAttribute("style"),
+    ).toContain("rotate(90deg)");
+  });
+
+  it("space/arrow keys go to the player while a video is open (viewer navigation pauses)", async () => {
+    const { container } = await renderVideoViewer();
+    const video = container.querySelector("video")!;
+    video.play = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(video, "paused", { value: true, configurable: true });
+
+    pressKey(" ");
+    expect(video.play).toHaveBeenCalled();
+    // No navigation happened: the main is still the player for item 1.
+    expect(container.querySelector("[data-testid='video-player']")).not.toBeNull();
+  });
+
+  it("closing the viewer stops playback and cancels the transcode", async () => {
+    const { container } = await renderVideoViewer();
+    const video = container.querySelector("video")!;
+    video.pause = vi.fn();
+    // Simulate the App unmounting the viewer on close.
+    cleanup();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(video.pause).toHaveBeenCalled();
+    expect(invokeMock).toHaveBeenCalledWith("stop_stream", { fileId: 1 });
+  });
+
+  it("preloads skip video neighbors (no full-file preview fetch)", async () => {
+    const loads: string[] = [];
+    const origImage = window.Image;
+    class FakeImage {
+      set src(v: string) {
+        loads.push(v);
+      }
+    }
+    (window as unknown as { Image: unknown }).Image = FakeImage;
+    invokeMock.mockResolvedValue(null);
+
+    try {
+      const items = [makeItems(3)[0], videoItem(1), makeItems(3)[2]];
+      render(Viewer, { items, startIndex: 0 });
+      flushSync();
+      // The video neighbor's preview:// URI is never requested; only the
+      // wrap-around image neighbor (index 2) loads.
+      expect(loads).toEqual([`preview://${HASH(2)}`]);
     } finally {
       (window as unknown as { Image: unknown }).Image = origImage;
     }

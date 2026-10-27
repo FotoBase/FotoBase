@@ -13,7 +13,9 @@
   import { gridState } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
   import InfoPane from "./InfoPane.svelte";
+  import VideoPlayer from "./VideoPlayer.svelte";
   import { nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
+  import { probeAndCache } from "./codec-probe";
 
   interface Props {
     items?: GridItem[];
@@ -45,17 +47,70 @@
   const current = $derived(items[index] ?? null);
   const mainUri = $derived(previewUri(current?.hash ?? null));
 
+  // --- Video (TASK-02-007, PLAN §2 Video strategy) ---------------------------
+  // A video item plays in the player component instead of the `<img>`: the
+  // src resolver picks the asset-protocol direct-play URL (codec supported)
+  // or `stream://` (02-006). The payload comes from the catalog's ffprobe
+  // metadata (02-003) via `video_info`; `null` = image or unknown item.
+
+  type VideoInfoPayload = {
+    path: string;
+    meta: {
+      duration_secs: number;
+      codec: string;
+      profile: string | null;
+      rotation_deg: number;
+    } | null;
+  } | null;
+
+  let videoInfo = $state<
+    | (NonNullable<VideoInfoPayload> & { directSrc: string | null })
+    | null
+  >(null);
+  const isVideo = $derived(
+    current !== null && current.media_type === "video" && videoInfo !== null,
+  );
+
+  // Fetch the payload for the current item and build the direct-play URL;
+  // stale answers are dropped. Browser dev / backend down → treated as an
+  // image, never a crash.
+  $effect(() => {
+    const item = current;
+    let stale = false;
+    void (async () => {
+      try {
+        const { invoke, convertFileSrc } = await import("@tauri-apps/api/core");
+        const info = await invoke<NonNullable<VideoInfoPayload>>("video_info", {
+          fileId: item?.id ?? -1,
+        });
+        if (!stale) {
+          videoInfo =
+            info === null
+              ? null
+              : { ...info, directSrc: convertFileSrc(info.path) };
+        }
+      } catch {
+        if (!stale) videoInfo = null;
+      }
+    })();
+    return () => {
+      stale = true;
+    };
+  });
+
+  const videoSupport = $derived(probeAndCache());
+
   // Preload the neighbors (functional spec: navigation feels instant). The
   // browser fetches them through the preview:// scheme handler; nothing
-  // crosses IPC.
+  // crosses IPC. Video neighbors are skipped — `preview://` would buffer the
+  // whole clip, and videos preload nothing (the player streams on demand).
   $effect(() => {
     void index;
     void items;
-    const uris = preloadUris(
-      items.map((it) => previewUri(it.hash)),
-      index,
+    const uris = items.map((it, i) =>
+      it.media_type === "video" ? null : previewUri(it.hash),
     );
-    for (const uri of uris) {
+    for (const uri of preloadUris(uris, index)) {
       const img = new Image();
       img.src = uri;
     }
@@ -82,6 +137,10 @@
   }
 
   function onKeydown(e: KeyboardEvent): void {
+    // A video is open: playback keys go to the player (space = play/pause,
+    // arrows = seek); navigation keys stay with the viewer.
+    const playerKeys = isVideo && [" ", "ArrowLeft", "ArrowRight"].includes(e.key);
+    if (playerKeys) return;
     switch (e.key) {
       case "ArrowRight":
         slideshowRunning = false; // pauses on interaction
@@ -121,7 +180,16 @@
   {/if}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="viewer-stage" data-testid="viewer-stage">
-    {#if mainUri}
+    {#if isVideo && videoInfo}
+      <VideoPlayer
+        fileId={current!.id}
+        codec={videoInfo.meta?.codec ?? ""}
+        rotationDeg={videoInfo.meta?.rotation_deg ?? 0}
+        durationSecs={videoInfo.meta?.duration_secs ?? 0}
+        directSrc={videoInfo.directSrc}
+        support={videoSupport}
+      />
+    {:else if mainUri}
       <img class="viewer-main" data-testid="viewer-main" src={mainUri} alt={current?.filename ?? ""} draggable="false" />
     {:else}
       <div class="viewer-placeholder" data-testid="viewer-placeholder"></div>
