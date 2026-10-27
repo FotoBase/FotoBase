@@ -266,8 +266,9 @@ fn drain_returns_the_first_bytes_within_the_two_second_budget() {
 fn drain_honours_eof_and_terminates_cleanly() {
     let mut child = {
         let mut c = if cfg!(windows) {
+            // `cmd /c echo` appends CRLF; `<nul set /p=` prints without a newline.
             let mut c = Command::new("cmd");
-            c.args(["/c", "echo fakedata"]);
+            c.args(["/c", "<nul set /p=fakedata"]);
             c
         } else {
             let mut c = Command::new("sh");
