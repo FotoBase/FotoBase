@@ -13,6 +13,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 pub mod associations;
+pub mod codec;
 pub mod display_profile;
 pub mod emit_pacer;
 pub mod file_menu;
@@ -91,6 +92,10 @@ struct AppState {
     /// ffmpeg frame extractor backing video thumbnails (TASK-02-004): the
     /// shipped LGPL sidecar (real binary in production, fakes in tests).
     video_extractor: std::sync::Arc<dyn fotobase_video::FrameExtractor + Send + Sync>,
+    /// WebView codec matrix reported at startup (TASK-02-005): consulted by
+    /// the playback decision before choosing HTML5 `<video>` vs `stream://`
+    /// transcode (02-006). `None` until the frontend has probed.
+    codec_support: Mutex<Option<codec::CodecSupport>>,
 }
 
 /// Destination profile for the render pipeline (TASK-02-001, PLAN §6 P1.5):
@@ -432,6 +437,34 @@ async fn exit_app(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> R
 #[tauri::command]
 fn ping() -> &'static str {
     "pong"
+}
+
+// --- Codec capability (TASK-02-005, PLAN §10) --------------------------------
+
+/// The frontend WebView probes its own decoders once at startup and reports
+/// the matrix here; the probe never blocks startup (functional spec) — this
+/// command is fire-and-forget from the frontend's boot sequence.
+#[tauri::command]
+fn report_codec_support(
+    state: tauri::State<'_, AppState>,
+    support: codec::CodecSupport,
+) -> Result<(), String> {
+    tracing::debug!("{}", support.log_line());
+    state
+        .codec_support
+        .lock()
+        .map_err(|e| format!("codec-support mutex poisoned: {e}"))?
+        .replace(support);
+    Ok(())
+}
+
+/// Diagnostics surface for the cached matrix (`None` until the frontend
+/// has probed).
+#[tauri::command]
+fn get_codec_support(
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<codec::CodecSupport>, String> {
+    Ok(*state.codec_support.lock().map_err(|e| format!("codec-support mutex poisoned: {e}"))?)
 }
 
 // --- File associations (TASK-01-025, PLAN §2M) -------------------------------
@@ -855,6 +888,7 @@ pub fn run() {
                 pending_open: Mutex::new(pending_open),
                 display_profile: Mutex::new(initial_display_profile()),
                 video_extractor: std::sync::Arc::new(fotobase_video::Ffmpeg::default()),
+                codec_support: Mutex::new(None),
             });
             // Display-profile watcher (TASK-02-001): re-read the profile
             // every [`display_profile::POLL_INTERVAL`]; on a fingerprint
@@ -907,6 +941,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ping,
+            report_codec_support,
+            get_codec_support,
             search_files,
             list_files,
             photo_info,

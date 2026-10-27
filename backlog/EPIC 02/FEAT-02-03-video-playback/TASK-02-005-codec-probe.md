@@ -1,6 +1,6 @@
 # task: startup codec-capability probe, HTML5 first
 
-**Feature:** [FEAT-02-03-video-playback](FEAT-02-03-video-playback.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** todo
+**Feature:** [FEAT-02-03-video-playback](FEAT-02-03-video-playback.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in review (2026-10-27)
 
 ## Description
 At startup, probe the OS WebView for codec support (PLAN §10: "WebKitGTK ships without H.264/HEVC on several distros") so playback decisions are data-driven: HTML5 `<video>` is the primary path when the codec is supported.
@@ -21,6 +21,6 @@ At startup, probe the OS WebView for codec support (PLAN §10: "WebKitGTK ships 
 - E2e: on a WebView with H.264 support, an H.264 fixture plays via plain `<video>` (no `stream://` request observed); on one without, `stream://` is requested (once 02-006 lands; test the decision function until then).
 
 ## Acceptance criteria
-- [ ] 02-005: codec support probed at startup, results cached.
-- [ ] 02-005: supported codecs play via HTML5 `<video>` with no transcode.
-- [ ] 02-005: probe matrix is visible for debugging.
+- [x] 02-005: codec support probed at startup, results cached.
+- [x] 02-005: supported codecs play via HTML5 `<video>` with no transcode.
+- [x] 02-005: probe matrix is visible for debugging.
