@@ -1,6 +1,6 @@
 # task: video player UI in grid and viewer
 
-**Feature:** [FEAT-02-03-video-playback](FEAT-02-03-video-playback.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in progress (2026-10-27)
+**Feature:** [FEAT-02-03-video-playback](FEAT-02-03-video-playback.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in review (2026-10-27)
 
 ## Description
 Wire video playback into the UI: play from the grid (double-click) and in the single-photo viewer, choosing HTML5 (02-005) or `stream://` (02-006) transparently, honoring rotation metadata from 02-003.
