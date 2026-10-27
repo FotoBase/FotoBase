@@ -13,6 +13,7 @@
 //! never an error dialog.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use fotobase_catalog::Catalog;
 use fotobase_jobs::{JobHandle, Priority, Queue};
@@ -148,21 +149,29 @@ pub fn placeholder() -> ThumbReply {
     ThumbReply { status: 200, content_type: "image/png", body: PLACEHOLDER_PNG.to_vec() }
 }
 
-/// Trigger render jobs for a cache miss (TASK-01-011 functional spec).
+/// Trigger render jobs for a cache miss (TASK-01-011 functional spec,
+/// TASK-02-004 video extension).
 ///
-/// Looks the hash up in the catalog and enqueues a [`thumbnail_job`] per
-/// source path at [`Priority::Visible`] (the user is looking at it right
-/// now). Jobs are keyed by [`job_key`], so repeated requests for the same
-/// thumbnail coalesce onto one running render — and 2x requests coalesce
-/// separately from 1x (TASK-01-024). Returns the job handles — empty when
-/// the hash is unknown (nothing cached *and* nothing catalogued carries it
-/// yet).
+/// Looks the hash up in the catalog and enqueues one job per source path:
+/// images go to the image render pipeline at [`Priority::Visible`] (the user
+/// is looking at them right now); videos go to the ffmpeg frame-extraction
+/// pipeline at [`Priority::Background`] — video thumbnails must never block
+/// visible image thumbnails (PLAN §3 rule 4: visible items first, background
+/// last). Both write into the same cache under the same key, so the existing
+/// `thumb://` handler serves both. Jobs are keyed by [`job_key`], so
+/// repeated requests for the same thumbnail coalesce onto one running render
+/// — and 2x requests coalesce separately from 1x (TASK-01-024). Returns the
+/// job handles — empty when the hash is unknown (nothing cached *and*
+/// nothing catalogued carries it yet), or when the miss is a video and
+/// `video_extractor` is `None` (the caller opted out; the placeholder
+/// stands).
 pub fn enqueue_missing_thumbs(
     req: &ThumbRequest,
     catalog: &Catalog,
     cache_dir: &Path,
     queue: &Queue<ThumbOutcome>,
     display_profile: Option<Vec<u8>>,
+    video_extractor: Option<Arc<dyn fotobase_video::FrameExtractor + Send + Sync>>,
 ) -> Vec<JobHandle<ThumbOutcome>> {
     if !is_cache_key(&req.hash) {
         return Vec::new();
@@ -179,26 +188,43 @@ pub fn enqueue_missing_thumbs(
         ..Default::default()
     };
     let key = job_key(req);
-    let paths: Vec<PathBuf> = match catalog.paths_for_hash(&req.hash) {
-        Ok(paths) => paths.into_iter().map(PathBuf::from).collect(),
+    let sources: Vec<(PathBuf, String)> = match catalog.path_types_for_hash(&req.hash) {
+        Ok(rows) => rows.into_iter().map(|(p, mt)| (PathBuf::from(p), mt)).collect(),
         // A poisoned/closed catalog must not turn into an error dialog; the
         // placeholder already went out, the render can be re-triggered later.
         Err(_) => return Vec::new(),
     };
-    paths
+    sources
         .into_iter()
-        .filter_map(|src| {
-            let cache_dir = cache_dir.to_path_buf();
-            queue
-                .try_enqueue(
+        .filter_map(|(src, media_type)| {
+            // Anything not exactly 'video' renders through the image
+            // pipeline — the catalog's media_type is `image` or `video`
+            // today, and an unknown future type still deserves a render
+            // attempt rather than a permanent placeholder.
+            let outcome = if media_type == "video" {
+                let extractor = video_extractor.clone()?;
+                queue.try_enqueue(
+                    key.as_str(),
+                    Priority::Background,
+                    fotobase_render::video_thumbnail_job(
+                        src,
+                        cache_dir.to_path_buf(),
+                        opts.clone(),
+                        extractor,
+                    ),
+                )
+            } else {
+                let cache_dir = cache_dir.to_path_buf();
+                queue.try_enqueue(
                     key.as_str(),
                     Priority::Visible,
                     thumbnail_job(src, cache_dir, opts.clone()),
                 )
-                // Full queue: the bounded queue protects memory (§3 rule 4);
-                // dropping the request is the correct degradation — the next
-                // miss re-triggers the render.
-                .ok()
+            };
+            // Full queue: the bounded queue protects memory (§3 rule 4);
+            // dropping the request is the correct degradation — the next
+            // miss re-triggers the render.
+            outcome.ok()
         })
         .collect()
 }

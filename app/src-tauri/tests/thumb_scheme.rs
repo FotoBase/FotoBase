@@ -200,6 +200,7 @@ mod miss_jobs {
             &cache,
             &queue,
             None,
+            None,
         );
         assert_eq!(handles.len(), 1, "one source path → one render job");
 
@@ -227,6 +228,7 @@ mod miss_jobs {
             &tmp.path().join("thumbs"),
             &queue,
             None,
+            None,
         );
         assert!(handles.is_empty());
         queue.close().await;
@@ -242,8 +244,8 @@ mod miss_jobs {
 
         let queue: Queue<ThumbOutcome> = Queue::new(8);
         let key = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        let first = enqueue_missing_thumbs(&req1(key), &cat, &cache, &queue, None);
-        let second = enqueue_missing_thumbs(&req1(key), &cat, &cache, &queue, None);
+        let first = enqueue_missing_thumbs(&req1(key), &cat, &cache, &queue, None, None);
+        let second = enqueue_missing_thumbs(&req1(key), &cat, &cache, &queue, None, None);
         assert_eq!(first.len(), 1);
         assert_eq!(second.len(), 1, "second request coalesces onto the same job");
 
@@ -287,6 +289,7 @@ mod miss_jobs {
                 &cache,
                 &queue,
                 profile,
+                None,
             );
             assert_eq!(handles.len(), 1);
             for handle in handles {
@@ -310,6 +313,226 @@ mod miss_jobs {
             .filter(|n| n.ends_with(".jpg"))
             .collect();
         assert_eq!(entries.len(), 3, "one cache entry per display profile: {entries:?}");
+        queue.close().await;
+    }
+}
+
+// --- video thumbnails (TASK-02-004) ----------------------------------------
+
+mod video_thumbs {
+    use super::*;
+    use fotobase_catalog::Catalog;
+    use fotobase_jobs::{Outcome, Priority, Queue};
+    use fotobase_video::FrameExtractor;
+    use std::path::Path;
+    use std::sync::Arc;
+
+    /// Fake extractor: writes a tiny decodable JPEG as the "extracted frame".
+    struct FakeOk;
+    impl FrameExtractor for FakeOk {
+        fn extract_frame(&self, _v: &Path, out: &Path) -> Result<(), fotobase_video::VideoError> {
+            let mut buf = Vec::new();
+            for _ in 0..32 * 24 {
+                buf.extend_from_slice(&[10, 120, 250]);
+            }
+            let mut jpg = Vec::new();
+            let enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpg, 90);
+            enc.write_image(&buf, 32, 24, image::ExtendedColorType::Rgb8).unwrap();
+            std::fs::write(out, jpg).unwrap();
+            Ok(())
+        }
+    }
+
+    /// A fake extractor that always fails: the corrupt/unsupported path.
+    struct FakeFail;
+    impl FrameExtractor for FakeFail {
+        fn extract_frame(&self, _v: &Path, _o: &Path) -> Result<(), fotobase_video::VideoError> {
+            Err(fotobase_video::VideoError::NoVideoStream)
+        }
+    }
+
+    /// A slow fake extractor: sleeps before writing, so an ordering test can
+    /// observe that the video job is still running.
+    struct FakeSlow;
+    impl FrameExtractor for FakeSlow {
+        fn extract_frame(&self, _v: &Path, out: &Path) -> Result<(), fotobase_video::VideoError> {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            FakeOk.extract_frame(_v, out)
+        }
+    }
+
+    fn catalog_with_media(dir: &TempDir, hash: &str, path: &str, media_type: &str) -> Catalog {
+        let mut cat = Catalog::open(dir.path().join("catalog.db")).unwrap();
+        let folder = cat.seed_folder("/photos").unwrap();
+        cat.conn()
+            .execute(
+                "INSERT INTO files(folder_id, path, filename, size, mtime, hash, media_type)
+                 VALUES (?1, ?2, ?3, 1, 0.0, ?4, ?5)",
+                rusqlite::params![folder, path, "unused", Some(hash), media_type],
+            )
+            .unwrap();
+        cat
+    }
+
+    fn tiny_video(dir: &Path) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let p = dir.join("clip.mp4");
+        std::fs::write(&p, b"fake mp4 bytes").unwrap();
+        p
+    }
+
+    #[tokio::test]
+    async fn video_miss_enqueues_a_background_priority_job_that_fills_the_cache() {
+        let tmp = TempDir::new().unwrap();
+        let cache = tmp.path().join("thumbs");
+        let video = tiny_video(&tmp.path().join("photos"));
+        let cat = catalog_with_media(
+            &tmp,
+            "cccccccccccccccccccccccccccccccc",
+            &video.to_string_lossy(),
+            "video",
+        );
+        let queue: Queue<ThumbOutcome> = Queue::new(8);
+
+        let handles = enqueue_missing_thumbs(
+            &req1("cccccccccccccccccccccccccccccccc"),
+            &cat,
+            &cache,
+            &queue,
+            None,
+            Some(Arc::new(FakeOk)),
+        );
+        assert_eq!(handles.len(), 1, "video miss → one video thumbnail job");
+        for handle in handles {
+            match &*handle.result().await {
+                Outcome::Done(Ok(_)) => {}
+                other => panic!("video thumbnail job must succeed, got {other:?}"),
+            }
+        }
+        // The video thumbnail landed under the shared key scheme, served by
+        // the same thumb:// resolution — a hit, not the placeholder.
+        let reply = resolve_thumb(&req1(&cache_key(&video)), &cache);
+        assert_eq!(reply.content_type, "image/jpeg", "video thumbnail cached via thumb://");
+        queue.close().await;
+    }
+
+    #[tokio::test]
+    async fn video_jobs_run_after_visible_image_jobs() {
+        // Ordering criterion: a video path's thumbnail job must dequeue
+        // *after* a visible image job (PLAN §3 rule 4). A gate job holds the
+        // single worker; video (background) is enqueued before the image
+        // (visible) yet must finish after it.
+        let tmp = TempDir::new().unwrap();
+        let cache = tmp.path().join("thumbs");
+        let video = tiny_video(&tmp.path().join("photos"));
+        let img = gen_jpeg(&tmp.path().join("photos"), 9, 100, 80);
+
+        let mut cat = Catalog::open(tmp.path().join("catalog.db")).unwrap();
+        let folder = cat.seed_folder("/photos").unwrap();
+        for (hash, path, mt) in [
+            ("dddddddddddddddddddddddddddddddd", video.to_string_lossy().to_string(), "video"),
+            ("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", img.to_string_lossy().to_string(), "image"),
+        ] {
+            cat.conn()
+                .execute(
+                    "INSERT INTO files(folder_id, path, filename, size, mtime, hash, media_type)
+                     VALUES (?1, ?2, ?3, 1, 0.0, ?4, ?5)",
+                    rusqlite::params![folder, path, "unused", Some(hash), mt],
+                )
+                .unwrap();
+        }
+
+        let queue: Queue<ThumbOutcome> = Queue::new(8);
+        use fotobase_jobs::{job, Outcome};
+        let release = Arc::new(tokio::sync::Notify::new());
+        let wait = release.clone();
+        let gate = job(move |_ctx| {
+            let wait = wait.clone();
+            async move {
+                wait.notified().await;
+                Outcome::Done(Ok(fotobase_render::Thumbnail {
+                    path: PathBuf::new(),
+                    width: 0,
+                    height: 0,
+                    from_cache: false,
+                }))
+            }
+        });
+        let gate_handle = queue.try_enqueue("gate", Priority::Visible, gate).unwrap();
+
+        let video_jobs = enqueue_missing_thumbs(
+            &req1("dddddddddddddddddddddddddddddddd"),
+            &cat,
+            &cache,
+            &queue,
+            None,
+            Some(Arc::new(FakeSlow)),
+        );
+        let image_jobs = enqueue_missing_thumbs(
+            &req1("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+            &cat,
+            &cache,
+            &queue,
+            None,
+            None,
+        );
+        assert_eq!(video_jobs.len(), 1);
+        assert_eq!(image_jobs.len(), 1);
+
+        release.notify_one();
+        let _ = gate_handle.result().await;
+
+        // The image job completes while the video job is still running: the
+        // slow fake extractor gives the video job a 200 ms window, so right
+        // after the image result lands the video cache entry cannot exist
+        // yet — the video job was dequeued after the visible image job.
+        match &*image_jobs[0].result().await {
+            Outcome::Done(Ok(_)) => {}
+            other => panic!("image job must succeed, got {other:?}"),
+        }
+        assert!(
+            !cache.join(format!("{}.jpg", cache_key(&video))).exists(),
+            "video job must not have completed before the visible image job"
+        );
+        match &*video_jobs[0].result().await {
+            Outcome::Done(Ok(_)) => {}
+            other => panic!("video job must succeed, got {other:?}"),
+        }
+        assert!(cache.join(format!("{}.jpg", cache_key(&video))).exists());
+        queue.close().await;
+    }
+
+    #[tokio::test]
+    async fn corrupt_video_yields_error_result_and_placeholder_not_crash() {
+        let tmp = TempDir::new().unwrap();
+        let cache = tmp.path().join("thumbs");
+        let video = tiny_video(&tmp.path().join("photos"));
+        let cat = catalog_with_media(
+            &tmp,
+            "ffffffffffffffffffffffffffffffff",
+            &video.to_string_lossy(),
+            "video",
+        );
+        let queue: Queue<ThumbOutcome> = Queue::new(8);
+
+        let handles = enqueue_missing_thumbs(
+            &req1("ffffffffffffffffffffffffffffffff"),
+            &cat,
+            &cache,
+            &queue,
+            None,
+            Some(Arc::new(FakeFail)),
+        );
+        assert_eq!(handles.len(), 1);
+        for handle in handles {
+            match &*handle.result().await {
+                Outcome::Done(Err(_)) => {}
+                other => panic!("corrupt video must be a job-level Err, got {other:?}"),
+            }
+        }
+        // The scheme layer serves the placeholder — never an error dialog.
+        let reply = resolve_thumb(&req1("ffffffffffffffffffffffffffffffff"), &cache);
+        assert!(reply.body.starts_with(&[0x89, b'P', b'N', b'G']), "placeholder served");
         queue.close().await;
     }
 }

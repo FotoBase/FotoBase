@@ -88,6 +88,9 @@ struct AppState {
     /// profile on Linux. Swapped in place by the profile watcher; the render
     /// jobs read it per enqueue so a switch re-renders into new cache entries.
     display_profile: Mutex<Option<Vec<u8>>>,
+    /// ffmpeg frame extractor backing video thumbnails (TASK-02-004): the
+    /// shipped LGPL sidecar (real binary in production, fakes in tests).
+    video_extractor: std::sync::Arc<dyn fotobase_video::FrameExtractor + Send + Sync>,
 }
 
 /// Destination profile for the render pipeline (TASK-02-001, PLAN §6 P1.5):
@@ -772,6 +775,9 @@ pub fn run() {
                             &state.cache_dir,
                             &state.thumbs,
                             state.display_profile.lock().ok().and_then(|g| g.clone()),
+                            // TASK-02-004: videos extract via the shipped
+                            // ffmpeg sidecar at background priority.
+                            Some(state.video_extractor.clone()),
                         ))
                     })
                     .unwrap_or_default();
@@ -848,6 +854,7 @@ pub fn run() {
                 folders: Mutex::new(None),
                 pending_open: Mutex::new(pending_open),
                 display_profile: Mutex::new(initial_display_profile()),
+                video_extractor: std::sync::Arc::new(fotobase_video::Ffmpeg::default()),
             });
             // Display-profile watcher (TASK-02-001): re-read the profile
             // every [`display_profile::POLL_INTERVAL`]; on a fingerprint

@@ -26,6 +26,8 @@ fotobase-jobs = { path = "../../crates/jobs" }
 fotobase-render = { path = "../../crates/render" }
 # Rebuild catalog (TASK-01-023): full scans of watched folders.
 fotobase-scanner = { path = "../../crates/scanner" }
+# Video thumbnails (TASK-02-004): ffmpeg frame extraction into the shared cache.
+fotobase-video = { path = "../../crates/video" }
 # Locate on disk (TASK-01-021): reveal in the OS file manager, called from
 # Rust — no capability surface needed.
 tauri-plugin-opener = "2"
