@@ -1,6 +1,6 @@
 # task: metadata crate — own exiv2 bindings and sidecar read/write
 
-**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-27)
+**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-27)
 
 ## Description
 Build the `metadata` crate: own exiv2 bindings (rexiv2 fork per PLAN §10 mitigation), read/write XMP sidecars next to originals, with merge-on-write per the 00-010 design doc ([`docs/sidecar-merge-on-write.md`](../../../docs/sidecar-merge-on-write.md) — gate satisfied 2026-10-20). Merge-on-write preserves unknown fields and backs up the previous sidecar version before every write (§5).
