@@ -131,6 +131,59 @@ impl Element {
         })
     }
 
+    fn attr(&self, name: &str) -> Option<&str> {
+        self.attributes.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str())
+    }
+
+    /// Simple property: child element text, or the attribute form
+    /// (`xmp:Rating="4"`) darktable/exiv2/digiKam all emit on
+    /// rdf:Description. Non-empty child text wins; empty text falls through.
+    fn child_text_or_attr(&self, prefix: &str, local: &str) -> Option<String> {
+        let attr_name = format!("{prefix}:{local}");
+        match self.child_text(prefix, local) {
+            Some(t) if !t.trim().is_empty() => Some(t),
+            _ => self.attr(&attr_name).map(str::to_string),
+        }
+    }
+
+    /// Language-alternative property (`dc:description`): the `x-default`
+    /// (or first) `rdf:li` text of the `rdf:Alt` child; falls back to direct
+    /// text, then the attribute form.
+    fn child_alt_text(&self, prefix: &str, local: &str) -> Option<String> {
+        let attr_name = format!("{prefix}:{local}");
+        if let Some(node) = self.find_child(prefix, local) {
+            if let Some(alt) = node.find_child("rdf", "Alt") {
+                for li in &alt.children {
+                    if let Child::Element(li_el) = li {
+                        if li_el.prefix == "rdf" && li_el.local == "li" {
+                            let mut text = String::new();
+                            for ch in &li_el.children {
+                                if let Child::Text(t) = ch {
+                                    text.push_str(t);
+                                }
+                            }
+                            if !text.trim().is_empty() {
+                                return Some(text);
+                            }
+                        }
+                    }
+                }
+            }
+            let direct = node
+                .children
+                .iter()
+                .filter_map(|c| match c {
+                    Child::Text(t) => Some(t.as_str()),
+                    _ => None,
+                })
+                .collect::<String>();
+            if !direct.trim().is_empty() {
+                return Some(direct);
+            }
+        }
+        self.attr(&attr_name).map(str::to_string)
+    }
+
     fn set_or_replace_child(&mut self, prefix: &str, local: &str, text: &str) {
         // Replace an existing node in place to keep tree order stable.
         for c in &mut self.children {
@@ -151,24 +204,8 @@ impl Element {
     }
 
     fn set_or_replace_bag(&mut self, prefix: &str, local: &str, items: &[String]) {
-        if let Some(existing) = self.find_child_mut(prefix, local) {
-            existing.children.clear();
-            existing.attributes.clear();
-            existing.attributes.push(("rdf:parseType".to_string(), "Bag".to_string()));
-            for item in items {
-                let mut li = Element {
-                    prefix: "rdf".to_string(),
-                    local: "li".to_string(),
-                    attributes: Vec::new(),
-                    children: vec![Child::Text(item.clone())],
-                };
-                // rdf:Bag wrapper is not needed with parseType="Bag" but an
-                // explicit bag is more interoperable; rebuild it.
-                li.prefix = "rdf".into();
-                existing.children.push(Child::Element(li));
-            }
-            return;
-        }
+        // Rebuild as an explicit rdf:Bag — the form every mainstream tool
+        // (exiv2/digiKam, darktable) reads without parseType tricks.
         let mut bag = Element {
             prefix: "rdf".to_string(),
             local: "Bag".to_string(),
@@ -183,6 +220,12 @@ impl Element {
                 children: vec![Child::Text(item.clone())],
             }));
         }
+        if let Some(existing) = self.find_child_mut(prefix, local) {
+            // Replace in place to keep tree order stable.
+            existing.children.clear();
+            existing.children.push(Child::Element(bag));
+            return;
+        }
         self.children.push(Child::Element(Element {
             prefix: prefix.to_string(),
             local: local.to_string(),
@@ -193,27 +236,38 @@ impl Element {
 
     fn bag_items(&self, prefix: &str, local: &str) -> Vec<String> {
         let mut out = Vec::new();
-        if let Some(node) = self.children.iter().find_map(|c| match c {
-            Child::Element(e) if e.prefix == prefix && e.local == local => Some(e),
-            _ => None,
-        }) {
-            for c in &node.children {
-                if let Child::Element(bag) = c {
-                    for li in &bag.children {
-                        if let Child::Element(li_el) = li {
-                            let mut text = String::new();
-                            for ch in &li_el.children {
-                                if let Child::Text(t) = ch {
-                                    text.push_str(t);
-                                }
-                            }
-                            out.push(text);
-                        }
-                    }
+        let Some(node) = self.find_child(prefix, local) else {
+            return out;
+        };
+        // Explicit rdf:Bag wrapper (our writes, digiKam, darktable)…
+        for c in &node.children {
+            if let Child::Element(bag) = c {
+                for li in &bag.children {
+                    append_li(li, &mut out);
                 }
             }
         }
+        // …or rdf:parseType="Bag" with direct rdf:li children.
+        if out.is_empty() {
+            for li in &node.children {
+                append_li(li, &mut out);
+            }
+        }
         out
+    }
+}
+
+fn append_li(child: &Child, out: &mut Vec<String>) {
+    if let Child::Element(li_el) = child {
+        if li_el.prefix == "rdf" && li_el.local == "li" {
+            let mut text = String::new();
+            for ch in &li_el.children {
+                if let Child::Text(t) = ch {
+                    text.push_str(t);
+                }
+            }
+            out.push(text);
+        }
     }
 }
 
@@ -547,7 +601,7 @@ impl Sidecar {
     pub fn rating(&self) -> Option<u8> {
         self.tree
             .description()
-            .and_then(|d| d.child_text("xmp", "Rating"))
+            .and_then(|d| d.child_text_or_attr("xmp", "Rating"))
             .and_then(|t| t.trim().parse().ok())
     }
 
@@ -556,7 +610,7 @@ impl Sidecar {
     }
 
     pub fn caption(&self) -> Option<String> {
-        self.tree.description().and_then(|d| d.child_text("dc", "description"))
+        self.tree.description().and_then(|d| d.child_alt_text("dc", "description"))
     }
 
     pub fn set_caption(&mut self, caption: &str) {
@@ -571,11 +625,20 @@ impl Sidecar {
         self.tree.ensure_description().set_or_replace_bag("dc", "subject", &tags);
     }
 
+    /// Lightroom-style hierarchical tags (`lr:hierarchicalSubject`), e.g.
+    /// `Vacation|2024`. digiKam and darktable read/write these; PLAN §5.
+    pub fn hierarchical_tags(&self) -> Vec<String> {
+        self.tree
+            .description()
+            .map(|d| d.bag_items("lr", "hierarchicalSubject"))
+            .unwrap_or_default()
+    }
+
     /// GPS as (latitude, longitude) decimal degrees.
     pub fn gps(&self) -> Option<(f64, f64)> {
         let d = self.tree.description()?;
-        let lat = d.child_text("exif", "GPSLatitude")?;
-        let lon = d.child_text("exif", "GPSLongitude")?;
+        let lat = d.child_text_or_attr("exif", "GPSLatitude")?;
+        let lon = d.child_text_or_attr("exif", "GPSLongitude")?;
         Some((parse_gps(&lat), parse_gps(&lon)))
     }
 
@@ -634,17 +697,31 @@ pub fn tmp_path(sidecar: &Path) -> PathBuf {
     sidecar.with_file_name(name)
 }
 
-/// Parse XMP GPS coordinate text (`52°31'59.9"N` or decimal `52.5331`).
+/// Parse XMP GPS coordinate text. Handles the forms the interop tools emit:
+/// decimal (`52.5331`), DMS (`52°31'59.9"N`), and darktable's
+/// deg,decimal-min form (`52,30.9999990N`) — see TASK-03-004.
 fn parse_gps(text: &str) -> f64 {
     let t = text.trim();
     if let Ok(v) = t.parse::<f64>() {
         return v;
     }
-    // DMS form: 52°31'59.9"N
+    // Hemisphere suffix, if any.
     let (body, hemi) = match t.chars().last() {
         Some(h @ ('N' | 'S' | 'E' | 'W')) => (&t[..t.len() - 1], h),
         _ => (t, 'N'),
     };
+    // darktable writes `52,30.9999990N` (deg,decimal-minutes with a comma
+    // separator); exiv2/digiKam write `52,31N` or `52°31'59.9"N`.
+    if body.contains(',') {
+        let parts: Vec<f64> = body.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+        let deg = match parts.as_slice() {
+            [d] => *d,
+            [d, m] => d + m / 60.0,
+            [d, m, s] => d + m / 60.0 + s / 3600.0,
+            _ => return f64::NAN,
+        };
+        return if hemi == 'S' || hemi == 'W' { -deg } else { deg };
+    }
     let body = body.trim_end_matches(|c: char| !c.is_ascii_digit() && c != '.');
     let parts: Vec<f64> = body
         .split(['°', '\'', '"'])
@@ -686,6 +763,10 @@ mod tests {
         assert!(parse_gps("13.405").abs() - 13.405 < 1e-9);
         assert!((parse_gps("52\u{b0}31'59.9\"N") - 52.533).abs() < 1e-3);
         assert!((parse_gps("52\u{b0}31'59.9\"S") + 52.533).abs() < 1e-3);
+        // Real-tool forms (interop fixtures, TASK-03-004): darktable writes
+        // deg,decimal-minutes with a comma; exiv2/digiKam deg,integer-min.
+        assert!((parse_gps("52,30.9999990N") - (52.0 + 30.999999 / 60.0)).abs() < 1e-3);
+        assert!((parse_gps("13,24E") - (13.0 + 24.0 / 60.0)).abs() < 1e-9);
     }
 
     #[test]

@@ -12,11 +12,11 @@
 - [x] `03-001` (L) `metadata` crate: exiv2 own bindings (rexiv2 fork); read/write sidecars; merge-on-write per 00-010 (preserve unknown fields, backup previous version).
 - [x] `03-002` (M) Sidecar sync engine: catalog ↔ sidecar authority rules (sidecar wins for user data, §5); write-through on every user-data mutation.
 - [x] `03-003` (M) Move/rename re-association: (size, mtime, hash) matching; sidecar follows the original (00-010 design).
-- [ ] `03-004` (M) Interop test suite: round-trip sidecars through darktable + digiKam (tags, ratings, captions, GPS) in CI.
+- [x] `03-004` (M) Interop test suite: round-trip sidecars through darktable + digiKam (tags, ratings, captions, GPS) in CI.
 
 ## Tasks
 
 - [x] [TASK-03-001-metadata-crate-sidecars.md](TASK-03-001-metadata-crate-sidecars.md) — metadata crate: own exiv2 bindings and sidecar read/write
 - [x] [TASK-03-002-sidecar-sync-engine.md](TASK-03-002-sidecar-sync-engine.md) — sidecar sync engine: catalog ↔ sidecar authority
-- [ ] [TASK-03-003-move-rename-reassociation.md](TASK-03-003-move-rename-reassociation.md) — move/rename re-association by (size, mtime, hash)
-- [ ] [TASK-03-004-interop-test-suite.md](TASK-03-004-interop-test-suite.md) — darktable/digiKam interop test suite in CI
+- [x] [TASK-03-003-move-rename-reassociation.md](TASK-03-003-move-rename-reassociation.md) — move/rename re-association by (size, mtime, hash)
+- [x] [TASK-03-004-interop-test-suite.md](TASK-03-004-interop-test-suite.md) — darktable/digiKam interop test suite in CI

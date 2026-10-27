@@ -1,0 +1,51 @@
+name: interop
+
+# TASK-03-004: darktable/digiKam interop suite. Runs on every change to the
+# metadata layer: regenerates the checked-in sidecar fixtures with the real
+# tools and diffs against them (drift = a tool version bump changed real
+# output), then runs the fixture-based interop tests.
+#
+# ubuntu-22.04 = the PLAN §4 floor runner and the version the fixtures were
+# produced with (darktable 3.8.1, exiv2 0.27.5). digiKam has no headless CLI;
+# its fixture comes from the exiv2 write path digiKam itself uses (00-010).
+
+"on":
+  pull_request:
+    paths:
+      - "crates/metadata/**"
+      - "tools/interop_fixtures.sh"
+      - ".github/workflows/interop.yml"
+  push:
+    branches: [main]
+    paths:
+      - "crates/metadata/**"
+      - "tools/interop_fixtures.sh"
+      - ".github/workflows/interop.yml"
+
+concurrency:
+  group: interop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  interop:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install darktable + exiv2 (real-tool fixture generation)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends darktable exiv2
+
+      - name: Fixture drift check (regenerate + diff against checked-in)
+        run: tools/interop_fixtures.sh
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo test (interop suite)
+        run: cargo test -p fotobase-metadata --test interop
