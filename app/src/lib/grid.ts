@@ -8,6 +8,9 @@ export interface GridItem {
   id: number;
   filename: string;
   hash: string | null;
+  /// `image` or `video` (TASK-02-007, from the catalog's `files.media_type`).
+  /// Absent in older payloads and browser-dev stubs — treated as image.
+  media_type?: "image" | "video";
 }
 
 /// Grid gap in px, both between cells and between rows.

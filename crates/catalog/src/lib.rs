@@ -12,7 +12,7 @@ pub use migrations::MIGRATIONS;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase-catalog";
@@ -43,6 +43,9 @@ pub struct FileInfo {
     pub id: i64,
     pub filename: String,
     pub hash: Option<String>,
+    /// `image` or `video` (TASK-02-007): the viewer uses it to pick the
+    /// player and to keep video files out of the `preview://` preload.
+    pub media_type: String,
 }
 
 /// Per-folder scan mode (TASK-01-016, PLAN §2A Folder Manager): `Once` is a
@@ -90,6 +93,18 @@ pub struct VideoMeta {
     pub profile: Option<String>,
     /// Display rotation in degrees, normalized to 0/90/180/270.
     pub rotation_deg: u32,
+}
+
+/// Player payload for one video (TASK-02-007): where the file lives plus the
+/// ffprobe result. `meta` is `None` until the probe succeeds — the player
+/// still plays such clips, but through the `stream://` fallback and without
+/// catalog duration/rotation.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct VideoInfo {
+    /// Absolute path of the original file (read-only; asset-protocol URL).
+    pub path: String,
+    /// Probe result, `None` when unprobed or the probe failed.
+    pub meta: Option<VideoMeta>,
 }
 
 /// One photo's info-pane payload (TASK-01-020, PLAN §2D): file properties
@@ -322,10 +337,16 @@ impl Catalog {
     /// grid-item lookup. `files.path` is UNIQUE, so this is one indexed
     /// query; `None` when the file is not cataloged (yet).
     pub fn file_by_path(&self, path: &str) -> Result<Option<FileInfo>> {
-        let mut stmt =
-            self.conn.prepare_cached("SELECT id, filename, hash FROM files WHERE path = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT id, filename, hash, media_type FROM files WHERE path = ?1")?;
         let mut rows = stmt.query_map([path], |r| {
-            Ok(FileInfo { id: r.get(0)?, filename: r.get(1)?, hash: r.get(2)? })
+            Ok(FileInfo {
+                id: r.get(0)?,
+                filename: r.get(1)?,
+                hash: r.get(2)?,
+                media_type: r.get(3)?,
+            })
         })?;
         match rows.next() {
             Some(row) => Ok(Some(row?)),
@@ -410,7 +431,7 @@ impl Catalog {
         }
         params.push(Box::new(limit as i64));
         let sql = format!(
-            "SELECT f.id, f.filename, f.hash FROM files_fts
+            "SELECT f.id, f.filename, f.hash, f.media_type FROM files_fts
              JOIN files f ON f.id = files_fts.rowid
              WHERE files_fts MATCH ?1{folder_clause}
              ORDER BY rank
@@ -420,7 +441,12 @@ impl Catalog {
         let mut stmt = self.conn.prepare_cached(&sql)?;
         let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
         let rows = stmt.query_map(refs.as_slice(), |r| {
-            Ok(FileInfo { id: r.get(0)?, filename: r.get(1)?, hash: r.get(2)? })
+            Ok(FileInfo {
+                id: r.get(0)?,
+                filename: r.get(1)?,
+                hash: r.get(2)?,
+                media_type: r.get(3)?,
+            })
         })?;
         Ok(rows.flatten().collect())
     }
@@ -431,11 +457,16 @@ impl Catalog {
     /// placeholder instead of dropping the photo. No image bytes here — the
     /// grid fetches pixels through the URI scheme, never over IPC.
     pub fn list_files(&self, limit: usize) -> Result<Vec<FileInfo>> {
-        let mut stmt = self
-            .conn
-            .prepare_cached("SELECT id, filename, hash FROM files ORDER BY path LIMIT ?1")?;
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT id, filename, hash, media_type FROM files ORDER BY path LIMIT ?1",
+        )?;
         let rows = stmt.query_map([limit as i64], |r| {
-            Ok(FileInfo { id: r.get(0)?, filename: r.get(1)?, hash: r.get(2)? })
+            Ok(FileInfo {
+                id: r.get(0)?,
+                filename: r.get(1)?,
+                hash: r.get(2)?,
+                media_type: r.get(3)?,
+            })
         })?;
         Ok(rows.flatten().collect())
     }
@@ -564,6 +595,41 @@ impl Catalog {
                 rusqlite::Error::QueryReturnedNoRows => Ok(None),
                 other => Err(other.into()),
             })
+    }
+
+    /// Player payload for one video (TASK-02-007): the file's path (for the
+    /// asset-protocol direct-play URL) plus the ffprobe result, `None` while
+    /// the probe has not succeeded. `None` for non-video files — the viewer
+    /// uses this to decide image vs player. No media bytes, ever.
+    pub fn video_info(&self, file_id: i64) -> Result<Option<VideoInfo>> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT f.path, f.media_type, m.video_duration, m.video_codec, \
+                        m.video_profile, m.video_rotation, m.video_probe_ok
+                 FROM files f LEFT JOIN metadata m ON m.file_id = f.id
+                 WHERE f.id = ?1 AND f.media_type = 'video'",
+                [file_id],
+                |r| {
+                    let duration: Option<f64> = r.get(2)?;
+                    let codec: Option<String> = r.get(3)?;
+                    let profile: Option<Option<String>> = r.get(4)?;
+                    let rotation: Option<i64> = r.get(5)?;
+                    let probe_ok: Option<i64> = r.get(6)?;
+                    let meta = match (probe_ok, duration, codec) {
+                        (Some(1), Some(duration_secs), Some(codec)) => Some(VideoMeta {
+                            duration_secs,
+                            codec,
+                            profile: profile.flatten(),
+                            rotation_deg: rotation.unwrap_or(0) as u32,
+                        }),
+                        _ => None,
+                    };
+                    Ok(VideoInfo { path: r.get(0)?, meta })
+                },
+            )
+            .optional()?;
+        Ok(row)
     }
 
     /// Videos still needing a probe: `media_type = 'video'` files never
@@ -757,14 +823,19 @@ impl Catalog {
         }
         let placeholders = "?,".repeat(folder_ids.len()).trim_end_matches(',').to_string();
         let sql = format!(
-            "SELECT id, filename, hash FROM files WHERE folder_id IN ({placeholders}) ORDER BY path LIMIT ?{}",
+            "SELECT id, filename, hash, media_type FROM files WHERE folder_id IN ({placeholders}) ORDER BY path LIMIT ?{}",
             folder_ids.len() + 1
         );
         let mut stmt = self.conn.prepare_cached(&sql)?;
         let params =
             folder_ids.iter().copied().chain(std::iter::once(limit as i64)).collect::<Vec<i64>>();
         let rows = stmt.query_map(rusqlite::params_from_iter(params), |r| {
-            Ok(FileInfo { id: r.get(0)?, filename: r.get(1)?, hash: r.get(2)? })
+            Ok(FileInfo {
+                id: r.get(0)?,
+                filename: r.get(1)?,
+                hash: r.get(2)?,
+                media_type: r.get(3)?,
+            })
         })?;
         Ok(rows.flatten().collect())
     }

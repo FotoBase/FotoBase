@@ -1,6 +1,6 @@
 # task: video player UI in grid and viewer
 
-**Feature:** [FEAT-02-03-video-playback](FEAT-02-03-video-playback.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** todo
+**Feature:** [FEAT-02-03-video-playback](FEAT-02-03-video-playback.md) · **Epic:** [EPIC-02 — Media & platform hardening](../EPIC-02.md) · **Status:** in progress (2026-10-27)
 
 ## Description
 Wire video playback into the UI: play from the grid (double-click) and in the single-photo viewer, choosing HTML5 (02-005) or `stream://` (02-006) transparently, honoring rotation metadata from 02-003.
@@ -22,7 +22,7 @@ Wire video playback into the UI: play from the grid (double-click) and in the si
 - E2e: portrait H.264 fixture plays upright with correct aspect; play/pause/scrub work; closing the viewer stops playback (no audio continues).
 
 ## Acceptance criteria
-- [ ] 02-007: videos play from grid and viewer with working controls.
-- [ ] 02-007: rotation honored.
-- [ ] 02-007: playback stops cleanly when the viewer closes.
-- [ ] 02-007: H.264/HEVC phone clips play on all three OSes.
+- [x] 02-007: videos play from grid and viewer with working controls.
+- [x] 02-007: rotation honored.
+- [x] 02-007: playback stops cleanly when the viewer closes.
+- [x] 02-007: H.264/HEVC phone clips play on all three OSes.
