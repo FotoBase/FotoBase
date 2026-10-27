@@ -1,6 +1,6 @@
 # task: darktable/digiKam interop test suite in CI
 
-**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-27)
+**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-27)
 
 ## Description
 CI suite round-tripping our sidecars through darktable and digiKam, verifying tags, ratings, captions, and GPS survive both directions (PLAN §9 Interop row; P2a acceptance "darktable/digiKam show tags, ratings, captions from our sidecars").
