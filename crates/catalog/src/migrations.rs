@@ -6,7 +6,7 @@
 //! rejected (`CatalogError::NewerSchema`) — we never downgrade.
 
 /// Ordered migration SQL. Index 0 upgrades a version-0 database to version 1.
-pub const MIGRATIONS: &[&str] = &[MIGRATION_V1, MIGRATION_V2, MIGRATION_V3];
+pub const MIGRATIONS: &[&str] = &[MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4];
 
 const MIGRATION_V1: &str = "
 CREATE TABLE folders (
@@ -99,6 +99,18 @@ END;
 
 INSERT INTO files_fts(rowid, filename, folder)
     SELECT f.id, f.filename, d.path FROM files f JOIN folders d ON d.id = f.folder_id;
+";
+
+/// TASK-03-002: sidecar sync state per file — the (mtime, size) of the XMP
+/// sidecar at the moment the catalog last converged with it (PLAN §5
+/// incremental rebuild). mtime is whole nanoseconds since the epoch (INTEGER,
+/// not REAL: float rounding must never make an unchanged sidecar look
+/// changed). NULL = never synced; changed values trigger a re-read on the
+/// next read/rebuild (sidecar wins).
+const MIGRATION_V4: &str = "
+ALTER TABLE files ADD COLUMN sidecar_mtime INTEGER;
+ALTER TABLE files ADD COLUMN sidecar_size INTEGER;
+CREATE INDEX idx_files_sidecar_sync ON files(sidecar_mtime, sidecar_size);
 ";
 
 use rusqlite::Connection;
