@@ -160,7 +160,9 @@ def cmd_mount(args: argparse.Namespace) -> int:
                         f"//127.0.0.1/{SHARE}",
                         str(mp),
                         "-o",
-                        f"username={USER},password={PASS},vers=3.0,soft,_netdev,port={PORT}",
+                        # uid/gid/file_mode/dir_mode so the runner user
+                        # (not root, who performed the mount) can write.
+                        f"username={USER},password={PASS},vers=3.0,soft,_netdev,port={PORT},uid={os.getuid()},gid={os.getgid()},file_mode=0666,dir_mode=0777",
                     ]
                 )
             else:
