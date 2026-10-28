@@ -9,6 +9,7 @@ pub mod albums;
 pub mod hidden;
 pub mod migrations;
 pub mod missing;
+pub mod query;
 pub mod relocate;
 pub mod sync;
 pub mod trash;
@@ -16,6 +17,7 @@ pub mod trash;
 pub use albums::AlbumInfo;
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
+pub use query::FileQuery;
 pub use relocate::BatchFile;
 pub use sync::{sidecar_path, SyncError, SyncStats};
 pub use trash::{TrashAction, TrashEntry, UndoReport, DEFAULT_TRASH_WINDOW_DAYS};
@@ -39,6 +41,9 @@ pub enum CatalogError {
     NewerSchema { found: i64, latest: usize },
     #[error("backup failed: {0}")]
     Backup(String),
+    /// A library query the caller built wrongly (e.g. a malformed date cutoff).
+    #[error("invalid query: {0}")]
+    InvalidQuery(String),
     #[error(transparent)]
     Sql(#[from] rusqlite::Error),
     #[error(transparent)]

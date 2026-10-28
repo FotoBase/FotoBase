@@ -4,6 +4,8 @@
 // position, so switching renderers (config-driven, user-overridable) loses
 // none of it. Svelte 5 runes in a `.svelte.ts` module keep this reactive.
 
+import { ALL_TIME } from "./filters";
+
 export type GridRenderer = "dom" | "canvas";
 
 /// Zoom range: 64 = wall of small tiles, 512 = near-preview. Shared by both
@@ -24,6 +26,13 @@ class GridState {
   /// the DOM and canvas grids filter for free: the shell fetches the
   /// matching items once and hands them to whichever renderer is mounted.
   searchQuery = $state("");
+  /// Library filters (TASK-03-014, PLAN §2 C). Session state: they live in
+  /// the module-level store so renderer switches and viewer re-opens keep
+  /// them, and the shell's one query effect reads them next to the search.
+  starredOnly = $state(false);
+  videosOnly = $state(false);
+  /// Date-slider position (`DATE_STEPS` index); `ALL_TIME` = no restriction.
+  dateStep = $state(ALL_TIME);
   /// Per-hash cache-bust versions (PLAN §3 rule 3). A cold-start miss serves
   /// the placeholder; when the queued render lands, the backend emits
   /// `thumb-rendered` and the shell bumps the hash's version here — every
@@ -35,6 +44,17 @@ class GridState {
   /// it stays pending until the photo is among the shown items, so the shell
   /// can widen the filters first and let the list reload.
   revealRequest = $state<{ id: number } | null>(null);
+
+  /// Any filter button or the date slider narrowing the library.
+  get filtersActive(): boolean {
+    return this.starredOnly || this.videosOnly || this.dateStep !== ALL_TIME;
+  }
+
+  clearFilters(): void {
+    this.starredOnly = false;
+    this.videosOnly = false;
+    this.dateStep = ALL_TIME;
+  }
 
   toggleSelection(id: number): void {
     const next = new Set(this.selection);
@@ -75,6 +95,7 @@ export function resetGridState(): void {
   gridState.selection = new Set();
   gridState.scrollTop = 0;
   gridState.searchQuery = "";
+  gridState.clearFilters();
   gridState.thumbVersions = {};
   gridState.revealRequest = null;
 }

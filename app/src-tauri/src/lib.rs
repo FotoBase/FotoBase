@@ -290,6 +290,37 @@ fn list_files(
     })
 }
 
+/// The grid's one query (TASK-03-014, PLAN §2 C): folder selection, album
+/// view, live search text and the filter buttons / date slider AND-combine
+/// in a single catalog query. `starred` resolves to the rating threshold for
+/// the current rating mode; `taken_since` is the date slider's `YYYY-MM-DD`
+/// cutoff. Ids and metadata only — no image bytes over IPC.
+#[tauri::command]
+fn query_files(
+    text: Option<String>,
+    folders: Option<Vec<i64>>,
+    album: Option<i64>,
+    starred: Option<bool>,
+    videos_only: Option<bool>,
+    taken_since: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::FileInfo>, String> {
+    let min_rating = if starred == Some(true) {
+        Some(rating::starred_threshold(ratings_enabled(&state)?))
+    } else {
+        None
+    };
+    let query = fotobase_catalog::FileQuery {
+        text,
+        folders,
+        album,
+        min_rating,
+        videos_only: videos_only == Some(true),
+        taken_since,
+    };
+    with_catalog(&state, |cat| cat.query_files(&query, usize::MAX))
+}
+
 fn ratings_enabled(state: &AppState) -> Result<bool, String> {
     let guard = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
     Ok(guard.ratings_enabled)
@@ -1414,6 +1445,7 @@ pub fn run() {
             stop_stream,
             search_files,
             list_files,
+            query_files,
             set_rating,
             get_caption,
             set_caption,

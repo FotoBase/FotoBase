@@ -9,9 +9,9 @@
 - Filters apply consistently in grid and viewer contexts.
 
 - [x] `03-013` (M) Extend FTS to captions + tags; live search covers them.
-- [ ] `03-014` (M) Filter buttons: starred, video; date slider (last N days/months).
+- [x] `03-014` (M) Filter buttons: starred, video; date slider (last N days/months).
 
 ## Tasks
 
 - [x] [TASK-03-013-fts-captions-tags.md](TASK-03-013-fts-captions-tags.md) — extend FTS to captions and tags
-- [ ] [TASK-03-014-filter-buttons-date-slider.md](TASK-03-014-filter-buttons-date-slider.md) — filter buttons and date slider
+- [x] [TASK-03-014-filter-buttons-date-slider.md](TASK-03-014-filter-buttons-date-slider.md) — filter buttons and date slider
