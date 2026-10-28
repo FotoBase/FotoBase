@@ -32,7 +32,7 @@
 
 ## feat: search & filters
 
-- [ ] `03-013` (M) Extend FTS to captions + tags; live search covers them.
+- [x] `03-013` (M) Extend FTS to captions + tags; live search covers them.
 - [ ] `03-014` (M) Filter buttons: starred, video; date slider (last N days/months).
 
 ## feat: view options
