@@ -92,6 +92,10 @@ pub struct Settings {
     /// maps to `xmp:Rating` = 5.
     #[serde(default)]
     pub ratings_enabled: bool,
+    /// Quick Tags panel labels (TASK-03-006, PLAN §2B): at most 10
+    /// user-configurable one-click tags. Empty slots render disabled.
+    #[serde(default)]
+    pub quick_tags: Vec<String>,
 }
 
 impl Default for Settings {
@@ -104,6 +108,7 @@ impl Default for Settings {
             theme: Theme::default(),
             file_associations: Vec::new(),
             ratings_enabled: false,
+            quick_tags: Vec::new(),
         }
     }
 }

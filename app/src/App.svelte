@@ -9,6 +9,7 @@
   import FolderTree from "./lib/FolderTree.svelte";
   import ImportDialog from "./lib/ImportDialog.svelte";
   import OptionsDialog from "./lib/OptionsDialog.svelte";
+  import QuickTags from "./lib/QuickTags.svelte";
   import SearchBar from "./lib/SearchBar.svelte";
   import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
   import Viewer from "./lib/Viewer.svelte";
@@ -415,6 +416,15 @@ import { reportCodecSupport } from "./lib/codec-probe";
       <!-- Live search (TASK-01-018): debounced into the shared store; the
            effect above re-queries FTS and both renderers narrow. -->
       <SearchBar bind:this={searchEl} />
+      <!-- Quick Tags (TASK-03-006, PLAN §2B): one click applies/removes one
+           of the 10 configured tags on the whole selection. -->
+      {#if settings && gridState.selection.size > 0}
+        <QuickTags
+          tags={settings.quick_tags}
+          selectedIds={[...gridState.selection]}
+          onapplied={() => void refreshLibrary()}
+        />
+      {/if}
       <!-- Renderer switch (TASK-01-014): config-driven, user-overridable. DOM
            stays the default everywhere; the canvas renderer is available on all
            OSes. Both read the same shared store, so zoom/selection/scroll carry

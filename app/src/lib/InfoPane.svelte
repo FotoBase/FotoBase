@@ -9,6 +9,7 @@
 <script lang="ts">
   import type { GridItem } from "./grid";
   import { t } from "./i18n.svelte.js";
+  import TagEditor from "./TagEditor.svelte";
   import { previewUri } from "./viewer";
   import {
     formatBytes,
@@ -144,5 +145,11 @@
       <dt>{t("info.modified")}</dt>
       <dd data-testid="info-modified">{info ? formatDate(info.mtime) : MISSING}</dd>
     </dl>
+  </section>
+  <!-- Tag editor (TASK-03-006, PLAN §2B): edit the visible photo's tags;
+       every change is written through to the sidecar by the backend. -->
+  <section>
+    <h3>{t("tags.title")}</h3>
+    <TagEditor photoId={photo?.id ?? null} />
   </section>
 </aside>

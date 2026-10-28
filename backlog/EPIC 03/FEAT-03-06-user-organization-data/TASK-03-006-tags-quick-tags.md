@@ -1,6 +1,6 @@
 # task: tags, tag editor, and quick tags panel
 
-**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-28)
 
 ## Description
 Tags/keywords written to `dc:subject` (plus `lr:hierarchicalSubject` for nested tags), a tag editor, and a Quick Tags panel with 10 one-click buttons (PLAN §2 B Tags/Quick Tags, §5 mapping). Depends on the sidecar merge-on-write design (00-010, hard gate for EPIC-03).
@@ -21,6 +21,6 @@ Tags/keywords written to `dc:subject` (plus `lr:hierarchicalSubject` for nested 
 - E2e: Quick Tags button toggles a tag on a multi-selection in one click.
 
 ## Acceptance criteria
-- [ ] 03-006: tags land in `dc:subject` (+ `lr:hierarchicalSubject`); nested tags work.
-- [ ] 03-006: tag editor and Quick Tags panel (10 one-click buttons) work.
-- [ ] 03-006: tags survive rebuild; originals unchanged (checksum).
+- [x] 03-006: tags land in `dc:subject` (+ `lr:hierarchicalSubject`); nested tags work.
+- [x] 03-006: tag editor and Quick Tags panel (10 one-click buttons) work.
+- [x] 03-006: tags survive rebuild; originals unchanged (checksum).

@@ -40,7 +40,11 @@ const settle = async (): Promise<void> => {
 
 describe("OptionsDialog theme (TASK-01-024)", () => {
   it("defaults to following the OS (system)", () => {
-    render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });
+    render(OptionsDialog, {
+      open: true,
+      settings: { ...DEFAULT_SETTINGS },
+      onchange: vi.fn(),
+    });
     const select = screen.getByTestId("theme-select") as HTMLSelectElement;
     expect(select.value).toBe("system");
   });
@@ -59,7 +63,11 @@ describe("OptionsDialog theme (TASK-01-024)", () => {
   });
 
   it("offers system, light, and dark choices", () => {
-    render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });
+    render(OptionsDialog, {
+      open: true,
+      settings: { ...DEFAULT_SETTINGS },
+      onchange: vi.fn(),
+    });
     const select = screen.getByTestId("theme-select") as HTMLSelectElement;
     const values = [...select.options].map((o) => o.value);
     expect(values).toEqual(["system", "light", "dark"]);
@@ -68,8 +76,14 @@ describe("OptionsDialog theme (TASK-01-024)", () => {
 
 describe("OptionsDialog ratings (TASK-03-005)", () => {
   it("is off by default (single star, ADR-0002)", () => {
-    render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });
-    expect((screen.getByTestId("ratings-enabled") as HTMLInputElement).checked).toBe(false);
+    render(OptionsDialog, {
+      open: true,
+      settings: { ...DEFAULT_SETTINGS },
+      onchange: vi.fn(),
+    });
+    expect(
+      (screen.getByTestId("ratings-enabled") as HTMLInputElement).checked,
+    ).toBe(false);
   });
 
   it("enabling 1-5 ratings applies and persists", async () => {
@@ -81,13 +95,42 @@ describe("OptionsDialog ratings (TASK-03-005)", () => {
     await settle();
 
     expect(onchange).toHaveBeenCalledWith({ ...base, ratings_enabled: true });
-    expect(saveSettings).toHaveBeenCalledWith({ ...base, ratings_enabled: true });
+    expect(saveSettings).toHaveBeenCalledWith({
+      ...base,
+      ratings_enabled: true,
+    });
+  });
+});
+
+describe("OptionsDialog quick tags (TASK-03-006)", () => {
+  it("persists one tag per line, trimmed, capped at 10", async () => {
+    const base: Settings = { ...DEFAULT_SETTINGS };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+
+    const input = screen.getByTestId("quick-tags-input") as HTMLTextAreaElement;
+    const lines = ["sea", "  family ", "", "Vacation|2024"].concat(
+      Array.from({ length: 9 }, (_, i) => `t${i}`),
+    );
+    await fireEvent.change(input, { target: { value: lines.join("\n") } });
+    await settle();
+
+    // Empty lines dropped, whitespace trimmed, at most 10 kept.
+    const applied = vi.mocked(onchange).mock.calls.at(-1)![0] as Settings;
+    expect(applied.quick_tags).toHaveLength(10);
+    expect(applied.quick_tags[1]).toBe("family");
+    expect(applied.quick_tags[2]).toBe("Vacation|2024");
+    expect(saveSettings).toHaveBeenLastCalledWith(applied);
   });
 });
 
 describe("OptionsDialog file associations (TASK-01-025)", () => {
   it("lists the supported image types with checkboxes", () => {
-    render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });
+    render(OptionsDialog, {
+      open: true,
+      settings: { ...DEFAULT_SETTINGS },
+      onchange: vi.fn(),
+    });
     for (const ext of ["jpg", "png", "heic"]) {
       const box = screen.getByTestId(`assoc-${ext}`) as HTMLInputElement;
       expect(box.type).toBe("checkbox");
@@ -95,11 +138,20 @@ describe("OptionsDialog file associations (TASK-01-025)", () => {
   });
 
   it("reflects the persisted association list as checked state", () => {
-    const settings: Settings = { ...DEFAULT_SETTINGS, file_associations: ["jpg", "png"] };
+    const settings: Settings = {
+      ...DEFAULT_SETTINGS,
+      file_associations: ["jpg", "png"],
+    };
     render(OptionsDialog, { open: true, settings, onchange: vi.fn() });
-    expect((screen.getByTestId("assoc-jpg") as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByTestId("assoc-png") as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByTestId("assoc-gif") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId("assoc-jpg") as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect((screen.getByTestId("assoc-png") as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect((screen.getByTestId("assoc-gif") as HTMLInputElement).checked).toBe(
+      false,
+    );
   });
 
   it("checking a type registers it with the OS and persists the list", async () => {
@@ -118,7 +170,10 @@ describe("OptionsDialog file associations (TASK-01-025)", () => {
   });
 
   it("unchecking a type unregisters it and drops it from the list", async () => {
-    const base: Settings = { ...DEFAULT_SETTINGS, file_associations: ["jpg", "png"] };
+    const base: Settings = {
+      ...DEFAULT_SETTINGS,
+      file_associations: ["jpg", "png"],
+    };
     const onchange = vi.fn();
     render(OptionsDialog, { open: true, settings: base, onchange });
 
