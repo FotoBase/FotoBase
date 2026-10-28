@@ -1,6 +1,6 @@
 # task: darktable/digiKam interop test suite in CI
 
-**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-08-xmp-sidecar-layer](FEAT-03-08-xmp-sidecar-layer.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-27)
 
 ## Description
 CI suite round-tripping our sidecars through darktable and digiKam, verifying tags, ratings, captions, and GPS survive both directions (PLAN §9 Interop row; P2a acceptance "darktable/digiKam show tags, ratings, captions from our sidecars").
@@ -20,6 +20,6 @@ CI suite round-tripping our sidecars through darktable and digiKam, verifying ta
 - Integration: a digiKam-edited sidecar re-read by Fotobase keeps digiKam's custom fields after our next write.
 
 ## Acceptance criteria
-- [ ] 03-004: interop suite round-trips tags, ratings, captions, GPS through darktable and digiKam.
-- [ ] 03-004: suite runs in CI (live or fixture-based) on metadata-layer changes.
-- [ ] 03-004: merge-on-write proven against real third-party output.
+- [x] 03-004: interop suite round-trips tags, ratings, captions, GPS through darktable and digiKam.
+- [x] 03-004: suite runs in CI (live or fixture-based) on metadata-layer changes.
+- [x] 03-004: merge-on-write proven against real third-party output.
