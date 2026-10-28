@@ -179,6 +179,26 @@ main {
   color: var(--fb-on-accent);
 }
 
+/* Folders + Albums stacked in one sidebar column (TASK-03-008). */
+.sidebar {
+  flex: 0 0 14rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-height: 80vh;
+  overflow: auto;
+  border-right: 1px solid var(--fb-border-soft);
+  padding-right: 0.75rem;
+}
+
+.sidebar .folder-tree {
+  flex: 0 0 auto;
+  max-height: none;
+  overflow: visible;
+  border-right: 0;
+  padding-right: 0;
+}
+
 .grid-area {
   flex: 1;
   min-width: 0;

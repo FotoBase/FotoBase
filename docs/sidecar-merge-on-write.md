@@ -21,6 +21,7 @@ This is the highest data-loss-risk area of the app. Everything here is normative
 | Field | XMP location | Type | Decided |
 |---|---|---|---|
 | Albums | `fb:Albums` | bag of album IDs (UUID strings) | §5 |
+| Album definitions | `albums.json` next to the catalog file (name, date, place, description, cover) | one JSON document, merge-on-write (backup, `.tmp` + rename, unknown fields preserved) | 03-008 |
 | Edit recipe | `fb:Recipe` | versioned JSON string | §5 |
 | Stack membership | `fb:StackId` (UUID), `fb:StackRole` (`top`/`member`) | per member photo | §11 Q5 |
 | Hidden (photo) | `fb:Hidden` | boolean | §11 Q6 |

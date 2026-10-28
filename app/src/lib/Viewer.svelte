@@ -32,6 +32,9 @@
     /// Fired after the backend persisted a rating, so the shell can update
     /// its item list.
     onrate?: (id: number, rating: number) => void;
+    /// Fired after the info pane changed album membership (TASK-03-008), so
+    /// the shell can refresh album counts and an open album view.
+    onalbumschanged?: () => void;
     onclose?: () => void;
   }
 
@@ -42,6 +45,7 @@
     startSlideshow = false,
     ratingsEnabled = false,
     onrate = () => {},
+    onalbumschanged = () => {},
     onclose = () => {},
   }: Props = $props();
 
@@ -223,7 +227,7 @@
 
 <div class="viewer" data-testid="viewer">
   {#if infoOpen}
-    <InfoPane photo={current} />
+    <InfoPane photo={current} {onalbumschanged} />
   {/if}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="viewer-stage" data-testid="viewer-stage">

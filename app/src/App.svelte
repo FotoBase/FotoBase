@@ -3,6 +3,8 @@
   // first wiring of the Options dialog (TASK-01-022): settings load at
   // startup, the dialog persists every change, and the update-mode policy
   // runs once on startup.
+  import AlbumDialog from "./lib/AlbumDialog.svelte";
+  import AlbumList from "./lib/AlbumList.svelte";
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import FolderManagerDialog from "./lib/FolderManagerDialog.svelte";
@@ -14,7 +16,17 @@
   import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
   import Viewer from "./lib/Viewer.svelte";
   import { deleteFromDisk, exitApp, refreshFolderThumbnails, revealInDisk } from "./lib/file-menu";
-import { reportCodecSupport } from "./lib/codec-probe";
+  import {
+    addToAlbum,
+    deleteAlbum,
+    listAlbumFiles,
+    listAlbums,
+    removeFromAlbum,
+    setAlbumCover,
+    targetIds,
+    type Album,
+  } from "./lib/albums";
+  import { reportCodecSupport } from "./lib/codec-probe";
   import { removeFolder } from "./lib/folder-manager";
   import type { FolderInfo, MenuItem } from "./lib/folder-tree";
   import { debounce, throttle, type GridItem } from "./lib/grid";
@@ -35,6 +47,24 @@ import { reportCodecSupport } from "./lib/codec-probe";
   let photos = $state<GridItem[]>([]);
   let folders = $state<FolderInfo[]>([]);
   let selectedFolders = $state<number[]>([]);
+  // Albums (TASK-03-008): the sidebar list, the album whose photos the grid
+  // shows (null = the folder/search view), and the menus + dialog around it.
+  let albums = $state<Album[]>([]);
+  let selectedAlbum = $state<number | null>(null);
+  let albumDialog = $state<{ open: boolean; album: Album | null }>({ open: false, album: null });
+  let albumMenu = $state<{ open: boolean; x: number; y: number; album: Album | null }>({
+    open: false,
+    x: 0,
+    y: 0,
+    album: null,
+  });
+  // "Add to album" picker: opened from the photo menu, lists the albums.
+  let albumPicker = $state<{ open: boolean; x: number; y: number; ids: number[] }>({
+    open: false,
+    x: 0,
+    y: 0,
+    ids: [],
+  });
   let folderMenu = $state<{ open: boolean; x: number; y: number; folder: FolderInfo | null }>({
     open: false,
     x: 0,
@@ -124,12 +154,33 @@ import { reportCodecSupport } from "./lib/codec-probe";
   async function refreshLibrary(): Promise<void> {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      photos = await invoke<GridItem[]>("list_files");
+      photos =
+        selectedAlbum !== null
+          ? await listAlbumFiles<GridItem>(selectedAlbum, gridState.searchQuery)
+          : await invoke<GridItem[]>("list_files");
       folders = await invoke<FolderInfo[]>("list_folders");
+      albums = await listAlbums();
     } catch {
       // Browser dev: no backend, empty grid and tree.
       photos = [];
       folders = [];
+      albums = [];
+    }
+  }
+
+  // Album membership changed (add/remove/delete/cover): refresh the sidebar
+  // counts and, in an album view, the grid.
+  async function refreshAlbums(): Promise<void> {
+    try {
+      albums = await listAlbums();
+      if (selectedAlbum !== null && !albums.some((a) => a.id === selectedAlbum)) {
+        selectedAlbum = null;
+      }
+      if (selectedAlbum !== null) {
+        photos = await listAlbumFiles<GridItem>(selectedAlbum, gridState.searchQuery);
+      }
+    } catch {
+      // Browser dev / backend down: keep what is shown.
     }
   }
 
@@ -272,12 +323,18 @@ import { reportCodecSupport } from "./lib/codec-probe";
   // search naturally restores the folder-filtered view: the query is the
   // only thing that changed.
   $effect(() => {
-    // Read both filters up front so the effect tracks each of them.
+    // Read every filter up front so the effect tracks each of them. An
+    // album view (TASK-03-008) takes the place of the folder filter; the
+    // search box still narrows it.
     const sel = selectedFolders;
     const query = gridState.searchQuery;
+    const album = selectedAlbum;
     void (async () => {
       try {
-        photos = await listLibraryItems(sel, query);
+        photos =
+          album !== null
+            ? await listAlbumFiles<GridItem>(album, query)
+            : await listLibraryItems(sel, query);
       } catch {
         // Browser dev / backend down: nothing to show.
         photos = [];
@@ -293,9 +350,28 @@ import { reportCodecSupport } from "./lib/codec-probe";
     { id: "view-slideshow", label: t("menu.viewSlideshow") },
     { id: "locate-on-disk", label: t("menu.locateOnDisk") },
     { id: "delete-from-disk", label: t("menu.deleteFromDisk") },
-    { id: "add-to-album", label: t("menu.addToAlbum"), disabled: true },
+    { id: "add-to-album", label: t("menu.addToAlbum"), disabled: albums.length === 0 },
+    ...(selectedAlbum !== null
+      ? [
+          { id: "remove-from-album", label: t("albums.removeFromPicked") },
+          { id: "set-album-cover", label: t("albums.setCover") },
+        ]
+      : []),
     { id: "exit", label: t("menu.exit") },
   ]);
+
+  const albumMenuItems = $derived<MenuItem[]>([
+    { id: "edit-album", label: t("albums.edit") },
+    { id: "delete-album", label: t("albums.delete") },
+  ]);
+
+  // The photo menu's "Add to album" opens this picker: one entry per album,
+  // then "New album…" (which adds the photos to the album once created).
+  const albumPickerItems = $derived<MenuItem[]>([
+    ...albums.map((a) => ({ id: `album:${a.id}`, label: a.name })),
+    { id: "new-album", label: t("albums.newEllipsis") },
+  ]);
+  let pendingAlbumIds = $state<number[]>([]);
 
   const folderMenuItems = $derived<MenuItem[]>([
     { id: "refresh-thumbnails", label: t("menu.refreshThumbnails") },
@@ -323,11 +399,81 @@ import { reportCodecSupport } from "./lib/codec-probe";
       } catch {
         // Browser dev / backend down: nothing to reveal or delete.
       }
+    } else if (id === "add-to-album") {
+      albumPicker = {
+        open: true,
+        x: photoMenu.x,
+        y: photoMenu.y,
+        ids: targetIds(item.id, gridState.selection),
+      };
+    } else if (id === "remove-from-album" && selectedAlbum !== null) {
+      try {
+        await removeFromAlbum(selectedAlbum, targetIds(item.id, gridState.selection));
+      } catch {
+        // Backend down: the grid keeps showing the album as it was.
+      }
+      await refreshAlbums();
+    } else if (id === "set-album-cover" && selectedAlbum !== null) {
+      try {
+        await setAlbumCover(selectedAlbum, item.id);
+      } catch {
+        // Backend down: the cover stays as it was.
+      }
+      await refreshAlbums();
     } else if (id === "exit") {
       void exitApp().catch(() => {
         // The backend tears down mid-response on a clean exit — not an error.
       });
     }
+  }
+
+  async function handleAlbumPick(id: string): Promise<void> {
+    const ids = albumPicker.ids;
+    if (id === "new-album") {
+      pendingAlbumIds = ids;
+      albumDialog = { open: true, album: null };
+      return;
+    }
+    const albumId = Number(id.slice("album:".length));
+    try {
+      await addToAlbum(albumId, ids);
+    } catch {
+      // Backend down: nothing was added.
+    }
+    await refreshAlbums();
+  }
+
+  async function handleAlbumMenuPick(id: string): Promise<void> {
+    const album = albumMenu.album;
+    if (!album) return;
+    if (id === "edit-album") {
+      pendingAlbumIds = [];
+      albumDialog = { open: true, album };
+    } else if (id === "delete-album" && confirm(t("albums.deleteConfirm", { name: album.name }))) {
+      // The album only — its photos stay in the library.
+      try {
+        await deleteAlbum(album.id);
+      } catch {
+        // Backend down: the album stays.
+      }
+      if (selectedAlbum === album.id) selectedAlbum = null;
+      await refreshAlbums();
+    }
+  }
+
+  // A new album created from the photo menu receives the photos it was
+  // created for.
+  async function handleAlbumSaved(album: Album): Promise<void> {
+    const ids = pendingAlbumIds;
+    pendingAlbumIds = [];
+    if (ids.length > 0) {
+      try {
+        await addToAlbum(album.id, ids);
+      } catch {
+        // The album exists; adding the photos failed — they can be added again.
+      }
+    }
+    await refreshAlbums();
   }
 
   async function handleFolderPick(id: string): Promise<void> {
@@ -352,6 +498,10 @@ import { reportCodecSupport } from "./lib/codec-probe";
 
   function openPhotoMenu(e: { x: number; y: number; item: GridItem }): void {
     photoMenu = { open: true, x: e.x, y: e.y, item: e.item };
+  }
+
+  function openAlbumMenu(e: { album: Album; x: number; y: number }): void {
+    albumMenu = { open: true, x: e.x, y: e.y, album: e.album };
   }
 
   function openFolderMenu(e: { folder: FolderInfo; x: number; y: number }): void {
@@ -406,12 +556,27 @@ import { reportCodecSupport } from "./lib/codec-probe";
   <!-- Folders view + grid (TASK-01-015): the tree's multi-select is the
        grid's filter; both live in one flex row. -->
   <div class="library">
-    <FolderTree
-      folders={folders}
-      selected={selectedFolders}
-      onselect={(ids) => (selectedFolders = ids)}
-      onfoldercontextmenu={openFolderMenu}
-    />
+    <div class="sidebar">
+      <FolderTree
+        folders={folders}
+        selected={selectedFolders}
+        onselect={(ids) => {
+          selectedFolders = ids;
+          selectedAlbum = null;
+        }}
+        onfoldercontextmenu={openFolderMenu}
+      />
+      <AlbumList
+        {albums}
+        selected={selectedAlbum}
+        onselect={(id) => (selectedAlbum = id)}
+        oncreate={() => {
+          pendingAlbumIds = [];
+          albumDialog = { open: true, album: null };
+        }}
+        oncontextmenu={openAlbumMenu}
+      />
+    </div>
     <div class="grid-area">
       <!-- Live search (TASK-01-018): debounced into the shared store; the
            effect above re-queries FTS and both renderers narrow. -->
@@ -455,6 +620,7 @@ import { reportCodecSupport } from "./lib/codec-probe";
       onrate={(id, rating) => {
         photos = photos.map((p) => (p.id === id ? { ...p, rating } : p));
       }}
+      onalbumschanged={() => void refreshAlbums()}
       onclose={() => (viewer = { open: false, index: 0, slideshow: false })}
     />
   {/if}
@@ -464,6 +630,25 @@ import { reportCodecSupport } from "./lib/codec-probe";
     y={folderMenu.y}
     items={folderMenuItems}
     onpick={handleFolderPick}
+  />
+  <ContextMenu
+    bind:open={albumMenu.open}
+    x={albumMenu.x}
+    y={albumMenu.y}
+    items={albumMenuItems}
+    onpick={handleAlbumMenuPick}
+  />
+  <ContextMenu
+    bind:open={albumPicker.open}
+    x={albumPicker.x}
+    y={albumPicker.y}
+    items={albumPickerItems}
+    onpick={handleAlbumPick}
+  />
+  <AlbumDialog
+    bind:open={albumDialog.open}
+    album={albumDialog.album}
+    onsaved={handleAlbumSaved}
   />
   <ContextMenu
     bind:open={photoMenu.open}

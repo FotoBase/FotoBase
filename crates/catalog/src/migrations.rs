@@ -6,8 +6,15 @@
 //! rejected (`CatalogError::NewerSchema`) — we never downgrade.
 
 /// Ordered migration SQL. Index 0 upgrades a version-0 database to version 1.
-pub const MIGRATIONS: &[&str] =
-    &[MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6];
+pub const MIGRATIONS: &[&str] = &[
+    MIGRATION_V1,
+    MIGRATION_V2,
+    MIGRATION_V3,
+    MIGRATION_V4,
+    MIGRATION_V5,
+    MIGRATION_V6,
+    MIGRATION_V7,
+];
 
 const MIGRATION_V1: &str = "
 CREATE TABLE folders (
@@ -204,6 +211,23 @@ INSERT INTO files_fts(rowid, filename, folder, caption)
     SELECT f.id, f.filename, d.path, m.caption
     FROM files f JOIN folders d ON d.id = f.folder_id
     LEFT JOIN metadata m ON m.file_id = f.id;
+";
+
+/// TASK-03-008: albums get a stable UUID (the id written to each member's
+/// `fb:Albums` bag, 00-010 §2) and a cover pick. The cover is stored as the
+/// photo's path, not its row id, so it re-resolves after the catalog is
+/// deleted and the files are re-scanned. `albums` / `album_files` are
+/// derived cache: the definitions are rebuilt from `albums.json` next to
+/// the catalog and the membership from the sidecars.
+const MIGRATION_V7: &str = "
+ALTER TABLE albums ADD COLUMN uuid TEXT;
+ALTER TABLE albums ADD COLUMN cover_path TEXT;
+UPDATE albums SET uuid = lower(
+    hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)), 2) ||
+    '-a' || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6)))
+    WHERE uuid IS NULL;
+CREATE UNIQUE INDEX idx_albums_uuid ON albums(uuid);
+CREATE INDEX idx_album_files_file ON album_files(file_id);
 ";
 
 use rusqlite::Connection;

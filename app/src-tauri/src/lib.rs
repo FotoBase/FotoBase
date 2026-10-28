@@ -319,6 +319,97 @@ fn set_caption(
     })
 }
 
+/// Albums (TASK-03-008): every album with its photo count and cover.
+#[tauri::command]
+fn list_albums(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::AlbumInfo>, String> {
+    with_catalog(&state, |cat| cat.list_albums())
+}
+
+/// Create an album (name + date required, place/description optional).
+#[tauri::command]
+fn create_album(
+    name: String,
+    date: String,
+    place: Option<String>,
+    description: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_catalog::AlbumInfo, String> {
+    with_catalog_sync(&state, |cat| {
+        cat.create_album(&name, &date, place.as_deref(), description.as_deref())
+    })
+}
+
+#[tauri::command]
+fn update_album(
+    album_id: i64,
+    name: String,
+    date: String,
+    place: Option<String>,
+    description: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_catalog::AlbumInfo, String> {
+    with_catalog_sync(&state, |cat| {
+        cat.update_album(album_id, &name, &date, place.as_deref(), description.as_deref())
+    })
+}
+
+/// Delete the album only; photos and originals are untouched.
+#[tauri::command]
+fn delete_album(album_id: i64, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    with_catalog_sync(&state, |cat| cat.delete_album(album_id))
+}
+
+/// Add photos to an album (`fb:Albums` in each sidecar). Returns the number
+/// of photos that were not already members.
+#[tauri::command]
+fn add_to_album(
+    album_id: i64,
+    file_ids: Vec<i64>,
+    state: tauri::State<'_, AppState>,
+) -> Result<usize, String> {
+    with_catalog_sync(&state, |cat| cat.add_to_album(album_id, &file_ids))
+}
+
+#[tauri::command]
+fn remove_from_album(
+    album_id: i64,
+    file_ids: Vec<i64>,
+    state: tauri::State<'_, AppState>,
+) -> Result<usize, String> {
+    with_catalog_sync(&state, |cat| cat.remove_from_album(album_id, &file_ids))
+}
+
+#[tauri::command]
+fn set_album_cover(
+    album_id: i64,
+    file_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_catalog::AlbumInfo, String> {
+    with_catalog_sync(&state, |cat| cat.set_album_cover(album_id, file_id))
+}
+
+/// The album's photos as grid items (id + hash only, no pixels). A non-blank
+/// `query` narrows them with the live search (filename, folder, caption).
+#[tauri::command]
+fn list_album_files(
+    album_id: i64,
+    query: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::FileInfo>, String> {
+    with_catalog(&state, |cat| match query.as_deref().map(str::trim) {
+        Some(q) if !q.is_empty() => cat.search_album_files(album_id, q, usize::MAX),
+        _ => cat.list_album_files(album_id, usize::MAX),
+    })
+}
+
+/// Ids of the albums a photo is in (viewer / info pane).
+#[tauri::command]
+fn get_file_albums(file_id: i64, state: tauri::State<'_, AppState>) -> Result<Vec<i64>, String> {
+    with_catalog(&state, |cat| cat.file_album_ids(file_id))
+}
+
 /// Tags (TASK-03-006): read a photo's tags from the catalog mirror.
 #[tauri::command]
 fn get_tags(file_id: i64, state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
@@ -1161,6 +1252,15 @@ pub fn run() {
             set_rating,
             get_caption,
             set_caption,
+            list_albums,
+            create_album,
+            update_album,
+            delete_album,
+            add_to_album,
+            remove_from_album,
+            set_album_cover,
+            list_album_files,
+            get_file_albums,
             get_tags,
             add_tag,
             remove_tag,

@@ -32,7 +32,7 @@ fn search_matches_filename_and_folder() {
 
     assert_eq!(cat.search_files("beach", 100).unwrap(), vec![id]);
     assert_eq!(cat.search_files("2024", 100).unwrap(), vec![id]);
-    assert_eq!(cat.search_files("xyzzy", 100).unwrap(), vec![]);
+    assert_eq!(cat.search_files("xyzzy", 100).unwrap(), Vec::<i64>::new());
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn search_survives_fts_syntax_characters_in_input() {
 
     // Typed text must never be interpreted as FTS5 query syntax.
     assert_eq!(cat.search_files("beach (", 100).unwrap(), vec![id]);
-    assert_eq!(cat.search_files("\"", 100).unwrap(), vec![]);
+    assert_eq!(cat.search_files("\"", 100).unwrap(), Vec::<i64>::new());
 }
 
 #[test]
@@ -165,7 +165,8 @@ fn detailed_search_intersects_with_folder_selection() {
     assert_eq!(
         ids[0],
         cat.conn()
-            .query_row("SELECT id FROM files WHERE filename = 'beach.jpg'", [], |r| r.get(0))
+            .query_row("SELECT id FROM files WHERE filename = 'beach.jpg'", [], |r| r
+                .get::<_, i64>(0))
             .unwrap()
     );
 

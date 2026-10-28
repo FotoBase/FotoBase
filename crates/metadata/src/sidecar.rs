@@ -798,6 +798,24 @@ impl Sidecar {
         );
     }
 
+    /// Album membership: the UUIDs in the custom `fb:Albums` bag (TASK-03-008,
+    /// 00-010 §2). Album definitions (name, date, …) live outside the sidecar.
+    pub fn albums(&self) -> Vec<String> {
+        self.tree.description().map(|d| d.bag_items("fb", "Albums")).unwrap_or_default()
+    }
+
+    /// Replace the `fb:Albums` bag. An empty membership removes the property
+    /// so a photo that left its last album carries no empty `fb:Albums`.
+    pub fn set_albums(&mut self, albums: Vec<String>) {
+        if albums.is_empty() {
+            if let Some(d) = self.tree.description_mut() {
+                d.remove_prop("fb", "Albums");
+            }
+            return;
+        }
+        self.tree.ensure_description_ns("fb").set_or_replace_bag("fb", "Albums", &albums);
+    }
+
     /// GPS as (latitude, longitude) decimal degrees.
     pub fn gps(&self) -> Option<(f64, f64)> {
         let d = self.tree.description()?;
