@@ -255,3 +255,16 @@ describe("ThumbnailGrid", () => {
     });
   });
 });
+
+describe("ThumbnailGrid hidden photos (TASK-03-009)", () => {
+  it("marks revealed hidden photos so they render grayed", () => {
+    const items: GridItem[] = [
+      { id: 1, filename: "open.jpg", hash: HASH(1) },
+      { id: 2, filename: "secret.jpg", hash: HASH(2), hidden: true },
+    ];
+    render(ThumbnailGrid, { items });
+    const cells = screen.getAllByTestId("grid-cell");
+    expect(cells[0].getAttribute("data-hidden")).toBeNull();
+    expect(cells[1].getAttribute("data-hidden")).toBe("true");
+  });
+});

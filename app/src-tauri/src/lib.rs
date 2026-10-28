@@ -28,6 +28,7 @@ pub mod settings;
 pub mod stream;
 pub mod tag_commands;
 pub mod thumb;
+pub mod trash_commands;
 
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase";
@@ -122,8 +123,7 @@ fn with_catalog<T>(
 ) -> Result<T, String> {
     let mut guard = state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
     if guard.is_none() {
-        let cat = Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?;
-        *guard = Some(cat);
+        *guard = Some(open_shell_catalog(state)?);
     }
     f(guard.as_ref().expect("catalog just inserted")).map_err(|e| e.to_string())
 }
@@ -137,10 +137,23 @@ fn with_catalog_mut<T>(
 ) -> Result<T, String> {
     let mut guard = state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
     if guard.is_none() {
-        let cat = Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?;
-        *guard = Some(cat);
+        *guard = Some(open_shell_catalog(state)?);
     }
     f(guard.as_mut().expect("catalog just inserted")).map_err(|e| e.to_string())
+}
+
+/// Open the shell's catalog connection with the user's settings applied:
+/// "show hidden" for its read paths, and the undo-window sweep that expires
+/// old trash entries (TASK-03-009, TASK-03-012). Called whenever the lazily
+/// opened connection is created — the first command after startup.
+fn open_shell_catalog(state: &AppState) -> Result<Catalog, String> {
+    let mut cat = Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?;
+    let settings =
+        state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?.clone();
+    if let Err(err) = trash_commands::apply_settings(&mut cat, &settings) {
+        tracing::warn!(error = %err, "applying hidden/trash settings failed");
+    }
+    Ok(cat)
 }
 
 /// Lock-and-create the Folder Manager backend; it owns a second catalog
@@ -291,8 +304,7 @@ fn set_rating(file_id: i64, rating: u8, state: tauri::State<'_, AppState>) -> Re
     let enabled = ratings_enabled(&state)?;
     let mut guard = state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
     if guard.is_none() {
-        *guard =
-            Some(Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?);
+        *guard = Some(open_shell_catalog(&state)?);
     }
     let cat = guard.as_mut().expect("catalog just inserted");
     rating::apply_rating(cat, file_id, rating, enabled).map_err(|e| e.to_string())?;
@@ -373,13 +385,91 @@ fn add_to_album(
     with_catalog_sync(&state, |cat| cat.add_to_album(album_id, &file_ids))
 }
 
+/// Remove photos from an album, soft-deleted (TASK-03-012): each removal
+/// lands in the catalog trash and can be undone within the undo window.
+/// Returns how many photos were members.
 #[tauri::command]
 fn remove_from_album(
     album_id: i64,
     file_ids: Vec<i64>,
     state: tauri::State<'_, AppState>,
 ) -> Result<usize, String> {
-    with_catalog_sync(&state, |cat| cat.remove_from_album(album_id, &file_ids))
+    with_catalog_sync(&state, |cat| cat.trash_remove_from_album(album_id, &file_ids))
+}
+
+/// Hide photos (TASK-03-009): `fb:Hidden` in each sidecar, library-only.
+/// Soft-deleted into the trash for undo. Returns how many were hidden.
+#[tauri::command]
+fn hide_photos(file_ids: Vec<i64>, state: tauri::State<'_, AppState>) -> Result<usize, String> {
+    with_catalog_sync(&state, |cat| cat.hide_photos(&file_ids))
+}
+
+#[tauri::command]
+fn unhide_photos(file_ids: Vec<i64>, state: tauri::State<'_, AppState>) -> Result<usize, String> {
+    with_catalog_sync(&state, |cat| cat.unhide_photos(&file_ids))
+}
+
+/// Hide a folder (TASK-03-009): the `.fotobase` flag; its photos and
+/// subfolders inherit. Soft-deleted into the trash for undo.
+#[tauri::command]
+fn hide_folder(path: String, state: tauri::State<'_, AppState>) -> Result<bool, String> {
+    with_catalog_sync(&state, |cat| cat.hide_folder(&path))
+}
+
+#[tauri::command]
+fn unhide_folder(path: String, state: tauri::State<'_, AppState>) -> Result<bool, String> {
+    with_catalog_sync(&state, |cat| cat.unhide_folder(&path))
+}
+
+/// The catalog trash (TASK-03-012): pending undoable actions, newest first.
+#[tauri::command]
+fn list_trash(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::TrashEntry>, String> {
+    with_catalog_sync(&state, |cat| cat.trash_list())
+}
+
+/// Undo one trash entry. An undone unlink re-adds the folder; the rescan
+/// that brings its photos back runs on a blocking thread and announces
+/// itself on `library-changed`.
+#[tauri::command]
+fn undo_trash(
+    id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_catalog::UndoReport, String> {
+    let report = with_catalog_sync(&state, |cat| cat.undo_trash(id))?;
+    rescan_restored(&state, &report);
+    Ok(report)
+}
+
+/// "Undo all" for one action type (`album_remove`, `hide` or `unlink`).
+#[tauri::command]
+fn undo_trash_all(
+    action: fotobase_catalog::TrashAction,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_catalog::UndoReport, String> {
+    let report = with_catalog_sync(&state, |cat| cat.undo_trash_all(action))?;
+    rescan_restored(&state, &report);
+    Ok(report)
+}
+
+/// Rescan the folders an undone unlink re-added (and re-arm their watchers)
+/// off the command thread: a library folder can take a while to scan.
+fn rescan_restored(state: &AppState, report: &fotobase_catalog::UndoReport) {
+    if report.rescan.is_empty() {
+        return;
+    }
+    let roots = report.rescan.clone();
+    let app = state.app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        for root in roots {
+            if let Err(err) = with_folder_manager(&state, |fm| fm.rescan_restored(&root)) {
+                tracing::warn!(root, error = %err, "rescan after undoing an unlink failed");
+            }
+        }
+        let _ = app.emit("library-changed", ());
+    });
 }
 
 #[tauri::command]
@@ -513,8 +603,7 @@ fn with_catalog_str<T>(
 ) -> Result<T, String> {
     let mut guard = state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
     if guard.is_none() {
-        *guard =
-            Some(Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?);
+        *guard = Some(open_shell_catalog(state)?);
     }
     f(guard.as_mut().expect("catalog just inserted"))
 }
@@ -527,8 +616,7 @@ fn with_catalog_sync<T>(
 ) -> Result<T, String> {
     let mut guard = state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
     if guard.is_none() {
-        *guard =
-            Some(Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?);
+        *guard = Some(open_shell_catalog(state)?);
     }
     f(guard.as_mut().expect("catalog just inserted")).map_err(|e| e.to_string())
 }
@@ -870,8 +958,17 @@ fn get_settings(state: tauri::State<'_, AppState>) -> Result<settings::Settings,
 #[tauri::command]
 fn set_settings(new: settings::Settings, state: tauri::State<'_, AppState>) -> Result<(), String> {
     new.save(&state.data_dir).map_err(|e| format!("save settings: {e}"))?;
-    let mut guard = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
-    *guard = new;
+    {
+        let mut guard =
+            state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
+        *guard = new.clone();
+    }
+    // "Show hidden" and the undo window take effect on the live connection
+    // (settings lock released first: the catalog opener takes it too).
+    let mut guard = state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
+    if let Some(cat) = guard.as_mut() {
+        trash_commands::apply_settings(cat, &new)?;
+    }
     Ok(())
 }
 
@@ -1326,6 +1423,13 @@ pub fn run() {
             delete_album,
             add_to_album,
             remove_from_album,
+            hide_photos,
+            unhide_photos,
+            hide_folder,
+            unhide_folder,
+            list_trash,
+            undo_trash,
+            undo_trash_all,
             set_album_cover,
             list_album_files,
             get_file_albums,

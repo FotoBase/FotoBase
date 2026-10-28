@@ -77,3 +77,30 @@ fn update_mode_phones_home_semantics() {
     assert!(!UpdateMode::CheckButAsk.auto_installs());
     assert!(!UpdateMode::Off.auto_installs());
 }
+
+#[test]
+fn hidden_and_trash_settings_default_and_survive_old_files() {
+    // TASK-03-009 / TASK-03-012: "show hidden" is off and the undo window is
+    // 30 days unless chosen; a settings.json from before the fields existed
+    // keeps the user's other settings.
+    let s = Settings::default();
+    assert!(!s.show_hidden);
+    assert_eq!(s.trash_window_days, 30);
+
+    let dir = TempDir::new().expect("tempdir");
+    write_settings(&dir, r#"{"language":"de","update_mode":"off","show_tooltips":false}"#);
+    let s = Settings::load(dir.path());
+    assert_eq!(s.language, "de");
+    assert!(!s.show_hidden);
+    assert_eq!(s.trash_window_days, 30);
+}
+
+#[test]
+fn hidden_and_trash_settings_round_trip() {
+    let dir = TempDir::new().expect("tempdir");
+    let s = Settings { show_hidden: true, trash_window_days: 7, ..Settings::default() };
+    s.save(dir.path()).expect("save");
+    let loaded = Settings::load(dir.path());
+    assert!(loaded.show_hidden);
+    assert_eq!(loaded.trash_window_days, 7);
+}

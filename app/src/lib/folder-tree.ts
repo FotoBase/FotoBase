@@ -10,6 +10,9 @@ export interface FolderInfo {
   year: number | null;
   /** Folder Manager mode (TASK-01-016, PLAN §2A): watched or not. */
   scan_mode: "once" | "always";
+  /// Hidden folder (or inside one), listed only while "show hidden" is on
+  /// (TASK-03-009): rendered grayed.
+  hidden?: boolean;
 }
 
 /** A year node in the tree; `year: null` is the trailing "unknown" group. */

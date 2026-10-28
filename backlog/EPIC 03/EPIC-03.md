@@ -22,13 +22,13 @@
 - [x] `03-006` (M) Tags/keywords → `dc:subject` (+ `lr:hierarchicalSubject`); tag editor; Quick Tags panel (10 one-click buttons).
 - [x] `03-007` (M) Captions → `dc:description`; searchable.
 - [x] `03-008` (M) Albums: create (name/date/place/description), delete, add/remove photos; `fb:Albums` namespace; album list UI.
-- [ ] `03-009` (S) Hidden folders + hidden photos (library only, files untouched).
+- [x] `03-009` (S) Hidden folders + hidden photos (library only, files untouched).
 
 ## feat: photo tray & batch
 
 - [x] `03-010` (M) Photo Tray: cross-folder selection, "Hold" pinning, actions apply to tray.
 - [x] `03-011` (M) Batch rename to pattern; batch move between folders (real file moves, catalog follows).
-- [ ] `03-012` (M) Catalog trash: soft-delete + undo window for remove-from-album, hide, unlink.
+- [x] `03-012` (M) Catalog trash: soft-delete + undo window for remove-from-album, hide, unlink.
 
 ## feat: search & filters
 

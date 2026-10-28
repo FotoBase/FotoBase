@@ -13,6 +13,9 @@ export interface GridItem {
   media_type?: "image" | "video";
   /// `xmp:Rating` mirror from the catalog, 0 = unrated (TASK-03-005).
   rating?: number;
+  /// Hidden photo (or in a hidden folder), listed only while "show hidden"
+  /// is on (TASK-03-009): rendered grayed.
+  hidden?: boolean;
 }
 
 /// Grid gap in px, both between cells and between rows.

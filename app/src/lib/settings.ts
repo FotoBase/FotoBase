@@ -24,6 +24,10 @@ export interface Settings {
   /// Quick Tags panel labels (TASK-03-006, PLAN §2B): at most 10 one-click
   /// tags; empty slots render disabled.
   quick_tags: string[];
+  /// Reveal hidden photos and folders, grayed (TASK-03-009).
+  show_hidden: boolean;
+  /// Catalog-trash undo window in days (TASK-03-012).
+  trash_window_days: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -35,6 +39,8 @@ export const DEFAULT_SETTINGS: Settings = {
   file_associations: [],
   ratings_enabled: false,
   quick_tags: [],
+  show_hidden: false,
+  trash_window_days: 30,
 };
 
 // Image types the file-association option (TASK-01-025, PLAN §2M) can

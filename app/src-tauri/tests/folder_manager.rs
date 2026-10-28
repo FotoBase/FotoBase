@@ -179,3 +179,37 @@ fn switching_from_always_to_once_stops_watching() {
     assert_eq!(folders[0].scan_mode, ScanMode::Once);
     fm.stop();
 }
+
+/// TASK-03-012: "remove from catalog" is an unlink — soft-deleted into the
+/// trash. Undo re-adds the folder with its scan mode; the manager then
+/// rescans it (and re-arms the watcher for a Scan Always folder).
+#[test]
+fn remove_is_an_undoable_unlink_that_restores_the_watch() {
+    let (lib, db, fm) = fixture();
+    let catalog_path = db.path().join("catalog.db");
+    let root = normalize(lib.path());
+    fm.set_mode(&root, ScanMode::Always).expect("watch");
+    assert!(wait_for(|| fm.scan_count() >= 1, SETTLE), "closing scan never ran");
+
+    fm.remove(&root).expect("unlink");
+    assert_eq!(count_files(&catalog_path), 0);
+
+    let mut shell = Catalog::open(&catalog_path).unwrap();
+    let entries = shell.trash_list().unwrap();
+    assert_eq!(entries.len(), 1, "the unlink must land in the trash");
+    assert_eq!(entries[0].path, root);
+    let report = shell.undo_trash(entries[0].id).unwrap();
+    assert_eq!(report.rescan, vec![root.clone()]);
+    for dir in &report.rescan {
+        fm.rescan_restored(dir).expect("rescan restored folder");
+    }
+
+    assert_eq!(count_files(&catalog_path), 1, "photos come back through the rescan");
+    write_jpg(&lib.path().join("after-undo.jpg"), 20);
+    assert!(
+        wait_for(|| count_files(&catalog_path) == 2, SETTLE),
+        "Scan Always watcher was not re-armed by the undo"
+    );
+    assert!(lib.path().join("a.jpg").exists(), "disk untouched throughout");
+    fm.stop();
+}

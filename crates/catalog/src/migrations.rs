@@ -14,6 +14,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V5,
     MIGRATION_V6,
     MIGRATION_V7,
+    MIGRATION_V8,
 ];
 
 const MIGRATION_V1: &str = "
@@ -247,6 +248,29 @@ ALTER TABLE metadata ADD COLUMN video_rotation INTEGER;
 ALTER TABLE metadata ADD COLUMN video_probe_ok INTEGER;
 ALTER TABLE metadata ADD COLUMN video_probe_mtime REAL;
 CREATE INDEX idx_metadata_video_probe ON metadata(video_probe_ok, video_probe_mtime);
+";
+
+/// TASK-03-009 / TASK-03-012: the hidden flag and the catalog trash.
+/// `files.hidden` mirrors the photo's `fb:Hidden`; `folders.hidden` mirrors
+/// the folder's own `.fotobase` flag and `folders.hidden_eff` is that flag
+/// OR any ancestor's (ADR-0007: members inherit), so read paths test one
+/// column. All three are rebuildable cache. `trash` holds the soft-deleted
+/// organizational actions with their JSON restore payload; `created_at` is
+/// unix seconds and drives the undo-window sweep.
+const MIGRATION_V8: &str = "
+ALTER TABLE files ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE folders ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE folders ADD COLUMN hidden_eff INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE trash (
+    id         INTEGER PRIMARY KEY,
+    action     TEXT NOT NULL CHECK (action IN ('album_remove', 'hide', 'unlink')),
+    path       TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    detail     TEXT,
+    payload    TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_trash_created ON trash(created_at);
 ";
 
 /// Apply all pending migrations, in order, each in its own transaction.

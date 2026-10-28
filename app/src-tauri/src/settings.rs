@@ -96,6 +96,17 @@ pub struct Settings {
     /// user-configurable one-click tags. Empty slots render disabled.
     #[serde(default)]
     pub quick_tags: Vec<String>,
+    /// Reveal hidden photos/folders, grayed (TASK-03-009).
+    #[serde(default)]
+    pub show_hidden: bool,
+    /// Catalog-trash undo window in days (TASK-03-012); older entries are
+    /// swept on startup.
+    #[serde(default = "default_trash_window_days")]
+    pub trash_window_days: u32,
+}
+
+fn default_trash_window_days() -> u32 {
+    fotobase_catalog::DEFAULT_TRASH_WINDOW_DAYS
 }
 
 impl Default for Settings {
@@ -109,6 +120,8 @@ impl Default for Settings {
             file_associations: Vec::new(),
             ratings_enabled: false,
             quick_tags: Vec::new(),
+            show_hidden: false,
+            trash_window_days: default_trash_window_days(),
         }
     }
 }

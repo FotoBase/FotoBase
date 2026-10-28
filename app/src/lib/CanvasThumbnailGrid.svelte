@@ -199,7 +199,10 @@
           const uri = thumbUri(item.hash, gridState.thumbVersions[item.hash] ?? 0);
           const entry = uri ? imgCache.get(uri) : undefined;
           if (entry && entry !== "loading" && entry !== "failed") {
+            // Revealed hidden photos draw faded (TASK-03-009).
+            if (item.hidden) ctx.globalAlpha = 0.4;
             ctx.drawImage(entry as unknown as CanvasImageSource, x, y, size, size);
+            ctx.globalAlpha = 1;
           } else {
             // Placeholder first; the real thumb replaces it on next repaint.
             ctx.fillStyle = paletteVar("--fb-surface", "#2a2a2a");

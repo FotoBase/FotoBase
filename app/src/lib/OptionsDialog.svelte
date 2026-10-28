@@ -20,15 +20,27 @@
     open = $bindable(false),
     settings,
     onchange,
-  }: { open?: boolean; settings: Settings; onchange: (s: Settings) => void } = $props();
+    onrevealchanged,
+  }: {
+    open?: boolean;
+    settings: Settings;
+    onchange: (s: Settings) => void;
+    /// "Show hidden" was toggled and the backend has applied it: re-list.
+    onrevealchanged?: () => void;
+  } = $props();
 
   let clearResult = $state<string | null>(null);
 
   function apply(next: Settings): void {
+    const revealChanged = next.show_hidden !== settings.show_hidden;
     onchange(next);
-    void saveSettings(next).catch(() => {
-      // Browser dev has no backend; the in-memory change still applies.
-    });
+    void saveSettings(next)
+      .then(() => {
+        if (revealChanged) onrevealchanged?.();
+      })
+      .catch(() => {
+        // Browser dev has no backend; the in-memory change still applies.
+      });
   }
 
   function setLanguage(lang: string): void {
@@ -54,6 +66,19 @@
 
   function setRatingsEnabled(enabled: boolean): void {
     apply({ ...settings, ratings_enabled: enabled });
+  }
+
+  function setShowHidden(show: boolean): void {
+    apply({ ...settings, show_hidden: show });
+  }
+
+  // Whole days, at least one; anything unparsable falls back to the default.
+  function setTrashWindow(raw: string): void {
+    const days = Math.trunc(Number(raw));
+    apply({
+      ...settings,
+      trash_window_days: Number.isFinite(days) && raw.trim() !== "" ? Math.max(1, days) : 30,
+    });
   }
 
   function setQuickTags(tags: string[]): void {
@@ -251,6 +276,29 @@
             onchange={(e) => setRatingsEnabled(e.currentTarget.checked)}
           />
           {t("options.ratings")}
+        </label>
+
+        <!-- Hidden items (TASK-03-009) and the catalog-trash undo window
+             (TASK-03-012). -->
+        <label class="options-row options-check">
+          <input
+            type="checkbox"
+            data-testid="show-hidden"
+            checked={settings.show_hidden}
+            onchange={(e) => setShowHidden(e.currentTarget.checked)}
+          />
+          {t("options.showHidden")}
+        </label>
+        <label class="options-row">
+          {t("options.trashWindow")}
+          <input
+            type="number"
+            min="1"
+            step="1"
+            data-testid="trash-window"
+            value={settings.trash_window_days}
+            onchange={(e) => setTrashWindow(e.currentTarget.value)}
+          />
         </label>
 
         <!-- Quick Tags (TASK-03-006, PLAN §2B): up to 10 one-click tags. -->

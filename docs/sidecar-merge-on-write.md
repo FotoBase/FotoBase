@@ -33,6 +33,7 @@ Standard fields stay standard so other apps interoperate: `xmp:Rating`, `dc:subj
 
 - One JSON file per folder: `{ "version": 1, "hidden": false }`. Written with the same merge-on-write discipline (§3). Absent file = not hidden.
 - Folder hide never touches member sidecars; the scanner inherits the flag at scan time. Photo hide always writes the photo's own sidecar.
+- Hide, unhide and their undo go through the catalog trash (03-012, `fotobase_catalog::trash`): the trash table is a catalog-only record of what to reverse, and an undo calls the same `fb:Hidden` / `.fotobase` write path. A hide stays in effect after its trash entry expires — only the undo is lost. Read-side: `Sidecar::hidden` / `FolderMeta` (`fotobase_metadata`); an absent `.fotobase` means "not hidden", a malformed one is never overwritten and is skipped (logged) by scans.
 
 ## 3. Merge-on-write algorithm (read-modify-write)
 

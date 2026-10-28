@@ -55,6 +55,7 @@
               <button
                 type="button"
                 data-testid={`folder-${folder.id}`}
+                data-hidden={folder.hidden ? "true" : undefined}
                 aria-pressed={ids.includes(folder.id)}
                 onclick={() => toggle(folder.id)}
                 oncontextmenu={(e) =>

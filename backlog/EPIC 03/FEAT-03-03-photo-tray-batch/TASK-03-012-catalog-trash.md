@@ -1,6 +1,6 @@
 # task: catalog trash — soft-delete with undo window
 
-**Feature:** [FEAT-03-03-photo-tray-batch](FEAT-03-03-photo-tray-batch.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-03-photo-tray-batch](FEAT-03-03-photo-tray-batch.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
 
 ## Description
 Catalog trash: soft-delete plus an undo window for remove-from-album, hide, and unlink actions (PLAN §6 P2a) — reversible organizational mistakes without touching disk.
@@ -21,6 +21,6 @@ Catalog trash: soft-delete plus an undo window for remove-from-album, hide, and 
 - Integration: hide → undo → photo visible again with stars/tags intact; expiry sweep drops entries past the window.
 
 ## Acceptance criteria
-- [ ] 03-012: remove-from-album, hide, unlink are soft-deleted with undo.
-- [ ] 03-012: undo restores exact prior state; window is configurable.
-- [ ] 03-012: no disk writes occur (originals untouched).
+- [x] 03-012: remove-from-album, hide, unlink are soft-deleted with undo.
+- [x] 03-012: undo restores exact prior state; window is configurable.
+- [x] 03-012: no disk writes occur (originals untouched).
