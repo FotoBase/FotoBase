@@ -11,6 +11,7 @@
   import FolderTree from "./lib/FolderTree.svelte";
   import ImportDialog from "./lib/ImportDialog.svelte";
   import OptionsDialog from "./lib/OptionsDialog.svelte";
+  import PhotoTray from "./lib/PhotoTray.svelte";
   import QuickTags from "./lib/QuickTags.svelte";
   import SearchBar from "./lib/SearchBar.svelte";
   import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
@@ -37,6 +38,7 @@
   import { findFileByPath, loadSettings, takeOpenFiles, type Settings } from "./lib/settings";
   import { shortcuts, type ShortcutHandlers } from "./lib/shortcuts";
   import { applyTheme, resolveTheme, systemPrefersDark, watchSystemTheme } from "./lib/theme";
+  import { actionIds, tray, type TrayPhoto } from "./lib/tray.svelte.js";
   import { runUpdateFlow } from "./lib/updates";
 
   let pong = $state<string | null>(null);
@@ -114,9 +116,12 @@
   // Global keyboard shortcuts (TASK-01-024, docs/help/shortcuts.md). The
   // component-local keys (grid arrows/Enter, viewer navigation) live in
   // their own components; these are the shell-level ones.
-  let searchEl: { focus(): void } | null = $state(null);
+  let searchEl: { focus(): void; clear(): void } | null = $state(null);
   const globalShortcuts: ShortcutHandlers = {
     "search-focus": () => searchEl?.focus(),
+    "tray-clear": () => {
+      tray.clearUnheld();
+    },
     exit: () => {
       void exitApp().catch(() => {
         // The backend tears down mid-response on a clean exit — not an error.
@@ -351,6 +356,9 @@
     { id: "locate-on-disk", label: t("menu.locateOnDisk") },
     { id: "delete-from-disk", label: t("menu.deleteFromDisk") },
     { id: "add-to-album", label: t("menu.addToAlbum"), disabled: albums.length === 0 },
+    photoMenu.item !== null && tray.has(photoMenu.item.id)
+      ? { id: "remove-from-tray", label: t("menu.removeFromTray") }
+      : { id: "add-to-tray", label: t("menu.addToTray") },
     ...(selectedAlbum !== null
       ? [
           { id: "remove-from-album", label: t("albums.removeFromPicked") },
@@ -394,6 +402,7 @@
           await revealInDisk(info.path);
         } else if (confirm(t("confirm.deletePhoto"))) {
           await deleteFromDisk(item.id);
+          tray.remove(item.id);
           await refreshLibrary();
         }
       } catch {
@@ -406,6 +415,12 @@
         y: photoMenu.y,
         ids: targetIds(item.id, gridState.selection),
       };
+    } else if (id === "add-to-tray") {
+      // Same target rule as the other photo actions: the whole selection when
+      // the clicked photo is part of it, otherwise just that photo.
+      tray.add(photosById(targetIds(item.id, gridState.selection)));
+    } else if (id === "remove-from-tray") {
+      tray.remove(item.id);
     } else if (id === "remove-from-album" && selectedAlbum !== null) {
       try {
         await removeFromAlbum(selectedAlbum, targetIds(item.id, gridState.selection));
@@ -425,6 +440,30 @@
         // The backend tears down mid-response on a clean exit — not an error.
       });
     }
+  }
+
+  function photosById(ids: number[]): TrayPhoto[] {
+    const wanted = new Set(ids);
+    return photos.filter((p) => wanted.has(p.id));
+  }
+
+  // Tray click (TASK-03-010): show the photo in the grid. When the current
+  // folder/album/search view hides it, widen the view to the whole library
+  // first; the grid scrolls to it as soon as the reloaded list contains it.
+  function jumpToPhoto(photo: TrayPhoto): void {
+    if (!photos.some((p) => p.id === photo.id)) {
+      selectedFolders = [];
+      selectedAlbum = null;
+      searchEl?.clear();
+    }
+    gridState.revealRequest = { id: photo.id };
+  }
+
+  // Tray "Add to album": the picker opens above the button — the tray sits at
+  // the window bottom, a downward menu would fall off screen.
+  function openTrayAlbumPicker(e: { ids: number[]; x: number; y: number }): void {
+    const menuHeight = (albumPickerItems.length + 1) * 32;
+    albumPicker = { open: true, x: e.x, y: Math.max(0, e.y - menuHeight), ids: e.ids };
   }
 
   async function handleAlbumPick(id: string): Promise<void> {
@@ -583,10 +622,10 @@
       <SearchBar bind:this={searchEl} />
       <!-- Quick Tags (TASK-03-006, PLAN §2B): one click applies/removes one
            of the 10 configured tags on the whole selection. -->
-      {#if settings && gridState.selection.size > 0}
+      {#if settings && (gridState.selection.size > 0 || tray.count > 0)}
         <QuickTags
           tags={settings.quick_tags}
-          selectedIds={[...gridState.selection]}
+          selectedIds={actionIds(gridState.selection, tray.ids)}
           onapplied={() => void refreshLibrary()}
         />
       {/if}
@@ -611,6 +650,14 @@
       {/if}
     </div>
   </div>
+  <!-- Photo Tray (TASK-03-010): cross-folder selection at the window bottom.
+       Quick Tags and "Add to album" apply to it while it has contents. -->
+  <PhotoTray
+    selectedIds={[...gridState.selection]}
+    resolve={photosById}
+    onjump={jumpToPhoto}
+    onaddtoalbum={openTrayAlbumPicker}
+  />
   {#if viewer.open}
     <Viewer
       items={photos}

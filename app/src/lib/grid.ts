@@ -65,6 +65,12 @@ export function thumbSrcset(
   return `thumb://${hash}${v}s=2 2x`;
 }
 
+/// Scroll offset that puts the row of item `index` at the top of the
+/// viewport (TASK-03-010: a tray click jumps to the photo in the grid).
+export function revealScrollTop(index: number, columns: number, size: number): number {
+  return Math.floor(index / columns) * (size + GRID_GAP);
+}
+
 /// Keyboard grid navigation (TASK-01-024): the neighbor of cell `index` in
 /// a `columns`-wide grid of `count` items for an arrow key, or `null` when
 /// the move would leave the grid (no wrapping — the edge is the edge).

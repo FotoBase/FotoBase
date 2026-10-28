@@ -29,7 +29,9 @@
     }, DEBOUNCE_MS);
   }
 
-  function clear(): void {
+  /// Empty the box and the shared query (also called by the shell when a
+  /// tray jump has to leave a search that hides the photo).
+  export function clear(): void {
     clearTimeout(timer);
     text = "";
     gridState.searchQuery = "";

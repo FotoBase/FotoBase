@@ -94,6 +94,15 @@ describe("gridState", () => {
   });
 });
 
+describe("reveal requests (TASK-03-010)", () => {
+  it("defaults to none and resets with the store", () => {
+    expect(gridState.revealRequest).toBeNull();
+    gridState.revealRequest = { id: 4 };
+    resetGridState();
+    expect(gridState.revealRequest).toBeNull();
+  });
+});
+
 describe("pickRenderer", () => {
   it("uses the canvas renderer only when explicitly configured", () => {
     expect(pickRenderer("canvas")).toBe("canvas");

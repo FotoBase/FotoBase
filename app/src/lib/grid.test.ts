@@ -7,6 +7,7 @@ import {
   columnCount,
   debounce,
   nextCell,
+  revealScrollTop,
   rowItems,
   throttle,
   thumbSrcset,
@@ -231,5 +232,16 @@ describe("throttle", () => {
     throttled("b");
     expect(fn).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
+  });
+});
+
+describe("revealScrollTop (tray jump, TASK-03-010)", () => {
+  it("puts the item's row at the top of the viewport", () => {
+    // 4 columns, 160px cells + 8px gap: item 9 sits in row 2.
+    expect(revealScrollTop(9, 4, 160)).toBe(2 * 168);
+  });
+
+  it("the first row scrolls to the top", () => {
+    expect(revealScrollTop(3, 4, 160)).toBe(0);
   });
 });

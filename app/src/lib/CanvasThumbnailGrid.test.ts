@@ -255,3 +255,16 @@ describe("CanvasThumbnailGrid", () => {
     expect(onopen).toHaveBeenCalledWith({ id: 1, filename: "photo-1.jpg", hash: HASH(1) });
   });
 });
+
+describe("CanvasThumbnailGrid reveal (tray jump, TASK-03-010)", () => {
+  it("scrolls to the requested photo, selects it, and clears the request", () => {
+    render(CanvasThumbnailGrid, { items: makeItems(1000) });
+    gridState.revealRequest = { id: 500 };
+    flushSync();
+    flushSync();
+
+    expect(screen.getByTestId("canvas-grid-scroll").scrollTop).toBe(125 * 168);
+    expect([...gridState.selection]).toEqual([500]);
+    expect(gridState.revealRequest).toBeNull();
+  });
+});

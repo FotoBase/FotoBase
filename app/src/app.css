@@ -26,6 +26,11 @@
   --fb-backdrop: rgb(0 0 0 / 40%);
 }
 
+:root {
+  /* Photo Tray height (TASK-03-010): the grid leaves room for the tray. */
+  --fb-tray-h: 8.5rem;
+}
+
 :root[data-theme="light"] {
   --fb-bg: #f6f6f6;
   --fb-fg: #1c1c1c;
@@ -57,6 +62,7 @@ main {
   display: grid;
   place-content: center;
   min-height: 100vh;
+  padding-bottom: var(--fb-tray-h);
   text-align: center;
 }
 
@@ -64,7 +70,7 @@ main {
 .grid-shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh - var(--fb-tray-h));
 }
 
 .grid-toolbar {
@@ -477,4 +483,121 @@ main {
 .viewer-rating-error {
   color: #ff8a80;
   font-size: 0.8rem;
+}
+
+/* Photo Tray (TASK-03-010): pinned at the window bottom. */
+.photo-tray {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--fb-tray-h);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--fb-surface);
+  border-top: 1px solid var(--fb-border);
+  text-align: left;
+}
+
+.photo-tray header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.photo-tray h3 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.photo-tray header span {
+  flex: 1;
+  color: var(--fb-muted);
+  font-size: 0.8rem;
+}
+
+.photo-tray button {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--fb-border);
+  border-radius: 6px;
+  background: var(--fb-surface-alt);
+  color: inherit;
+  cursor: pointer;
+}
+
+.photo-tray button:hover:not(:disabled) {
+  background: var(--fb-surface-hover);
+}
+
+.photo-tray button:disabled {
+  color: var(--fb-dim);
+  cursor: default;
+}
+
+.photo-tray p {
+  margin: 0;
+  color: var(--fb-muted);
+  font-size: 0.8rem;
+}
+
+.photo-tray ul {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  min-height: 0;
+}
+
+.photo-tray li {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: stretch;
+}
+
+.photo-tray li[data-held="true"] .tray-thumb {
+  outline: 2px solid var(--fb-accent);
+}
+
+.photo-tray .tray-thumb {
+  display: block;
+  width: 4rem;
+  height: 4rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+.photo-tray .tray-thumb img,
+.photo-tray .tray-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--fb-surface-alt);
+}
+
+.photo-tray .tray-hold {
+  padding: 0 0.25rem;
+  font-size: 0.7rem;
+}
+
+.photo-tray .tray-hold[aria-pressed="true"] {
+  background: var(--fb-accent);
+  color: var(--fb-on-accent);
+}
+
+.photo-tray .tray-remove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0 0.3rem;
+  line-height: 1.1;
+  border-radius: 0 6px 0 6px;
 }
