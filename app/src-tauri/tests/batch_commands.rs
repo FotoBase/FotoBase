@@ -16,6 +16,12 @@ fn spec(pattern: &str) -> RenameSpec {
     RenameSpec { pattern: pattern.into(), start: 1, step: 1, pad: 2 }
 }
 
+/// `root/rel` with native separators, as the scanner stores paths (a mixed
+/// `\\` and `/` spelling would not match the catalog row on Windows).
+fn at(root: &Path, rel: &str) -> std::path::PathBuf {
+    rel.split('/').fold(root.to_path_buf(), |p, part| p.join(part))
+}
+
 /// Library root with `a/` (two photos) and `b/` (empty), scanned.
 fn fixture() -> (tempfile::TempDir, Catalog, Vec<i64>) {
     let tmp = tempfile::tempdir().unwrap();
@@ -28,13 +34,13 @@ fn fixture() -> (tempfile::TempDir, Catalog, Vec<i64>) {
     scan_folder(&mut cat, &root, &AtomicBool::new(false)).unwrap();
     let ids = ["a/one.jpg", "a/two.jpg"]
         .iter()
-        .map(|r| cat.file_id_by_path(root.join(r).to_str().unwrap()).unwrap().unwrap())
+        .map(|r| cat.file_id_by_path(at(&root, r).to_str().unwrap()).unwrap().unwrap())
         .collect();
     (tmp, cat, ids)
 }
 
 fn lib(tmp: &tempfile::TempDir, rel: &str) -> std::path::PathBuf {
-    tmp.path().join("lib").join(rel)
+    at(&tmp.path().join("lib"), rel)
 }
 
 #[test]

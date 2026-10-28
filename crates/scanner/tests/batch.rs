@@ -30,6 +30,12 @@ fn scan(cat: &mut Catalog, root: &Path) -> ScanReport {
     scan_folder(cat, root, &CANCEL).unwrap()
 }
 
+/// `root/rel` with native separators, as the scanner stores paths (a mixed
+/// `\\` and `/` spelling would not match the catalog row on Windows).
+fn at(root: &Path, rel: &str) -> PathBuf {
+    rel.split('/').fold(root.to_path_buf(), |p, part| p.join(part))
+}
+
 fn path_str(p: &Path) -> &str {
     p.to_str().unwrap()
 }
@@ -74,7 +80,7 @@ fn lib() -> Lib {
 
 impl Lib {
     fn id(&self, rel: &str) -> i64 {
-        let p = self.root.join(rel);
+        let p = at(&self.root, rel);
         self.cat.file_id_by_path(path_str(&p)).unwrap().unwrap_or_else(|| panic!("no row {rel}"))
     }
 
@@ -83,7 +89,7 @@ impl Lib {
     }
 
     fn rating(&self, rel: &str) -> Option<i64> {
-        let p = self.root.join(rel);
+        let p = at(&self.root, rel);
         self.cat
             .conn()
             .query_row(
@@ -417,7 +423,7 @@ fn half_applied_state_after_a_kill_is_repaired_by_reassociation() {
         .conn()
         .query_row(
             "SELECT filename FROM files WHERE path = ?1",
-            [path_str(&l.root.join("b/IMG_1.jpg"))],
+            [path_str(&at(&l.root, "b/IMG_1.jpg"))],
             |r| r.get(0),
         )
         .unwrap();
@@ -435,7 +441,7 @@ fn reassociated_rename_gets_the_new_filename() {
         .conn()
         .query_row(
             "SELECT filename FROM files WHERE path = ?1",
-            [path_str(&l.root.join("a/renamed.jpg"))],
+            [path_str(&at(&l.root, "a/renamed.jpg"))],
             |r| r.get(0),
         )
         .unwrap();
