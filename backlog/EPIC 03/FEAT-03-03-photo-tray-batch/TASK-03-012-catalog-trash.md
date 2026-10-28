@@ -1,6 +1,6 @@
 # task: catalog trash — soft-delete with undo window
 
-**Feature:** [FEAT-03-03-photo-tray-batch](FEAT-03-03-photo-tray-batch.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
+**Feature:** [FEAT-03-03-photo-tray-batch](FEAT-03-03-photo-tray-batch.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-28)
 
 ## Description
 Catalog trash: soft-delete plus an undo window for remove-from-album, hide, and unlink actions (PLAN §6 P2a) — reversible organizational mistakes without touching disk.
