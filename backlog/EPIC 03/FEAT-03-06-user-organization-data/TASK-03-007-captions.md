@@ -1,6 +1,6 @@
 # task: captions written to dc:description
 
-**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
+**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-28)
 
 ## Description
 Per-photo caption stored in `dc:description` (PLAN §2 B Captions, §5 mapping), searchable via 03-013, editable inline. Depends on the sidecar merge-on-write design (00-010, hard gate for EPIC-03).
