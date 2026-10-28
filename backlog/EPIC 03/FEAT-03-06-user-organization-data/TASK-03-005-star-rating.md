@@ -1,6 +1,6 @@
 # task: star/rating written to xmp:Rating with starred filter
 
-**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
+**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-28)
 
 ## Description
 Star (and opt-in 1–5 rating, per the 00-001 decision) written to `xmp:Rating` with a starred filter (PLAN §5: star = 5, or 1–5 if ratings enabled). Depends on the sidecar merge-on-write design doc (00-010, hard gate for EPIC-03).
