@@ -25,6 +25,7 @@
     columnCount,
     debounce,
     GRID_GAP,
+    revealScrollTop,
     rowItems,
     thumbUri,
     visibleHashes,
@@ -76,6 +77,20 @@
     const el = scrollEl;
     if (!el) return;
     el.scrollTop = untrack(() => gridState.scrollTop);
+  });
+
+  // Tray jump (TASK-03-010): scroll the requested photo's row into view and
+  // select it. Stays pending until the photo is among the shown items.
+  $effect(() => {
+    const request = gridState.revealRequest;
+    const el = scrollEl;
+    if (!request || !el) return;
+    const index = items.findIndex((i) => i.id === request.id);
+    if (index < 0) return;
+    const cols = columnCount(el.clientWidth, gridState.thumbSize, GRID_GAP);
+    el.scrollTop = revealScrollTop(index, cols, gridState.thumbSize);
+    gridState.selection = new Set([request.id]);
+    gridState.revealRequest = null;
   });
 
   /// Decoded-image cache: one fetch + decode per thumbnail, reused on every

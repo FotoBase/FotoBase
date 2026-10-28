@@ -12,7 +12,7 @@
 //
 // The full user-facing list is documented in docs/help/shortcuts.md.
 
-export type ShortcutAction = "search-focus" | "exit";
+export type ShortcutAction = "search-focus" | "exit" | "tray-clear";
 
 /// The modifier for this platform: Cmd on macOS, Ctrl elsewhere.
 function platformModifier(e: ShortcutEvent, mac: boolean): boolean {
@@ -33,9 +33,10 @@ export interface ShortcutEvent {
 /// shortcut (typing, plain navigation — must never be swallowed).
 export function matchShortcut(e: ShortcutEvent, mac: boolean): ShortcutAction | null {
   // Chords with extra modifiers mean something else (browser, OS, text
-  // editing) — never match them.
-  if (e.altKey || e.shiftKey) return null;
+  // editing) — never match them. The one shifted chord is the tray clear.
+  if (e.altKey) return null;
   if (!platformModifier(e, mac)) return null;
+  if (e.shiftKey) return e.key === "t" || e.key === "T" ? "tray-clear" : null;
   switch (e.key) {
     case "f":
     case "F":

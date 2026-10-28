@@ -42,6 +42,14 @@ describe("matchShortcut", () => {
     expect(matchShortcut(ev("q", { ctrl: true }), false)).toBe("exit");
   });
 
+  it("Cmd/Ctrl+Shift+T clears the unheld tray items (TASK-03-010)", () => {
+    expect(matchShortcut(ev("T", { meta: true, shift: true }), true)).toBe("tray-clear");
+    expect(matchShortcut(ev("t", { ctrl: true, shift: true }), false)).toBe("tray-clear");
+    // Without shift (browser/new-tab territory) or with alt it stays unmatched.
+    expect(matchShortcut(ev("t", { ctrl: true }), false)).toBeNull();
+    expect(matchShortcut(ev("T", { ctrl: true, shift: true, alt: true }), false)).toBeNull();
+  });
+
   it("alt/shift chords do not match (they mean something else)", () => {
     expect(matchShortcut(ev("f", { meta: true, alt: true }), true)).toBeNull();
     expect(matchShortcut(ev("f", { meta: true, shift: true }), true)).toBeNull();

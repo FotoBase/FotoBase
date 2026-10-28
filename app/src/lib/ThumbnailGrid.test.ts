@@ -36,6 +36,36 @@ afterEach(() => {
   cleanup();
 });
 
+describe("ThumbnailGrid reveal (tray jump, TASK-03-010)", () => {
+  it("scrolls to the requested photo, selects it, and clears the request", () => {
+    render(ThumbnailGrid, { items: makeItems(1000) });
+    const el = screen.getByTestId("grid-scroll");
+    expect(el.scrollTop).toBe(0);
+
+    gridState.revealRequest = { id: 500 };
+    flushSync();
+    flushSync();
+
+    // 800px wide at 160px cells + 8px gaps → 4 columns; item 500 is in row 125.
+    expect(el.scrollTop).toBe(125 * 168);
+    expect([...gridState.selection]).toEqual([500]);
+    expect(gridState.revealRequest).toBeNull();
+  });
+
+  it("waits for the photo to appear in the shown items", () => {
+    const { rerender } = render(ThumbnailGrid, { items: makeItems(10) });
+    gridState.revealRequest = { id: 500 };
+    flushSync();
+    expect(gridState.revealRequest).toEqual({ id: 500 });
+
+    void rerender({ items: makeItems(1000) });
+    flushSync();
+    flushSync();
+    expect(gridState.revealRequest).toBeNull();
+    expect([...gridState.selection]).toEqual([500]);
+  });
+});
+
 describe("ThumbnailGrid", () => {
   it("mounts a bounded DOM for 1000 items (only visible rows exist)", () => {
     render(ThumbnailGrid, { items: makeItems(1000) });

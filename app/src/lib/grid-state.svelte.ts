@@ -30,6 +30,11 @@ class GridState {
   /// consumer re-requests `thumb://<hash>?v=N`, so the placeholder is
   /// replaced without a refetch storm (only hashes that rendered bump).
   thumbVersions = $state<Record<string, number>>({});
+  /// Pending "show me this photo" request (TASK-03-010: a tray click). The
+  /// mounted grid scrolls to the photo, selects it and clears the request —
+  /// it stays pending until the photo is among the shown items, so the shell
+  /// can widen the filters first and let the list reload.
+  revealRequest = $state<{ id: number } | null>(null);
 
   toggleSelection(id: number): void {
     const next = new Set(this.selection);
@@ -71,6 +76,7 @@ export function resetGridState(): void {
   gridState.scrollTop = 0;
   gridState.searchQuery = "";
   gridState.thumbVersions = {};
+  gridState.revealRequest = null;
 }
 
 /// Which renderer to mount for a persisted setting. Canvas only when

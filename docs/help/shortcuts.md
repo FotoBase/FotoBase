@@ -10,6 +10,7 @@ Linux it is **Ctrl**.
 | --- | --- |
 | `Ctrl/Cmd + F` | Focus the live search box |
 | `Ctrl/Cmd + Q` | Exit Fotobase |
+| `Ctrl/Cmd + Shift + T` | Photo Tray: clear all unheld photos (held ones stay) |
 
 ## Library grid
 
