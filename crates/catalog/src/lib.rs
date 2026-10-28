@@ -6,16 +6,19 @@
 //! trigger the rebuild-from-sidecars recovery path.
 
 pub mod albums;
+pub mod hidden;
 pub mod migrations;
 pub mod missing;
 pub mod relocate;
 pub mod sync;
+pub mod trash;
 
 pub use albums::AlbumInfo;
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
 pub use relocate::BatchFile;
 pub use sync::{sidecar_path, SyncError, SyncStats};
+pub use trash::{TrashAction, TrashEntry, UndoReport, DEFAULT_TRASH_WINDOW_DAYS};
 
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -57,12 +60,22 @@ pub struct FileInfo {
     /// `xmp:Rating` mirror, 0 = unrated (TASK-03-005). Star = 5; the UI
     /// shows 1–5 only when ratings are enabled.
     pub rating: u8,
+    /// Hidden by its own `fb:Hidden` flag or by a hidden folder (TASK-03-009).
+    /// Only ever `true` while "show hidden" is on — otherwise the row is not
+    /// listed at all.
+    pub hidden: bool,
 }
 
 /// Grid-row SQL columns; pairs with [`file_info_row`]. `f` is the `files`
 /// alias the caller must use.
 const FILE_INFO_COLS: &str = "f.id, f.filename, f.hash, f.media_type,
-     COALESCE((SELECT m.rating FROM metadata m WHERE m.file_id = f.id), 0)";
+     COALESCE((SELECT m.rating FROM metadata m WHERE m.file_id = f.id), 0),
+     (f.hidden OR EXISTS (SELECT 1 FROM folders hd WHERE hd.id = f.folder_id AND hd.hidden_eff = 1))";
+
+/// Appended to a `WHERE` on `files f`: drops hidden photos and photos in
+/// hidden folders (TASK-03-009). Skipped while "show hidden" is on.
+const NOT_HIDDEN: &str = " AND f.hidden = 0 AND NOT EXISTS (SELECT 1 FROM folders hd \
+     WHERE hd.id = f.folder_id AND hd.hidden_eff = 1)";
 
 fn file_info_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FileInfo> {
     Ok(FileInfo {
@@ -71,6 +84,7 @@ fn file_info_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FileInfo> {
         hash: r.get(2)?,
         media_type: r.get(3)?,
         rating: r.get(4)?,
+        hidden: r.get(5)?,
     })
 }
 
@@ -167,12 +181,19 @@ pub struct FolderInfo {
     pub path: String,
     pub year: Option<i64>,
     pub scan_mode: ScanMode,
+    /// Hidden itself or inside a hidden folder (TASK-03-009); only listed
+    /// while "show hidden" is on.
+    pub hidden: bool,
 }
 
 #[derive(Debug)]
 pub struct Catalog {
     conn: Connection,
     path: PathBuf,
+    /// "Show hidden" (TASK-03-009): reveal hidden photos/folders in every
+    /// read path, flagged so the UI can gray them. Per connection, off by
+    /// default; not persisted here.
+    show_hidden: bool,
 }
 
 impl Catalog {
@@ -194,7 +215,7 @@ impl Catalog {
 
         migrations::migrate(&conn)?;
 
-        let mut cat = Catalog { conn, path };
+        let mut cat = Catalog { conn, path, show_hidden: false };
         // Cheap corruption check on startup; full `integrity_check` is opt-in.
         cat.quick_check()?;
         // Album definitions live beside the catalog (TASK-03-008); a failure
@@ -223,6 +244,24 @@ impl Catalog {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Turn "show hidden" on or off for this connection's read paths.
+    pub fn set_show_hidden(&mut self, show: bool) {
+        self.show_hidden = show;
+    }
+
+    pub fn show_hidden(&self) -> bool {
+        self.show_hidden
+    }
+
+    /// SQL tail that filters hidden photos out of a `files f` query.
+    pub(crate) fn not_hidden(&self) -> &'static str {
+        if self.show_hidden {
+            ""
+        } else {
+            NOT_HIDDEN
+        }
     }
 
     pub fn schema_version(&self) -> Result<i64> {
@@ -414,13 +453,14 @@ impl Catalog {
         if expr.is_empty() {
             return Ok(Vec::new());
         }
-        let mut stmt = self.conn.prepare_cached(
+        let mut stmt = self.conn.prepare_cached(&format!(
             "SELECT f.id FROM files_fts
              JOIN files f ON f.id = files_fts.rowid
-             WHERE files_fts MATCH ?1
+             WHERE files_fts MATCH ?1{}
              ORDER BY rank
              LIMIT ?2",
-        )?;
+            self.not_hidden()
+        ))?;
         let ids = stmt.query_map(rusqlite::params![expr, limit as i64], |r| r.get(0))?;
         Ok(ids.flatten().collect())
     }
@@ -462,9 +502,10 @@ impl Catalog {
         let sql = format!(
             "SELECT {FILE_INFO_COLS} FROM files_fts
              JOIN files f ON f.id = files_fts.rowid
-             WHERE files_fts MATCH ?1{folder_clause}
+             WHERE files_fts MATCH ?1{folder_clause}{}
              ORDER BY rank
              LIMIT ?{}",
+            self.not_hidden(),
             params.len()
         );
         let mut stmt = self.conn.prepare_cached(&sql)?;
@@ -480,7 +521,8 @@ impl Catalog {
     /// grid fetches pixels through the URI scheme, never over IPC.
     pub fn list_files(&self, limit: usize) -> Result<Vec<FileInfo>> {
         let mut stmt = self.conn.prepare_cached(&format!(
-            "SELECT {FILE_INFO_COLS} FROM files f ORDER BY f.path LIMIT ?1"
+            "SELECT {FILE_INFO_COLS} FROM files f WHERE 1 = 1{} ORDER BY f.path LIMIT ?1",
+            self.not_hidden()
         ))?;
         let rows = stmt.query_map([limit as i64], file_info_row)?;
         Ok(rows.flatten().collect())
@@ -754,13 +796,16 @@ impl Catalog {
     /// (TASK-01-016, PLAN §2A). `LEFT JOIN` keeps empty folders listed — they
     /// group under "unknown year" in the tree.
     pub fn list_folders(&self) -> Result<Vec<FolderInfo>> {
-        let sql = "SELECT f.id, f.path, f.scan_mode, MAX(COALESCE( \
-                   CASE WHEN length(fi.taken_at) >= 4 \
-                        THEN CAST(substr(fi.taken_at, 1, 4) AS INTEGER) END, \
-                        CAST(strftime('%Y', fi.mtime, 'unixepoch') AS INTEGER))) \
-                   FROM folders f LEFT JOIN files fi ON fi.folder_id = f.id \
-                   GROUP BY f.id, f.path ORDER BY f.path";
-        let mut stmt = self.conn.prepare_cached(sql)?;
+        let visible = if self.show_hidden { "" } else { "WHERE f.hidden_eff = 0 " };
+        let sql = format!(
+            "SELECT f.id, f.path, f.scan_mode, MAX(COALESCE( \
+             CASE WHEN length(fi.taken_at) >= 4 \
+                  THEN CAST(substr(fi.taken_at, 1, 4) AS INTEGER) END, \
+                  CAST(strftime('%Y', fi.mtime, 'unixepoch') AS INTEGER))), f.hidden_eff \
+             FROM folders f LEFT JOIN files fi ON fi.folder_id = f.id \
+             {visible}GROUP BY f.id, f.path ORDER BY f.path"
+        );
+        let mut stmt = self.conn.prepare_cached(&sql)?;
         let rows = stmt.query_map([], |r| {
             let mode: String = r.get(2)?;
             Ok(FolderInfo {
@@ -768,6 +813,7 @@ impl Catalog {
                 path: r.get(1)?,
                 scan_mode: ScanMode::from_db(&mode),
                 year: r.get(3)?,
+                hidden: r.get(4)?,
             })
         })?;
         Ok(rows.flatten().collect())
@@ -838,7 +884,8 @@ impl Catalog {
         }
         let placeholders = "?,".repeat(folder_ids.len()).trim_end_matches(',').to_string();
         let sql = format!(
-            "SELECT {FILE_INFO_COLS} FROM files f WHERE f.folder_id IN ({placeholders}) ORDER BY f.path LIMIT ?{}",
+            "SELECT {FILE_INFO_COLS} FROM files f WHERE f.folder_id IN ({placeholders}){} ORDER BY f.path LIMIT ?{}",
+            self.not_hidden(),
             folder_ids.len() + 1
         );
         let mut stmt = self.conn.prepare_cached(&sql)?;
@@ -874,8 +921,9 @@ impl Catalog {
         let sql = format!(
             "SELECT {FILE_INFO_COLS} FROM files f
              JOIN metadata m ON m.file_id = f.id
-             WHERE m.rating >= ?1{folder_clause}
+             WHERE m.rating >= ?1{folder_clause}{}
              ORDER BY f.path LIMIT ?{}",
+            self.not_hidden(),
             params.len()
         );
         let mut stmt = self.conn.prepare_cached(&sql)?;

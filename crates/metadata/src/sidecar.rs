@@ -816,6 +816,27 @@ impl Sidecar {
         self.tree.ensure_description_ns("fb").set_or_replace_bag("fb", "Albums", &albums);
     }
 
+    /// Library-only hide flag (`fb:Hidden`, ADR-0007). Reads the XMP boolean
+    /// spellings; absent or anything else is "not hidden".
+    pub fn hidden(&self) -> bool {
+        self.tree
+            .description()
+            .and_then(|d| d.child_text_or_attr("fb", "Hidden"))
+            .is_some_and(|t| matches!(t.trim().to_ascii_lowercase().as_str(), "true" | "1"))
+    }
+
+    /// Set `fb:Hidden`. Unhiding removes the property so an un-hidden photo
+    /// carries no leftover flag.
+    pub fn set_hidden(&mut self, hidden: bool) {
+        if hidden {
+            let d = self.tree.ensure_description_ns("fb");
+            d.attributes.retain(|(k, _)| k != "fb:Hidden");
+            d.set_or_replace_child("fb", "Hidden", "True");
+        } else if let Some(d) = self.tree.description_mut() {
+            d.remove_prop("fb", "Hidden");
+        }
+    }
+
     /// GPS as (latitude, longitude) decimal degrees.
     pub fn gps(&self) -> Option<(f64, f64)> {
         let d = self.tree.description()?;

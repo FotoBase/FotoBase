@@ -1,6 +1,6 @@
 # task: hidden folders and hidden photos
 
-**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-28)
 
 ## Description
 Hide folders and individual photos from the library view only — files on disk untouched (PLAN §2 A Hidden folders, §6 P2a). Hide actions route through the catalog trash (03-012) for undo.
@@ -21,6 +21,6 @@ Hide folders and individual photos from the library view only — files on disk 
 - Integration: hide → rebuild → still hidden; unhide restores with stars/tags intact.
 
 ## Acceptance criteria
-- [ ] 03-009: folders and photos can be hidden/unhidden, library-only.
-- [ ] 03-009: hidden items excluded from search and filters; toggle reveals them.
-- [ ] 03-009: hide is undoable (trash) and rebuildable; disk untouched.
+- [x] 03-009: folders and photos can be hidden/unhidden, library-only.
+- [x] 03-009: hidden items excluded from search and filters; toggle reveals them.
+- [x] 03-009: hide is undoable (trash) and rebuildable; disk untouched.

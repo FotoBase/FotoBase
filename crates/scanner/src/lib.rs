@@ -237,6 +237,13 @@ fn scan_inner(
     for dir in dirs {
         catalog.seed_folder(&dir.to_string_lossy())?;
     }
+    // Folder-level hide (`.fotobase`) is inherited at scan time (ADR-0007).
+    let dir_strs: Vec<String> = dirs.iter().map(|d| d.to_string_lossy().into_owned()).collect();
+    if let Err(err) = catalog.sync_folder_flags(
+        std::iter::once(root_str.as_str()).chain(dir_strs.iter().map(String::as_str)),
+    ) {
+        tracing::warn!(root = %root_str, error = %err, "syncing folder hide flags failed");
+    }
 
     // Existing rows under the root, keyed by path for cheap (mtime, size) compare.
     let existing = existing_files(catalog, &root_str)?;

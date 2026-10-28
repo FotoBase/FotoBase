@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use rusqlite::OptionalExtension;
 
-use fotobase_metadata::{Sidecar, SidecarError};
+use fotobase_metadata::{FolderMetaError, Sidecar, SidecarError};
 
 use crate::{Catalog, CatalogError, Result};
 
@@ -35,6 +35,14 @@ pub enum SyncError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Sidecar(#[from] SidecarError),
+    #[error(transparent)]
+    FolderMeta(#[from] FolderMetaError),
+    #[error("no trash entry with id {0}")]
+    UnknownTrashEntry(i64),
+    #[error("no folder {0} in the catalog")]
+    UnknownFolder(String),
+    #[error("malformed trash payload: {0}")]
+    TrashPayload(String),
     #[error(transparent)]
     Catalog(#[from] CatalogError),
     #[error(transparent)]
@@ -64,6 +72,8 @@ struct UserData {
     gps: Option<(f64, f64)>,
     /// `fb:Albums` ids (TASK-03-008).
     albums: Vec<String>,
+    /// `fb:Hidden` (TASK-03-009).
+    hidden: bool,
 }
 
 impl UserData {
@@ -76,6 +86,7 @@ impl UserData {
             tags: sc.tags(),
             gps: sc.gps(),
             albums: sc.albums(),
+            hidden: sc.hidden(),
         }
     }
 }
@@ -308,6 +319,8 @@ impl Catalog {
     /// are skipped. `full = true` forces a re-read of every sidecar.
     pub fn rebuild_from_sidecars(&mut self, full: bool) -> SyncResult<SyncStats> {
         let mut stats = SyncStats::default();
+        // Folder-level hide lives in `.fotobase`, not in any sidecar (ADR-0007).
+        self.sync_all_folder_flags()?;
         let files: Vec<(i64, String, Option<i64>, Option<i64>)> = {
             let mut stmt =
                 self.conn().prepare("SELECT id, path, sidecar_mtime, sidecar_size FROM files")?;
@@ -444,6 +457,11 @@ fn apply_user_data(tx: &rusqlite::Transaction<'_>, file_id: i64, data: &UserData
             data.gps.map(|(_, lon)| lon),
             file_id
         ],
+    )?;
+
+    tx.execute(
+        "UPDATE files SET hidden = ?1 WHERE id = ?2",
+        rusqlite::params![data.hidden, file_id],
     )?;
 
     tx.execute("DELETE FROM file_tags WHERE file_id = ?1", [file_id])?;

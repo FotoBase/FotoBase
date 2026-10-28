@@ -147,8 +147,7 @@ pub fn run(app: &tauri::AppHandle) -> Result<RebuildReport, String> {
     let state = app.state::<crate::AppState>();
     let mut guard = state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
     if guard.is_none() {
-        *guard =
-            Some(Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?);
+        *guard = Some(crate::open_shell_catalog(&state)?);
     }
     let cat = guard.as_mut().expect("catalog just inserted");
     let roots = watched_folders(cat);

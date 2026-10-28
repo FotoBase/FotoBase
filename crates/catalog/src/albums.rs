@@ -280,13 +280,21 @@ fn clean_date(date: &str) -> SyncResult<String> {
 
 // ---- Catalog API ------------------------------------------------------------
 
-const ALBUM_COLS: &str = "a.id, a.uuid, a.name, a.date, a.place, a.description,
-     (SELECT COUNT(*) FROM album_files af WHERE af.album_id = a.id),
+/// Album-list columns. Hidden photos (TASK-03-009) count toward neither the
+/// member total nor the cover pick unless "show hidden" is on.
+fn album_cols(not_hidden: &str) -> String {
+    format!(
+        "a.id, a.uuid, a.name, a.date, a.place, a.description,
+     (SELECT COUNT(*) FROM album_files af JOIN files f ON f.id = af.file_id
+       WHERE af.album_id = a.id{not_hidden}),
      COALESCE(
         (SELECT f.id FROM album_files af JOIN files f ON f.id = af.file_id
-          WHERE af.album_id = a.id AND f.path = a.cover_path),
-        (SELECT af.file_id FROM album_files af WHERE af.album_id = a.id
-          ORDER BY af.position, af.file_id LIMIT 1))";
+          WHERE af.album_id = a.id AND f.path = a.cover_path{not_hidden}),
+        (SELECT af.file_id FROM album_files af JOIN files f ON f.id = af.file_id
+          WHERE af.album_id = a.id{not_hidden}
+          ORDER BY af.position, af.file_id LIMIT 1))"
+    )
+}
 
 fn album_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<AlbumInfo> {
     Ok(AlbumInfo {
@@ -439,8 +447,9 @@ impl Catalog {
 
     /// Every album, newest date first (album-list UI, with counts).
     pub fn list_albums(&self) -> Result<Vec<AlbumInfo>> {
+        let cols = album_cols(self.not_hidden());
         let mut stmt = self.conn().prepare_cached(&format!(
-            "SELECT {ALBUM_COLS} FROM albums a
+            "SELECT {cols} FROM albums a
              ORDER BY a.date DESC, a.name COLLATE NOCASE, a.id"
         ))?;
         let rows = stmt.query_map([], album_row)?;
@@ -449,9 +458,9 @@ impl Catalog {
     }
 
     pub fn album(&self, album_id: i64) -> Result<Option<AlbumInfo>> {
-        let mut stmt = self
-            .conn()
-            .prepare_cached(&format!("SELECT {ALBUM_COLS} FROM albums a WHERE a.id = ?1"))?;
+        let cols = album_cols(self.not_hidden());
+        let mut stmt =
+            self.conn().prepare_cached(&format!("SELECT {cols} FROM albums a WHERE a.id = ?1"))?;
         let album = stmt.query_row([album_id], album_row).optional()?;
         album.map(|a| self.with_cover_hash(a)).transpose()
     }
@@ -490,7 +499,8 @@ impl Catalog {
     pub fn list_album_files(&self, album_id: i64, limit: usize) -> Result<Vec<FileInfo>> {
         let mut stmt = self.conn().prepare_cached(&format!(
             "SELECT {FILE_INFO_COLS} FROM album_files af JOIN files f ON f.id = af.file_id
-             WHERE af.album_id = ?1 ORDER BY af.position, f.path LIMIT ?2"
+             WHERE af.album_id = ?1{} ORDER BY af.position, f.path LIMIT ?2",
+            self.not_hidden()
         ))?;
         let rows = stmt.query_map(params![album_id, limit as i64], file_info_row)?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
@@ -512,8 +522,9 @@ impl Catalog {
             "SELECT {FILE_INFO_COLS} FROM files_fts
              JOIN files f ON f.id = files_fts.rowid
              WHERE files_fts MATCH ?1
-               AND f.id IN (SELECT file_id FROM album_files WHERE album_id = ?2)
-             ORDER BY rank LIMIT ?3"
+               AND f.id IN (SELECT file_id FROM album_files WHERE album_id = ?2){}
+             ORDER BY rank LIMIT ?3",
+            self.not_hidden()
         ))?;
         let rows = stmt.query_map(params![expr, album_id, limit as i64], file_info_row)?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)

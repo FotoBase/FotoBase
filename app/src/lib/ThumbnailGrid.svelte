@@ -168,6 +168,7 @@
             <div
               class="grid-cell"
               data-testid="grid-cell"
+              data-hidden={item.hidden ? "true" : undefined}
               data-cell-index={row.index * columns + localIdx}
               style="--thumb-size: {gridState.thumbSize}px"
               tabindex="0"

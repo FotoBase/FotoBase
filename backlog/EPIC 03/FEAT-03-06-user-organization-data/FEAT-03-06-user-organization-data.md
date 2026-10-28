@@ -13,7 +13,7 @@
 - [x] `03-006` (M) Tags/keywords → `dc:subject` (+ `lr:hierarchicalSubject`); tag editor; Quick Tags panel (10 one-click buttons).
 - [x] `03-007` (M) Captions → `dc:description`; searchable.
 - [x] `03-008` (M) Albums: create (name/date/place/description), delete, add/remove photos; `fb:Albums` namespace; album list UI.
-- [ ] `03-009` (S) Hidden folders + hidden photos (library only, files untouched).
+- [x] `03-009` (S) Hidden folders + hidden photos (library only, files untouched).
 
 ## Tasks
 
@@ -21,4 +21,4 @@
 - [x] [TASK-03-006-tags-quick-tags.md](TASK-03-006-tags-quick-tags.md) — tags, tag editor, and quick tags panel
 - [x] [TASK-03-007-captions.md](TASK-03-007-captions.md) — captions written to dc:description
 - [x] [TASK-03-008-albums.md](TASK-03-008-albums.md) — albums with fb:Albums sidecar namespace
-- [ ] [TASK-03-009-hidden-folders-photos.md](TASK-03-009-hidden-folders-photos.md) — hidden folders and hidden photos
+- [x] [TASK-03-009-hidden-folders-photos.md](TASK-03-009-hidden-folders-photos.md) — hidden folders and hidden photos

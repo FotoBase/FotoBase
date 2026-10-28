@@ -110,13 +110,35 @@ impl FolderManager {
         Ok(report)
     }
 
-    /// Remove a folder from the catalog (with its nested folder rows); also
-    /// stops watching it. Returns how many folder rows were removed (`0`
-    /// when the folder was never cataloged). Files on disk are untouched.
+    /// Unlink a folder: remove it from the catalog (with its nested folder
+    /// rows), soft-deleted into the trash for undo (TASK-03-012); also stops
+    /// watching it. Returns how many folder rows were removed (`0` when the
+    /// folder was never cataloged). Files on disk are untouched.
     pub fn remove(&self, path: &str) -> Result<usize, String> {
         self.watcher.remove_root(Path::new(path));
         let mut cat = self.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
-        cat.remove_folder_tree(path).map_err(|e| format!("remove folder {path}: {e}"))
+        cat.unlink_folder(path).map_err(|e| format!("remove folder {path}: {e}"))
+    }
+
+    /// After an undone unlink re-seeded `path`: bring its photos back with a
+    /// rescan, and re-arm the watcher when the folder was Scan Always.
+    pub fn rescan_restored(&self, path: &str) -> Result<(), String> {
+        let mode = {
+            let cat = self.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
+            cat.list_folders()
+                .map_err(|e| format!("list folders: {e}"))?
+                .into_iter()
+                .find(|f| f.path == path)
+                .map(|f| f.scan_mode)
+        };
+        match mode {
+            Some(ScanMode::Always) => {
+                self.watcher.add_root(Path::new(path)).map_err(|e| e.to_string())?;
+                self.scan_now(path).map(|_| ())
+            }
+            Some(ScanMode::Once) => self.scan_now(path).map(|_| ()),
+            None => Ok(()),
+        }
     }
 
     fn persist_mode(&self, path: &str, mode: ScanMode) -> Result<(), String> {

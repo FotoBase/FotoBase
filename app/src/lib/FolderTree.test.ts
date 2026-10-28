@@ -96,3 +96,15 @@ describe("FolderTree", () => {
     expect(screen.getByTestId("tree-empty")).toBeTruthy();
   });
 });
+
+describe("FolderTree hidden folders (TASK-03-009)", () => {
+  it("marks revealed hidden folders so they render grayed", () => {
+    render(FolderTree, {
+      folders: [{ ...f(1, "/a", 2021), hidden: true }, f(2, "/b", 2021)],
+      selected: [],
+      onselect: vi.fn(),
+    });
+    expect(screen.getByTestId("folder-1").getAttribute("data-hidden")).toBe("true");
+    expect(screen.getByTestId("folder-2").getAttribute("data-hidden")).toBeNull();
+  });
+});

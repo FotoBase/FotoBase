@@ -6,8 +6,10 @@
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase-metadata";
 
+mod folder_meta;
 mod sidecar;
 
+pub use folder_meta::{FolderMeta, FolderMetaError, FOLDER_META_FILE};
 pub use sidecar::{
     backup_path, tmp_path, FbNs, QuickXmlBackend, Sidecar, SidecarBackend, SidecarError, FB_NS,
 };

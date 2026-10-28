@@ -199,3 +199,62 @@ describe("OptionsDialog file associations (TASK-01-025)", () => {
     expect(screen.getByTestId("assoc-result").textContent).toContain("boom");
   });
 });
+
+describe("OptionsDialog hidden items and undo window (TASK-03-009, TASK-03-012)", () => {
+  it("show hidden is off by default and toggling applies and persists", async () => {
+    const base: Settings = { ...DEFAULT_SETTINGS };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+    expect((screen.getByTestId("show-hidden") as HTMLInputElement).checked).toBe(false);
+
+    await fireEvent.click(screen.getByTestId("show-hidden"));
+    await settle();
+
+    expect(onchange).toHaveBeenCalledWith({ ...base, show_hidden: true });
+    expect(saveSettings).toHaveBeenCalledWith({ ...base, show_hidden: true });
+  });
+
+  it("the undo window is configurable in whole days, at least one", async () => {
+    const base: Settings = { ...DEFAULT_SETTINGS };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+    const input = screen.getByTestId("trash-window") as HTMLInputElement;
+    expect(input.value).toBe("30");
+
+    await fireEvent.change(input, { target: { value: "7" } });
+    await settle();
+    expect(onchange).toHaveBeenLastCalledWith({ ...base, trash_window_days: 7 });
+
+    await fireEvent.change(input, { target: { value: "0" } });
+    await settle();
+    expect(onchange).toHaveBeenLastCalledWith({ ...base, trash_window_days: 1 });
+
+    await fireEvent.change(input, { target: { value: "abc" } });
+    await settle();
+    expect(onchange).toHaveBeenLastCalledWith({ ...base, trash_window_days: 30 });
+  });
+});
+
+describe("OptionsDialog show hidden refresh (TASK-03-009)", () => {
+  it("asks the shell to re-list once the setting is saved, and only then", async () => {
+    const order: string[] = [];
+    vi.mocked(saveSettings).mockImplementation(async () => {
+      order.push("saved");
+    });
+    const onrevealchanged = vi.fn(() => order.push("refresh"));
+    render(OptionsDialog, {
+      open: true,
+      settings: { ...DEFAULT_SETTINGS },
+      onchange: vi.fn(),
+      onrevealchanged,
+    });
+
+    await fireEvent.click(screen.getByTestId("ratings-enabled"));
+    await settle();
+    expect(onrevealchanged).not.toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByTestId("show-hidden"));
+    await settle();
+    expect(order.slice(-2)).toEqual(["saved", "refresh"]);
+  });
+});

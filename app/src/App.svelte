@@ -16,6 +16,7 @@
   import QuickTags from "./lib/QuickTags.svelte";
   import SearchBar from "./lib/SearchBar.svelte";
   import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
+  import TrashDialog from "./lib/TrashDialog.svelte";
   import Viewer from "./lib/Viewer.svelte";
   import { deleteFromDisk, exitApp, refreshFolderThumbnails, revealInDisk } from "./lib/file-menu";
   import {
@@ -40,12 +41,14 @@
   import { shortcuts, type ShortcutHandlers } from "./lib/shortcuts";
   import { applyTheme, resolveTheme, systemPrefersDark, watchSystemTheme } from "./lib/theme";
   import { actionIds, tray, type TrayPhoto } from "./lib/tray.svelte.js";
+  import { hideFolder, hidePhotos, unhideFolder, unhidePhotos } from "./lib/trash";
   import { runUpdateFlow } from "./lib/updates";
 
   let pong = $state<string | null>(null);
   let optionsOpen = $state(false);
   let folderManagerOpen = $state(false);
   let importOpen = $state(false);
+  let trashOpen = $state(false);
   let settings = $state<Settings | null>(null);
   let photos = $state<GridItem[]>([]);
   let folders = $state<FolderInfo[]>([]);
@@ -177,6 +180,25 @@
       photos = [];
       folders = [];
       albums = [];
+    }
+  }
+
+  // Hide/unhide/undo changed what the library lists: re-run the current
+  // (folder / album / search) view, not the whole-library list, then refresh
+  // the tree and the album counts.
+  async function refreshView(): Promise<void> {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      photos =
+        selectedAlbum !== null
+          ? await listAlbumFiles<GridItem>(selectedAlbum, gridState.searchQuery)
+          : await listLibraryItems(selectedFolders, gridState.searchQuery);
+      folders = await invoke<FolderInfo[]>("list_folders");
+      albums = await listAlbums();
+      const visible = new Set(folders.map((f) => f.id));
+      selectedFolders = selectedFolders.filter((id) => visible.has(id));
+    } catch {
+      // Backend down: keep what is shown.
     }
   }
 
@@ -366,6 +388,9 @@
     photoMenu.item !== null && tray.has(photoMenu.item.id)
       ? { id: "remove-from-tray", label: t("menu.removeFromTray") }
       : { id: "add-to-tray", label: t("menu.addToTray") },
+    photoMenu.item?.hidden
+      ? { id: "unhide-photo", label: t("menu.unhide") }
+      : { id: "hide-photo", label: t("menu.hide") },
     ...(selectedAlbum !== null
       ? [
           { id: "remove-from-album", label: t("albums.removeFromPicked") },
@@ -390,6 +415,9 @@
 
   const folderMenuItems = $derived<MenuItem[]>([
     { id: "refresh-thumbnails", label: t("menu.refreshThumbnails") },
+    folderMenu.folder?.hidden
+      ? { id: "unhide-folder", label: t("menu.unhideFolder") }
+      : { id: "hide-folder", label: t("menu.hideFolder") },
     { id: "locate-on-disk", label: t("menu.locateOnDisk") },
     { id: "remove-from-fotobase", label: t("menu.removeFromFotobase") },
     { id: "exit", label: t("menu.exit") },
@@ -442,6 +470,18 @@
         // Backend down: the cover stays as it was.
       }
       await refreshAlbums();
+    } else if (id === "hide-photo" || id === "unhide-photo") {
+      // Library-only: the photo's own sidecar flag, nothing on disk moves.
+      // Hiding is soft-deleted into the trash, so it can be undone from there.
+      const ids = targetIds(item.id, gridState.selection);
+      try {
+        await (id === "hide-photo" ? hidePhotos(ids) : unhidePhotos(ids));
+      } catch {
+        // Backend down: nothing changed.
+      }
+      for (const hiddenId of ids) tray.remove(hiddenId);
+      gridState.selection = new Set();
+      await refreshView();
     } else if (id === "exit") {
       void exitApp().catch(() => {
         // The backend tears down mid-response on a clean exit — not an error.
@@ -537,6 +577,9 @@
         await refreshFolderThumbnails(folder.path);
       } else if (id === "locate-on-disk") {
         await revealInDisk(folder.path);
+      } else if (id === "hide-folder" || id === "unhide-folder") {
+        await (id === "hide-folder" ? hideFolder(folder.path) : unhideFolder(folder.path));
+        await refreshView();
       } else if (id === "remove-from-fotobase" && confirm(t("folderManager.remove.confirm"))) {
         // Catalog only — the files on disk are never touched.
         await removeFolder(folder.path);
@@ -588,6 +631,9 @@
   <button type="button" onclick={() => (importOpen = true)} data-testid="open-import">
     {t("app.import")}
   </button>
+  <button type="button" onclick={() => (trashOpen = true)} data-testid="open-trash">
+    {t("app.trash")}
+  </button>
   {#if settings}
     <OptionsDialog
       bind:open={optionsOpen}
@@ -596,6 +642,7 @@
         settings = s;
         setLocale(s.language);
       }}
+      onrevealchanged={() => void refreshView()}
     />
   {/if}
   {#if settings}
@@ -606,6 +653,7 @@
     />
     <ImportDialog bind:open={importOpen} onchanged={refreshLibrary} />
   {/if}
+  <TrashDialog bind:open={trashOpen} onchanged={refreshView} />
   <!-- Folders view + grid (TASK-01-015): the tree's multi-select is the
        grid's filter; both live in one flex row. -->
   <div class="library">
