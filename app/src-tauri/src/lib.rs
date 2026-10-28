@@ -21,6 +21,7 @@ pub mod folder_manager;
 pub mod import;
 pub mod perf_probe;
 pub mod preview;
+pub mod rating;
 pub mod rebuild;
 pub mod settings;
 pub mod stream;
@@ -255,16 +256,45 @@ fn search_files(
 /// hash. The hash is what the grid turns into a `thumb://` URI — pixels are
 /// fetched by the WebView from the disk cache through the scheme handler,
 /// never over IPC. An optional folder-id list (TASK-01-015) restricts the
-/// result to the folders selected in the Folders view.
+/// result to the folders selected in the Folders view; `starred_only`
+/// (TASK-03-005) keeps only starred photos (rating >= 5, or >= 1 when
+/// ratings are enabled).
 #[tauri::command]
 fn list_files(
     folders: Option<Vec<i64>>,
+    starred_only: Option<bool>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<fotobase_catalog::FileInfo>, String> {
+    if starred_only == Some(true) {
+        let min = rating::starred_threshold(ratings_enabled(&state)?);
+        return with_catalog(&state, |cat| cat.list_starred(folders.as_deref(), min, usize::MAX));
+    }
     with_catalog(&state, |cat| match folders {
         None => cat.list_files(usize::MAX),
         Some(ids) => cat.list_files_in_folders(&ids, usize::MAX),
     })
+}
+
+fn ratings_enabled(state: &AppState) -> Result<bool, String> {
+    let guard = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
+    Ok(guard.ratings_enabled)
+}
+
+/// Star / rate one photo (TASK-03-005): `rating` 0 unstars, 5 stars, 1–4
+/// only while ratings are enabled. Write-through: the sidecar is written
+/// first, the catalog mirror only after that succeeded. Returns the new
+/// rating so the UI can reflect what landed.
+#[tauri::command]
+fn set_rating(file_id: i64, rating: u8, state: tauri::State<'_, AppState>) -> Result<u8, String> {
+    let enabled = ratings_enabled(&state)?;
+    let mut guard = state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
+    if guard.is_none() {
+        *guard =
+            Some(Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?);
+    }
+    let cat = guard.as_mut().expect("catalog just inserted");
+    rating::apply_rating(cat, file_id, rating, enabled).map_err(|e| e.to_string())?;
+    Ok(rating)
 }
 
 /// Info pane payload for one photo (TASK-01-020, PLAN §2D): file properties
@@ -1051,6 +1081,7 @@ pub fn run() {
             stop_stream,
             search_files,
             list_files,
+            set_rating,
             photo_info,
             video_info,
             list_folders,

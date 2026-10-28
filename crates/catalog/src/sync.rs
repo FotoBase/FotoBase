@@ -19,6 +19,8 @@ use crate::{Catalog, CatalogError, Result};
 pub enum SyncError {
     #[error("no catalog file with id {0}")]
     UnknownFile(i64),
+    #[error("rating {0} out of range 0-5")]
+    InvalidRating(u8),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -55,7 +57,9 @@ struct UserData {
 impl UserData {
     fn from_sidecar(sc: &Sidecar) -> Self {
         UserData {
-            rating: sc.rating().map(i64::from),
+            // The catalog column is CHECK 0..=5; other tools write -1
+            // (rejected) or junk, which must not abort convergence.
+            rating: sc.rating().filter(|r| *r <= 5).map(i64::from),
             caption: sc.caption(),
             tags: sc.tags(),
             gps: sc.gps(),
@@ -67,7 +71,15 @@ impl Catalog {
     // ---- write-through mutations (single pathway, 00-010 §3.6) -----------
 
     pub fn set_rating(&mut self, file_id: i64, rating: u8) -> SyncResult<()> {
+        if rating > 5 {
+            return Err(SyncError::InvalidRating(rating));
+        }
         self.mutate_user_data(file_id, |sc| sc.set_rating(rating))
+    }
+
+    /// Unstar: drop `xmp:Rating` from the sidecar and clear the mirror.
+    pub fn clear_rating(&mut self, file_id: i64) -> SyncResult<()> {
+        self.mutate_user_data(file_id, |sc| sc.clear_rating())
     }
 
     pub fn set_caption(&mut self, file_id: i64, caption: &str) -> SyncResult<()> {
@@ -154,6 +166,38 @@ impl Catalog {
             }
         }
         Ok(stats)
+    }
+
+    /// Scan hook: converge the sidecars of just-scanned files so user data
+    /// survives a catalog delete + re-scan (§5 rebuild). Unlike
+    /// [`Self::rebuild_from_sidecars`] a bad sidecar is logged and skipped —
+    /// one malformed XMP must never fail a library scan.
+    pub fn sync_paths<'a>(&mut self, paths: impl IntoIterator<Item = &'a str>) -> SyncStats {
+        let mut stats = SyncStats::default();
+        for path in paths {
+            stats.checked += 1;
+            let row = self
+                .conn()
+                .query_row(
+                    "SELECT id, sidecar_mtime, sidecar_size FROM files WHERE path = ?1",
+                    [path],
+                    |r| Ok((r.get::<_, i64>(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .optional();
+            let Ok(Some((id, mtime, size))) = row else {
+                stats.skipped += 1;
+                continue;
+            };
+            match self.converge(id, path, mtime, size) {
+                Ok(true) => stats.converged += 1,
+                Ok(false) => stats.skipped += 1,
+                Err(err) => {
+                    tracing::warn!(path, error = %err, "sidecar sync failed; keeping catalog row");
+                    stats.skipped += 1;
+                }
+            }
+        }
+        stats
     }
 }
 

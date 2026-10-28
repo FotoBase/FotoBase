@@ -66,6 +66,25 @@ describe("OptionsDialog theme (TASK-01-024)", () => {
   });
 });
 
+describe("OptionsDialog ratings (TASK-03-005)", () => {
+  it("is off by default (single star, ADR-0002)", () => {
+    render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });
+    expect((screen.getByTestId("ratings-enabled") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("enabling 1-5 ratings applies and persists", async () => {
+    const base: Settings = { ...DEFAULT_SETTINGS };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+
+    await fireEvent.click(screen.getByTestId("ratings-enabled"));
+    await settle();
+
+    expect(onchange).toHaveBeenCalledWith({ ...base, ratings_enabled: true });
+    expect(saveSettings).toHaveBeenCalledWith({ ...base, ratings_enabled: true });
+  });
+});
+
 describe("OptionsDialog file associations (TASK-01-025)", () => {
   it("lists the supported image types with checkboxes", () => {
     render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });

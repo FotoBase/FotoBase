@@ -52,6 +52,10 @@
     apply({ ...settings, theme });
   }
 
+  function setRatingsEnabled(enabled: boolean): void {
+    apply({ ...settings, ratings_enabled: enabled });
+  }
+
   // File associations (TASK-01-025, PLAN §2M): a checked type registers
   // Fotobase as the OS default viewer for it (unchecking unregisters and
   // restores the previous handler). The persisted list is the checked
@@ -234,6 +238,16 @@
             <span class="clear-result" data-testid="assoc-result">{assocResult}</span>
           {/if}
         </fieldset>
+
+        <label class="options-row options-check">
+          <input
+            type="checkbox"
+            data-testid="ratings-enabled"
+            checked={settings.ratings_enabled}
+            onchange={(e) => setRatingsEnabled(e.currentTarget.checked)}
+          />
+          {t("options.ratings")}
+        </label>
 
         <label class="options-row options-check">
           <input

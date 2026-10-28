@@ -439,3 +439,22 @@ main {
   border-color: #4a9eff;
   color: #fff;
 }
+
+.viewer-star {
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+}
+
+.viewer-star.on {
+  color: #f5c518;
+}
+
+.viewer-rating-error {
+  color: #ff8a80;
+  font-size: 0.8rem;
+}

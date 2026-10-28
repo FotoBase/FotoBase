@@ -6,7 +6,8 @@
   IPC), the filmstrip shows `thumb://` thumbnails for the whole collection.
 
   Keyboard: ←/→ navigate (and pause a running slideshow), Esc exits,
-  F toggles fullscreen (Tauri window API), space toggles the slideshow.
+  F toggles fullscreen (Tauri window API), space toggles the slideshow,
+  S toggles the star (TASK-03-005); with ratings enabled 0–5 rate.
 -->
 <script lang="ts">
   import { thumbUri, type GridItem } from "./grid";
@@ -16,6 +17,7 @@
   import VideoPlayer from "./VideoPlayer.svelte";
   import { nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
   import { probeAndCache } from "./codec-probe";
+  import { ratingForKey, setRating, toggleStar } from "./rating";
 
   interface Props {
     items?: GridItem[];
@@ -25,6 +27,11 @@
     slideshowMs?: number;
     /// The context menu's "View slideshow" opens with the slideshow running.
     startSlideshow?: boolean;
+    /// Opt-in 1–5 ratings (ADR-0002); off = single star.
+    ratingsEnabled?: boolean;
+    /// Fired after the backend persisted a rating, so the shell can update
+    /// its item list.
+    onrate?: (id: number, rating: number) => void;
     onclose?: () => void;
   }
 
@@ -33,6 +40,8 @@
     startIndex = 0,
     slideshowMs = 3000,
     startSlideshow = false,
+    ratingsEnabled = false,
+    onrate = () => {},
     onclose = () => {},
   }: Props = $props();
 
@@ -46,6 +55,34 @@
 
   const current = $derived(items[index] ?? null);
   const mainUri = $derived(previewUri(current?.hash ?? null));
+
+  // --- Star / rating (TASK-03-005) -------------------------------------------
+  // The backend writes the sidecar first; the UI reflects a rating only once
+  // `set_rating` resolved. `rated` overlays the items prop until the shell
+  // refreshes the list.
+  let rated = $state<Record<number, number>>({});
+  let ratingError = $state<string | null>(null);
+  const currentRating = $derived(
+    current === null ? 0 : (rated[current.id] ?? current.rating ?? 0),
+  );
+
+  async function rate(value: number): Promise<void> {
+    const item = current;
+    if (item === null) return;
+    ratingError = null;
+    try {
+      const saved = await setRating(item.id, value);
+      rated[item.id] = saved;
+      onrate(item.id, saved);
+    } catch (e) {
+      ratingError = t("viewer.ratingFailed", { error: String(e) });
+    }
+  }
+
+  // Clicking the current rating again clears it, like the star toggle.
+  function rateOrClear(value: number): void {
+    void rate(value === currentRating ? 0 : value);
+  }
 
   // --- Video (TASK-02-007, PLAN §2 Video strategy) ---------------------------
   // A video item plays in the player component instead of the `<img>`: the
@@ -141,7 +178,16 @@
     // arrows = seek); navigation keys stay with the viewer.
     const playerKeys = isVideo && [" ", "ArrowLeft", "ArrowRight"].includes(e.key);
     if (playerKeys) return;
+    const digit = ratingForKey(e.key, ratingsEnabled);
+    if (digit !== null) {
+      void rate(digit);
+      return;
+    }
     switch (e.key) {
+      case "s":
+      case "S":
+        void rate(toggleStar(currentRating));
+        break;
       case "ArrowRight":
         slideshowRunning = false; // pauses on interaction
         index = nextIndex(index, items.length);
@@ -199,6 +245,36 @@
     <span data-testid="viewer-count">{index + 1}/{items.length}</span>
     {#if slideshowRunning}
       <span data-testid="slideshow-running">{t("viewer.slideshowRunning")}</span>
+    {/if}
+    {#if ratingsEnabled}
+      <span class="viewer-rating" data-testid="rating-buttons">
+        {#each [1, 2, 3, 4, 5] as n (n)}
+          <button
+            type="button"
+            class="viewer-star{n <= currentRating ? ' on' : ''}"
+            data-testid={`rating-${n}`}
+            aria-pressed={n === currentRating}
+            title={t("viewer.rating", { n })}
+            onclick={() => rateOrClear(n)}
+          >
+            {n <= currentRating ? "★" : "☆"}
+          </button>
+        {/each}
+      </span>
+    {:else}
+      <button
+        type="button"
+        class="viewer-star{currentRating > 0 ? ' on' : ''}"
+        data-testid="star-toggle"
+        aria-pressed={currentRating > 0}
+        title={t("viewer.star")}
+        onclick={() => void rate(toggleStar(currentRating))}
+      >
+        {currentRating > 0 ? "★" : "☆"}
+      </button>
+    {/if}
+    {#if ratingError}
+      <span class="viewer-rating-error" data-testid="rating-error" role="alert">{ratingError}</span>
     {/if}
     <button
       type="button"

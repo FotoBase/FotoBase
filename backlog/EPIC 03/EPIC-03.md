@@ -18,7 +18,7 @@
 
 ## feat: user organization data
 
-- [ ] `03-005` (M) Star/rating (per 00-001 decision) → `xmp:Rating`; starred filter.
+- [x] `03-005` (M) Star/rating (per 00-001 decision) → `xmp:Rating`; starred filter.
 - [ ] `03-006` (M) Tags/keywords → `dc:subject` (+ `lr:hierarchicalSubject`); tag editor; Quick Tags panel (10 one-click buttons).
 - [ ] `03-007` (M) Captions → `dc:description`; searchable.
 - [ ] `03-008` (M) Albums: create (name/date/place/description), delete, add/remove photos; `fb:Albums` namespace; album list UI.

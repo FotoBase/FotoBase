@@ -441,6 +441,10 @@ import { reportCodecSupport } from "./lib/codec-probe";
       items={photos}
       startIndex={viewer.index}
       startSlideshow={viewer.slideshow}
+      ratingsEnabled={settings?.ratings_enabled ?? false}
+      onrate={(id, rating) => {
+        photos = photos.map((p) => (p.id === id ? { ...p, rating } : p));
+      }}
       onclose={() => (viewer = { open: false, index: 0, slideshow: false })}
     />
   {/if}
