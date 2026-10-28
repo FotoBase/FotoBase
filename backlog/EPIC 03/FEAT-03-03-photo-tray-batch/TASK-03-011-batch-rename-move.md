@@ -1,6 +1,6 @@
 # task: batch rename and batch move
 
-**Feature:** [FEAT-03-03-photo-tray-batch](FEAT-03-03-photo-tray-batch.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
+**Feature:** [FEAT-03-03-photo-tray-batch](FEAT-03-03-photo-tray-batch.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-28)
 
 ## Description
 Batch rename to a pattern and batch move between folders, performing real file moves with catalog and sidecars following (PLAN §2 B "Batch rename / move", §6 P2a). Depends on the move/rename re-association design (00-010, hard gate for EPIC-03).
