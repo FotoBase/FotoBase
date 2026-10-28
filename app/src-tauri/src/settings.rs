@@ -88,6 +88,10 @@ pub struct Settings {
     /// through the `associations` module when it changes.
     #[serde(default)]
     pub file_associations: Vec<String>,
+    /// Opt-in 1–5 ratings (TASK-03-005, ADR-0002). Off: single star, which
+    /// maps to `xmp:Rating` = 5.
+    #[serde(default)]
+    pub ratings_enabled: bool,
 }
 
 impl Default for Settings {
@@ -99,6 +103,7 @@ impl Default for Settings {
             grid_renderer: GridRenderer::default(),
             theme: Theme::default(),
             file_associations: Vec::new(),
+            ratings_enabled: false,
         }
     }
 }
@@ -197,6 +202,17 @@ mod tests {
         assert_eq!(s.update_mode, UpdateMode::Off);
         assert!(!s.show_tooltips);
         assert_eq!(s.grid_renderer, GridRenderer::Dom);
+    }
+
+    #[test]
+    fn ratings_are_opt_in_and_survive_old_settings_files() {
+        // ADR-0002: single star by default; a pre-03-005 settings.json has no
+        // `ratings_enabled` key and must keep the user's other settings.
+        assert!(!Settings::default().ratings_enabled);
+        let old = r#"{"language":"de","update_mode":"off","show_tooltips":false}"#;
+        let s: Settings = serde_json::from_str(old).unwrap();
+        assert_eq!(s.language, "de");
+        assert!(!s.ratings_enabled);
     }
 
     #[test]

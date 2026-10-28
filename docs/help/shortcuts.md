@@ -27,6 +27,8 @@ Linux it is **Ctrl**.
 | `Space` | Start / pause the slideshow |
 | `F` | Toggle fullscreen |
 | `I` | Toggle the info pane (EXIF + histogram) |
+| `S` | Toggle the star (writes `xmp:Rating` = 5 to the sidecar) |
+| `0` – `5` | Set the rating (only when Options → "Enable 1–5 ratings" is on; `0` clears) |
 | `Esc` | Close the viewer |
 
 ## Implementation notes

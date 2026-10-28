@@ -91,6 +91,92 @@ mod tests {
     }
 
     #[test]
+    fn clear_rating_removes_node_and_preserves_unknown_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("IMG_0010.jpg.xmp");
+        std::fs::write(&sidecar, SAMPLE_WITH_UNKNOWN_DIGIKAM_FIELD).unwrap();
+
+        let mut sc = Sidecar::read(&sidecar).unwrap();
+        sc.set_rating(5);
+        sc.write(&sidecar).unwrap();
+
+        let mut sc = Sidecar::read(&sidecar).unwrap();
+        sc.clear_rating();
+        sc.write(&sidecar).unwrap();
+
+        let sc2 = Sidecar::read(&sidecar).unwrap();
+        assert_eq!(sc2.rating(), None);
+        assert!(!sc2.raw().contains("xmp:Rating"), "node must be removed, not zeroed");
+        assert!(sc2.raw().contains("digiKam:TagsList"));
+        assert!(sc2.raw().contains("ns2:Foreign"));
+    }
+
+    #[test]
+    fn rating_attribute_form_is_replaced_and_cleared_without_duplicates() {
+        // darktable/exiv2 emit `xmp:Rating="4"` as an attribute on
+        // rdf:Description; a write must not leave attribute + child behind.
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("IMG_0011.jpg.xmp");
+        std::fs::write(&sidecar, SAMPLE_WITH_RATING_ATTRIBUTE).unwrap();
+        assert_eq!(Sidecar::read(&sidecar).unwrap().rating(), Some(4));
+
+        let mut sc = Sidecar::read(&sidecar).unwrap();
+        sc.set_rating(5);
+        sc.write(&sidecar).unwrap();
+        let sc2 = Sidecar::read(&sidecar).unwrap();
+        assert_eq!(sc2.rating(), Some(5));
+        assert_eq!(
+            sc2.raw().matches("Rating").count(),
+            2,
+            "one open + one close tag: {}",
+            sc2.raw()
+        );
+
+        let mut sc = Sidecar::read(&sidecar).unwrap();
+        sc.clear_rating();
+        sc.write(&sidecar).unwrap();
+        let sc3 = Sidecar::read(&sidecar).unwrap();
+        assert_eq!(sc3.rating(), None);
+        assert!(!sc3.raw().contains("Rating"));
+        assert!(sc3.raw().contains("digiKam:CustomValue"), "unknown attribute survives");
+    }
+
+    #[test]
+    fn fresh_sidecar_declares_the_xmp_namespace() {
+        // A bare `<xmp:Rating>` without xmlns is namespace-invalid: darktable
+        // and digiKam would silently ignore the star (EPIC-03 acceptance).
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("IMG_0013.jpg.xmp");
+        let mut sc = Sidecar::read(&sidecar).unwrap();
+        sc.set_rating(5);
+        sc.write(&sidecar).unwrap();
+        let raw = std::fs::read_to_string(&sidecar).unwrap();
+        assert!(raw.contains(r#"xmlns:xmp="http://ns.adobe.com/xap/1.0/""#), "{raw}");
+        assert_eq!(Sidecar::read(&sidecar).unwrap().rating(), Some(5));
+    }
+
+    #[test]
+    fn existing_namespace_declaration_is_not_duplicated() {
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("IMG_0014.jpg.xmp");
+        std::fs::write(&sidecar, SAMPLE_WITH_RATING_ATTRIBUTE).unwrap();
+        let mut sc = Sidecar::read(&sidecar).unwrap();
+        sc.set_rating(2);
+        sc.write(&sidecar).unwrap();
+        let raw = std::fs::read_to_string(&sidecar).unwrap();
+        assert_eq!(raw.matches("xmlns:xmp=").count(), 1, "{raw}");
+    }
+
+    #[test]
+    fn clear_rating_on_missing_sidecar_is_a_no_op() {
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("IMG_0012.jpg.xmp");
+        let mut sc = Sidecar::read(&sidecar).unwrap();
+        sc.clear_rating();
+        assert_eq!(sc.rating(), None);
+    }
+
+    #[test]
     fn gps_round_trip() {
         let dir = tempfile::tempdir().unwrap();
         let sidecar = dir.path().join("IMG_0004.jpg.xmp");
@@ -151,6 +237,18 @@ mod tests {
    <digiKam:CustomValue>keep me</digiKam:CustomValue>
    <ns2:Foreign>data</ns2:Foreign>
   </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>"#;
+
+    const SAMPLE_WITH_RATING_ATTRIBUTE: &str = r#"<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="XMP Core 5.4.0">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:digiKam="http://www.digikam.org/ns/1.0/"
+    xmp:Rating="4"
+    digiKam:CustomValue="keep me"/>
  </rdf:RDF>
 </x:xmpmeta>
 <?xpacket end="w"?>"#;

@@ -11,6 +11,8 @@ export interface GridItem {
   /// `image` or `video` (TASK-02-007, from the catalog's `files.media_type`).
   /// Absent in older payloads and browser-dev stubs — treated as image.
   media_type?: "image" | "video";
+  /// `xmp:Rating` mirror from the catalog, 0 = unrated (TASK-03-005).
+  rating?: number;
 }
 
 /// Grid gap in px, both between cells and between rows.

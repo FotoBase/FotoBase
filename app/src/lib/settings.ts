@@ -19,6 +19,8 @@ export interface Settings {
   grid_renderer: GridRendererSetting;
   theme: ThemeSetting;
   file_associations: string[];
+  /// Opt-in 1-5 ratings (TASK-03-005, ADR-0002); off = single star.
+  ratings_enabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   grid_renderer: "dom",
   theme: "system",
   file_associations: [],
+  ratings_enabled: false,
 };
 
 // Image types the file-association option (TASK-01-025, PLAN §2M) can

@@ -35,6 +35,8 @@ tauri-plugin-opener = "2"
 trash = "5"
 tracing.workspace = true
 tracing-subscriber.workspace = true
+# Rating command errors (TASK-03-005).
+thiserror.workspace = true
 # Display-profile watcher (TASK-02-001): the poll loop sleeps on tokio time
 # inside tauri::async_runtime.
 tokio = { version = "1", features = ["rt", "time"] }
@@ -44,6 +46,8 @@ tokio = { version = "1", features = ["rt", "time"] }
 winreg = "0.55"
 
 [dev-dependencies]
+# Rating tests read the sidecar back (TASK-03-005).
+fotobase-metadata = { path = "../../crates/metadata" }
 # Same verifier tauri-plugin-updater uses — tests exercise the real path.
 base64 = "0.22"
 minisign-verify = "0.2"

@@ -1,6 +1,6 @@
 # task: star/rating written to xmp:Rating with starred filter
 
-**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
 
 ## Description
 Star (and opt-in 1–5 rating, per the 00-001 decision) written to `xmp:Rating` with a starred filter (PLAN §5: star = 5, or 1–5 if ratings enabled). Depends on the sidecar merge-on-write design doc (00-010, hard gate for EPIC-03).
@@ -22,6 +22,6 @@ Star (and opt-in 1–5 rating, per the 00-001 decision) written to `xmp:Rating` 
 - Unit: given a photo with `xmp:Rating=5`, the starred filter returns it.
 
 ## Acceptance criteria
-- [ ] 03-005: star/rating writes `xmp:Rating` and survives catalog rebuild.
-- [ ] 03-005: starred filter works.
-- [ ] 03-005: originals unchanged (checksum).
+- [x] 03-005: star/rating writes `xmp:Rating` and survives catalog rebuild.
+- [x] 03-005: starred filter works.
+- [x] 03-005: originals unchanged (checksum).

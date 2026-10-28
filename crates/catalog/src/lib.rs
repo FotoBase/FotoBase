@@ -50,6 +50,24 @@ pub struct FileInfo {
     /// `image` or `video` (TASK-02-007): the viewer uses it to pick the
     /// player and to keep video files out of the `preview://` preload.
     pub media_type: String,
+    /// `xmp:Rating` mirror, 0 = unrated (TASK-03-005). Star = 5; the UI
+    /// shows 1–5 only when ratings are enabled.
+    pub rating: u8,
+}
+
+/// Grid-row SQL columns; pairs with [`file_info_row`]. `f` is the `files`
+/// alias the caller must use.
+const FILE_INFO_COLS: &str = "f.id, f.filename, f.hash, f.media_type,
+     COALESCE((SELECT m.rating FROM metadata m WHERE m.file_id = f.id), 0)";
+
+fn file_info_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FileInfo> {
+    Ok(FileInfo {
+        id: r.get(0)?,
+        filename: r.get(1)?,
+        hash: r.get(2)?,
+        media_type: r.get(3)?,
+        rating: r.get(4)?,
+    })
 }
 
 /// Per-folder scan mode (TASK-01-016, PLAN §2A Folder Manager): `Once` is a
@@ -348,15 +366,8 @@ impl Catalog {
     pub fn file_by_path(&self, path: &str) -> Result<Option<FileInfo>> {
         let mut stmt = self
             .conn
-            .prepare_cached("SELECT id, filename, hash, media_type FROM files WHERE path = ?1")?;
-        let mut rows = stmt.query_map([path], |r| {
-            Ok(FileInfo {
-                id: r.get(0)?,
-                filename: r.get(1)?,
-                hash: r.get(2)?,
-                media_type: r.get(3)?,
-            })
-        })?;
+            .prepare_cached(&format!("SELECT {FILE_INFO_COLS} FROM files f WHERE f.path = ?1"))?;
+        let mut rows = stmt.query_map([path], file_info_row)?;
         match rows.next() {
             Some(row) => Ok(Some(row?)),
             None => Ok(None),
@@ -440,7 +451,7 @@ impl Catalog {
         }
         params.push(Box::new(limit as i64));
         let sql = format!(
-            "SELECT f.id, f.filename, f.hash, f.media_type FROM files_fts
+            "SELECT {FILE_INFO_COLS} FROM files_fts
              JOIN files f ON f.id = files_fts.rowid
              WHERE files_fts MATCH ?1{folder_clause}
              ORDER BY rank
@@ -449,14 +460,7 @@ impl Catalog {
         );
         let mut stmt = self.conn.prepare_cached(&sql)?;
         let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
-        let rows = stmt.query_map(refs.as_slice(), |r| {
-            Ok(FileInfo {
-                id: r.get(0)?,
-                filename: r.get(1)?,
-                hash: r.get(2)?,
-                media_type: r.get(3)?,
-            })
-        })?;
+        let rows = stmt.query_map(refs.as_slice(), file_info_row)?;
         Ok(rows.flatten().collect())
     }
 
@@ -466,17 +470,10 @@ impl Catalog {
     /// placeholder instead of dropping the photo. No image bytes here — the
     /// grid fetches pixels through the URI scheme, never over IPC.
     pub fn list_files(&self, limit: usize) -> Result<Vec<FileInfo>> {
-        let mut stmt = self.conn.prepare_cached(
-            "SELECT id, filename, hash, media_type FROM files ORDER BY path LIMIT ?1",
-        )?;
-        let rows = stmt.query_map([limit as i64], |r| {
-            Ok(FileInfo {
-                id: r.get(0)?,
-                filename: r.get(1)?,
-                hash: r.get(2)?,
-                media_type: r.get(3)?,
-            })
-        })?;
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "SELECT {FILE_INFO_COLS} FROM files f ORDER BY f.path LIMIT ?1"
+        ))?;
+        let rows = stmt.query_map([limit as i64], file_info_row)?;
         Ok(rows.flatten().collect())
     }
 
@@ -832,20 +829,48 @@ impl Catalog {
         }
         let placeholders = "?,".repeat(folder_ids.len()).trim_end_matches(',').to_string();
         let sql = format!(
-            "SELECT id, filename, hash, media_type FROM files WHERE folder_id IN ({placeholders}) ORDER BY path LIMIT ?{}",
+            "SELECT {FILE_INFO_COLS} FROM files f WHERE f.folder_id IN ({placeholders}) ORDER BY f.path LIMIT ?{}",
             folder_ids.len() + 1
         );
         let mut stmt = self.conn.prepare_cached(&sql)?;
         let params =
             folder_ids.iter().copied().chain(std::iter::once(limit as i64)).collect::<Vec<i64>>();
-        let rows = stmt.query_map(rusqlite::params_from_iter(params), |r| {
-            Ok(FileInfo {
-                id: r.get(0)?,
-                filename: r.get(1)?,
-                hash: r.get(2)?,
-                media_type: r.get(3)?,
-            })
-        })?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(params), file_info_row)?;
+        Ok(rows.flatten().collect())
+    }
+
+    /// Starred filter (TASK-03-005): photos whose rating mirror is at least
+    /// `min_rating`, path-ordered, optionally narrowed to folder ids. The
+    /// caller picks the threshold: 5 in star-only mode, 1 when 1–5 ratings
+    /// are enabled (ADR-0002). An empty folder list filters everything out.
+    pub fn list_starred(
+        &self,
+        folder_ids: Option<&[i64]>,
+        min_rating: u8,
+        limit: usize,
+    ) -> Result<Vec<FileInfo>> {
+        if folder_ids.is_some_and(|ids| ids.is_empty()) {
+            return Ok(Vec::new());
+        }
+        let folder_clause = match folder_ids {
+            None => String::new(),
+            Some(ids) => {
+                let placeholders = "?,".repeat(ids.len()).trim_end_matches(',').to_string();
+                format!(" AND f.folder_id IN ({placeholders})")
+            }
+        };
+        let mut params: Vec<i64> = vec![i64::from(min_rating)];
+        params.extend(folder_ids.unwrap_or_default().iter().copied());
+        params.push(limit as i64);
+        let sql = format!(
+            "SELECT {FILE_INFO_COLS} FROM files f
+             JOIN metadata m ON m.file_id = f.id
+             WHERE m.rating >= ?1{folder_clause}
+             ORDER BY f.path LIMIT ?{}",
+            params.len()
+        );
+        let mut stmt = self.conn.prepare_cached(&sql)?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(params), file_info_row)?;
         Ok(rows.flatten().collect())
     }
 }

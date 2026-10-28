@@ -184,6 +184,14 @@ impl Element {
         self.attr(&attr_name).map(str::to_string)
     }
 
+    /// Drop a simple property in both forms: child element and attribute.
+    fn remove_prop(&mut self, prefix: &str, local: &str) {
+        let attr_name = format!("{prefix}:{local}");
+        self.attributes.retain(|(k, _)| *k != attr_name);
+        self.children
+            .retain(|c| !matches!(c, Child::Element(e) if e.prefix == prefix && e.local == local));
+    }
+
     fn set_or_replace_child(&mut self, prefix: &str, local: &str, text: &str) {
         // Replace an existing node in place to keep tree order stable.
         for c in &mut self.children {
@@ -437,6 +445,40 @@ impl XmpTree {
         None
     }
 
+    fn ns_declared(&self, prefix: &str) -> bool {
+        let key = format!("xmlns:{prefix}");
+        let has = |e: &Element| e.attributes.iter().any(|(k, _)| *k == key);
+        let Some(root) = self.root.as_ref() else { return false };
+        if has(root) {
+            return true;
+        }
+        if root.local == "xmpmeta" && root.find_child("rdf", "RDF").is_some_and(has) {
+            return true;
+        }
+        self.description().is_some_and(has)
+    }
+
+    /// The description to write into, with `prefix`'s namespace declared
+    /// (on the description) unless an ancestor or the description already
+    /// declares it. `<xmp:Rating>` without `xmlns:xmp` is invalid XMP and
+    /// other tools would ignore it.
+    fn ensure_description_ns(&mut self, prefix: &str) -> &mut Element {
+        let needs_ns = !self.ns_declared(prefix);
+        let uri = match prefix {
+            "xmp" => Some("http://ns.adobe.com/xap/1.0/"),
+            "dc" => Some("http://purl.org/dc/elements/1.1/"),
+            "lr" => Some("http://ns.adobe.com/lightroom/1.0/"),
+            "exif" => Some("http://ns.adobe.com/exif/1.0/"),
+            "fb" => Some(FB_NS),
+            _ => None,
+        };
+        let d = self.ensure_description();
+        if let (true, Some(uri)) = (needs_ns, uri) {
+            d.attributes.push((format!("xmlns:{prefix}"), uri.to_string()));
+        }
+        d
+    }
+
     fn ensure_description(&mut self) -> &mut Element {
         if self.description_mut().is_none() {
             let desc = Element {
@@ -606,7 +648,19 @@ impl Sidecar {
     }
 
     pub fn set_rating(&mut self, rating: u8) {
-        self.tree.ensure_description().set_or_replace_child("xmp", "Rating", &rating.to_string());
+        let d = self.tree.ensure_description_ns("xmp");
+        // An attribute-form `xmp:Rating` would duplicate the child node.
+        let attr_name = "xmp:Rating";
+        d.attributes.retain(|(k, _)| k != attr_name);
+        d.set_or_replace_child("xmp", "Rating", &rating.to_string());
+    }
+
+    /// Remove `xmp:Rating` entirely (unstar). A sidecar without a description
+    /// is left untouched.
+    pub fn clear_rating(&mut self) {
+        if let Some(d) = self.tree.description_mut() {
+            d.remove_prop("xmp", "Rating");
+        }
     }
 
     pub fn caption(&self) -> Option<String> {
@@ -614,7 +668,7 @@ impl Sidecar {
     }
 
     pub fn set_caption(&mut self, caption: &str) {
-        self.tree.ensure_description().set_or_replace_child("dc", "description", caption);
+        self.tree.ensure_description_ns("dc").set_or_replace_child("dc", "description", caption);
     }
 
     pub fn tags(&self) -> Vec<String> {
@@ -622,7 +676,7 @@ impl Sidecar {
     }
 
     pub fn set_tags(&mut self, tags: Vec<String>) {
-        self.tree.ensure_description().set_or_replace_bag("dc", "subject", &tags);
+        self.tree.ensure_description_ns("dc").set_or_replace_bag("dc", "subject", &tags);
     }
 
     /// Lightroom-style hierarchical tags (`lr:hierarchicalSubject`), e.g.
@@ -643,7 +697,7 @@ impl Sidecar {
     }
 
     pub fn set_gps(&mut self, lat: f64, lon: f64) {
-        let d = self.tree.ensure_description();
+        let d = self.tree.ensure_description_ns("exif");
         d.set_or_replace_child("exif", "GPSLatitude", &format_gps(lat, 'N', 'S'));
         d.set_or_replace_child("exif", "GPSLongitude", &format_gps(lon, 'E', 'W'));
     }

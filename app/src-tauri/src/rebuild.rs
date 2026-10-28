@@ -7,10 +7,10 @@
 //! show folders/files processed while staying responsive.
 //!
 //! Sidecar-backed user data in the catalog survives by construction: the
-//! scanner upserts `files` rows by path (stable file ids), so `metadata` /
-//! `file_tags` rows keyed by `file_id` are never dropped. Once the metadata
-//! sidecar layer lands (03-08), its reader hooks into the same upsert path
-//! and the catalog copy becomes a pure cache again.
+//! scanner upserts `files` rows by path (stable file ids), so
+//! `metadata` / `file_tags` rows keyed by `file_id` are never dropped. The
+//! scanner also converges each re-walked file's sidecar into the catalog
+//! (03-005), so user data lost with a deleted catalog is restored from XMP.
 //!
 //! Originals and sidecars are only ever read here, never written.
 

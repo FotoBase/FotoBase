@@ -205,11 +205,15 @@ pub fn scan_folder_with_probes(
     }
 
     catalog.begin_uncommitted_batch()?;
-    let result = scan_inner(catalog, root, &dirs, &files, options.full)
+    let mut touched: Vec<String> = Vec::new();
+    let result = scan_inner(catalog, root, &dirs, &files, options.full, &mut touched)
         .and_then(|report| probe_videos(catalog, root, cancel, video_probe).map(|_| report));
     match result {
         Ok(report) => {
             catalog.commit_batch()?;
+            // Sidecars are the source of truth for user data (PLAN §5): a
+            // fresh or rebuilt catalog picks stars/tags back up from them.
+            catalog.sync_paths(touched.iter().map(String::as_str));
             Ok(ScanReport { cancelled, ..report })
         }
         Err(e) => {
@@ -225,6 +229,7 @@ fn scan_inner(
     dirs: &[PathBuf],
     files: &[WalkedFile],
     full: bool,
+    touched: &mut Vec<String>,
 ) -> Result<ScanReport> {
     let root_str = root.to_string_lossy().into_owned();
     catalog.seed_folder(&root_str)?;
@@ -258,6 +263,7 @@ fn scan_inner(
             }
             Some(_) => {
                 upsert_file(catalog, f)?;
+                touched.push(f.path.clone());
                 report.updated += 1;
             }
             None => {
@@ -269,10 +275,12 @@ fn scan_inner(
                     ReassocOutcome::Ambiguous(_) => {
                         report.ambiguous += 1;
                         upsert_file(catalog, f)?;
+                        touched.push(f.path.clone());
                         report.added += 1;
                     }
                     ReassocOutcome::NoMatch => {
                         upsert_file(catalog, f)?;
+                        touched.push(f.path.clone());
                         report.added += 1;
                     }
                 }
