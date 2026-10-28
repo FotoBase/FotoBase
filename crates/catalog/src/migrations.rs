@@ -15,6 +15,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V6,
     MIGRATION_V7,
     MIGRATION_V8,
+    MIGRATION_V9,
 ];
 
 const MIGRATION_V1: &str = "
@@ -271,6 +272,104 @@ CREATE TABLE trash (
     created_at INTEGER NOT NULL
 );
 CREATE INDEX idx_trash_created ON trash(created_at);
+";
+
+/// TASK-03-013: tags become searchable. `files_fts` gains a `tags` column
+/// (space-joined tag names; the unicode61 tokenizer splits nested
+/// `Vacation|Italy` into its segments) next to filename/folder/caption
+/// (PLAN §5). FTS is derived data, so the table is dropped and rebuilt from
+/// the mirror rows. Every `files` / `metadata.caption` / `file_tags` change
+/// refreshes the one FTS row of the affected photo, so the sidecar
+/// write-through (and a rebuild from sidecars) keeps search current with no
+/// manual step. A trigger firing for a photo whose `files` row is already
+/// gone inserts nothing (the SELECT is empty).
+const MIGRATION_V9: &str = "
+DROP TRIGGER files_fts_insert;
+DROP TRIGGER files_fts_delete;
+DROP TRIGGER files_fts_update;
+DROP TRIGGER files_fts_caption_insert;
+DROP TRIGGER files_fts_caption_update;
+DROP TRIGGER files_fts_caption_delete;
+DROP TABLE files_fts;
+CREATE VIRTUAL TABLE files_fts USING fts5(filename, folder, caption, tags);
+
+CREATE TRIGGER files_fts_insert AFTER INSERT ON files BEGIN
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags)
+    VALUES (NEW.id, NEW.filename, (SELECT path FROM folders WHERE id = NEW.folder_id),
+            (SELECT caption FROM metadata WHERE file_id = NEW.id),
+            (SELECT group_concat(t.name, ' ') FROM file_tags ft
+             JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = NEW.id));
+END;
+
+CREATE TRIGGER files_fts_delete AFTER DELETE ON files BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.id;
+END;
+
+CREATE TRIGGER files_fts_update AFTER UPDATE ON files BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.id;
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags)
+    VALUES (NEW.id, NEW.filename, (SELECT path FROM folders WHERE id = NEW.folder_id),
+            (SELECT caption FROM metadata WHERE file_id = NEW.id),
+            (SELECT group_concat(t.name, ' ') FROM file_tags ft
+             JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = NEW.id));
+END;
+
+CREATE TRIGGER files_fts_caption_insert AFTER INSERT ON metadata
+WHEN NEW.caption IS NOT NULL BEGIN
+    DELETE FROM files_fts WHERE rowid = NEW.file_id;
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags)
+        SELECT f.id, f.filename, d.path, NEW.caption,
+               (SELECT group_concat(t.name, ' ') FROM file_tags ft
+                JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id)
+        FROM files f JOIN folders d ON d.id = f.folder_id WHERE f.id = NEW.file_id;
+END;
+
+CREATE TRIGGER files_fts_caption_update AFTER UPDATE OF caption ON metadata
+WHEN OLD.caption IS NOT NEW.caption BEGIN
+    DELETE FROM files_fts WHERE rowid = NEW.file_id;
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags)
+        SELECT f.id, f.filename, d.path, NEW.caption,
+               (SELECT group_concat(t.name, ' ') FROM file_tags ft
+                JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id)
+        FROM files f JOIN folders d ON d.id = f.folder_id WHERE f.id = NEW.file_id;
+END;
+
+CREATE TRIGGER files_fts_caption_delete AFTER DELETE ON metadata
+WHEN OLD.caption IS NOT NULL BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.file_id;
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags)
+        SELECT f.id, f.filename, d.path, NULL,
+               (SELECT group_concat(t.name, ' ') FROM file_tags ft
+                JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id)
+        FROM files f JOIN folders d ON d.id = f.folder_id WHERE f.id = OLD.file_id;
+END;
+
+CREATE TRIGGER files_fts_tags_insert AFTER INSERT ON file_tags BEGIN
+    DELETE FROM files_fts WHERE rowid = NEW.file_id;
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags)
+        SELECT f.id, f.filename, d.path, m.caption,
+               (SELECT group_concat(t.name, ' ') FROM file_tags ft
+                JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id)
+        FROM files f JOIN folders d ON d.id = f.folder_id
+        LEFT JOIN metadata m ON m.file_id = f.id WHERE f.id = NEW.file_id;
+END;
+
+CREATE TRIGGER files_fts_tags_delete AFTER DELETE ON file_tags BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.file_id;
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags)
+        SELECT f.id, f.filename, d.path, m.caption,
+               (SELECT group_concat(t.name, ' ') FROM file_tags ft
+                JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id)
+        FROM files f JOIN folders d ON d.id = f.folder_id
+        LEFT JOIN metadata m ON m.file_id = f.id WHERE f.id = OLD.file_id;
+END;
+
+INSERT INTO files_fts(rowid, filename, folder, caption, tags)
+    SELECT f.id, f.filename, d.path, m.caption,
+           (SELECT group_concat(t.name, ' ') FROM file_tags ft
+            JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id)
+    FROM files f JOIN folders d ON d.id = f.folder_id
+    LEFT JOIN metadata m ON m.file_id = f.id;
 ";
 
 /// Apply all pending migrations, in order, each in its own transaction.
