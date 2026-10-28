@@ -1,6 +1,6 @@
 # task: extend FTS to captions and tags
 
-**Feature:** [FEAT-03-05-search-filters](FEAT-03-05-search-filters.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
+**Feature:** [FEAT-03-05-search-filters](FEAT-03-05-search-filters.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-28)
 
 ## Description
 Extend live search beyond filenames/folders (P1 scope) to captions and tags via the existing FTS5 index (PLAN §5 catalog: `files_fts` over filename, folder, caption, tags, people, place; §2 C live search). Keeps as-you-type performance on the 50k fixture.
