@@ -1,6 +1,6 @@
 # task: batch rename and batch move
 
-**Feature:** [FEAT-03-03-photo-tray-batch](FEAT-03-03-photo-tray-batch.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-03-photo-tray-batch](FEAT-03-03-photo-tray-batch.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-28)
 
 ## Description
 Batch rename to a pattern and batch move between folders, performing real file moves with catalog and sidecars following (PLAN §2 B "Batch rename / move", §6 P2a). Depends on the move/rename re-association design (00-010, hard gate for EPIC-03).
@@ -23,6 +23,6 @@ Batch rename to a pattern and batch move between folders, performing real file m
 - Integration: interrupted move (kill mid-batch) leaves catalog consistent (aborted batch reported, no half-moved rows).
 
 ## Acceptance criteria
-- [ ] 03-011: batch rename applies patterns without collisions.
-- [ ] 03-011: batch move does real file moves; catalog and sidecars follow.
-- [ ] 03-011: originals' contents unchanged (checksum); no re-scan as new.
+- [x] 03-011: batch rename applies patterns without collisions.
+- [x] 03-011: batch move does real file moves; catalog and sidecars follow.
+- [x] 03-011: originals' contents unchanged (checksum); no re-scan as new.

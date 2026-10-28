@@ -8,11 +8,13 @@
 pub mod albums;
 pub mod migrations;
 pub mod missing;
+pub mod relocate;
 pub mod sync;
 
 pub use albums::AlbumInfo;
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
+pub use relocate::BatchFile;
 pub use sync::{sidecar_path, SyncError, SyncStats};
 
 use std::path::{Path, PathBuf};
@@ -926,6 +928,12 @@ fn file_stem(path: &Path) -> String {
 
 fn today() -> String {
     let (y, m, d) = civil_from_days(now_days());
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// `YYYY-MM-DD` (UTC) of a Unix timestamp in seconds.
+pub fn iso_date(unix_secs: f64) -> String {
+    let (y, m, d) = civil_from_days((unix_secs as i64).div_euclid(86_400));
     format!("{y:04}-{m:02}-{d:02}")
 }
 

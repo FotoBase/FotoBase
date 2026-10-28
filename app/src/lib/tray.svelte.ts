@@ -50,6 +50,16 @@ class TrayState {
     this.items = this.items.filter((i) => i.id !== id);
   }
 
+  /// Re-read names and hashes from fresh library rows (a batch rename
+  /// changes the filename of photos that sit in the tray). Hold stays.
+  refresh(photos: readonly TrayPhoto[]): void {
+    const byId = new Map(photos.map((p) => [p.id, p]));
+    this.items = this.items.map((i) => {
+      const p = byId.get(i.id);
+      return p ? { ...i, filename: p.filename, hash: p.hash } : i;
+    });
+  }
+
   toggleHold(id: number): void {
     this.items = this.items.map((i) => (i.id === id ? { ...i, held: !i.held } : i));
   }

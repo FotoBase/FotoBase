@@ -5,6 +5,7 @@
   // runs once on startup.
   import AlbumDialog from "./lib/AlbumDialog.svelte";
   import AlbumList from "./lib/AlbumList.svelte";
+  import BatchDialog from "./lib/BatchDialog.svelte";
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import FolderManagerDialog from "./lib/FolderManagerDialog.svelte";
@@ -65,6 +66,12 @@
     open: false,
     x: 0,
     y: 0,
+    ids: [],
+  });
+  // Batch rename / move (TASK-03-011): opened from the tray, acts on its photos.
+  let batchDialog = $state<{ open: boolean; mode: "rename" | "move"; ids: number[] }>({
+    open: false,
+    mode: "rename",
     ids: [],
   });
   let folderMenu = $state<{ open: boolean; x: number; y: number; folder: FolderInfo | null }>({
@@ -466,6 +473,13 @@
     albumPicker = { open: true, x: e.x, y: Math.max(0, e.y - menuHeight), ids: e.ids };
   }
 
+  // Files moved/renamed on disk: re-read the library so grid, tree and tray
+  // show the new names and folders.
+  async function handleBatchApplied(): Promise<void> {
+    await refreshLibrary();
+    tray.refresh(photos);
+  }
+
   async function handleAlbumPick(id: string): Promise<void> {
     const ids = albumPicker.ids;
     if (id === "new-album") {
@@ -657,6 +671,7 @@
     resolve={photosById}
     onjump={jumpToPhoto}
     onaddtoalbum={openTrayAlbumPicker}
+    onbatch={(e) => (batchDialog = { open: true, ...e })}
   />
   {#if viewer.open}
     <Viewer
@@ -696,6 +711,13 @@
     bind:open={albumDialog.open}
     album={albumDialog.album}
     onsaved={handleAlbumSaved}
+  />
+  <BatchDialog
+    bind:open={batchDialog.open}
+    mode={batchDialog.mode}
+    ids={batchDialog.ids}
+    {folders}
+    onapplied={handleBatchApplied}
   />
   <ContextMenu
     bind:open={photoMenu.open}

@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use fotobase_catalog::{Catalog, Result};
 use fotobase_video::VideoMeta as ProbeMeta;
 
+pub mod batch;
 mod polling;
 pub mod reassoc;
 pub use polling::{

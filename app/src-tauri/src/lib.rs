@@ -13,6 +13,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 pub mod associations;
+pub mod batch_commands;
 pub mod codec;
 pub mod display_profile;
 pub mod emit_pacer;
@@ -449,6 +450,73 @@ fn rename_tag(old: String, new: String, state: tauri::State<'_, AppState>) -> Re
 #[tauri::command]
 fn list_tags(state: tauri::State<'_, AppState>) -> Result<Vec<tag_commands::TagCount>, String> {
     with_catalog_sync(&state, |cat| tag_commands::all(cat))
+}
+
+/// Batch rename preview (TASK-03-011): the names a pattern would give the
+/// photos, in selection order, plus any collisions. Touches nothing.
+#[tauri::command]
+fn preview_batch_rename(
+    ids: Vec<i64>,
+    spec: fotobase_scanner::batch::RenameSpec,
+    policy: fotobase_scanner::batch::CollisionPolicy,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_scanner::batch::BatchPlan, String> {
+    with_catalog_str(&state, |cat| batch_commands::preview_rename(cat, &ids, &spec, policy))
+}
+
+/// Batch rename: real file renames, sidecars and catalog rows following.
+/// All-or-nothing; returns the applied moves (the undo window's input).
+#[tauri::command]
+async fn batch_rename(
+    ids: Vec<i64>,
+    spec: fotobase_scanner::batch::RenameSpec,
+    policy: fotobase_scanner::batch::CollisionPolicy,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_scanner::batch::PlannedMove>, String> {
+    let moves = with_catalog_str(&state, |cat| batch_commands::rename(cat, &ids, &spec, policy))?;
+    let _ = app.emit("library-changed", ());
+    Ok(moves)
+}
+
+/// Batch move preview: where the photos would land in `dest`.
+#[tauri::command]
+fn preview_batch_move(
+    ids: Vec<i64>,
+    dest: String,
+    policy: fotobase_scanner::batch::CollisionPolicy,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_scanner::batch::BatchPlan, String> {
+    with_catalog_str(&state, |cat| batch_commands::preview_move(cat, &ids, &dest, policy))
+}
+
+/// Batch move into a cataloged folder: real file moves, sidecars and
+/// catalog rows following. All-or-nothing, like [`batch_rename`].
+#[tauri::command]
+async fn batch_move(
+    ids: Vec<i64>,
+    dest: String,
+    policy: fotobase_scanner::batch::CollisionPolicy,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_scanner::batch::PlannedMove>, String> {
+    let moves =
+        with_catalog_str(&state, |cat| batch_commands::move_photos(cat, &ids, &dest, policy))?;
+    let _ = app.emit("library-changed", ());
+    Ok(moves)
+}
+
+/// [`with_catalog_mut`] for helpers that already report `String` errors.
+fn with_catalog_str<T>(
+    state: &AppState,
+    f: impl FnOnce(&mut Catalog) -> Result<T, String>,
+) -> Result<T, String> {
+    let mut guard = state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
+    if guard.is_none() {
+        *guard =
+            Some(Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?);
+    }
+    f(guard.as_mut().expect("catalog just inserted"))
 }
 
 /// [`with_catalog_mut`] for sync-engine errors (tags work through the sync
@@ -1266,6 +1334,10 @@ pub fn run() {
             remove_tag,
             rename_tag,
             list_tags,
+            preview_batch_rename,
+            batch_rename,
+            preview_batch_move,
+            batch_move,
             photo_info,
             video_info,
             list_folders,
