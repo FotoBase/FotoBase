@@ -688,6 +688,16 @@ impl Sidecar {
             .unwrap_or_default()
     }
 
+    /// Replace the `lr:hierarchicalSubject` bag (TASK-03-006). Nested tags
+    /// use `|` as the path separator, the form darktable and digiKam write.
+    pub fn set_hierarchical_tags(&mut self, tags: Vec<String>) {
+        self.tree.ensure_description_ns("lr").set_or_replace_bag(
+            "lr",
+            "hierarchicalSubject",
+            &tags,
+        );
+    }
+
     /// GPS as (latitude, longitude) decimal degrees.
     pub fn gps(&self) -> Option<(f64, f64)> {
         let d = self.tree.description()?;

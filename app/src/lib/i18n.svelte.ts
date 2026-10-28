@@ -40,8 +40,10 @@ const messages: Record<string, Dict> = {
     "options.theme.light": "Light",
     "options.theme.dark": "Dark",
     "options.associations": "File associations",
-    "options.associations.hint": "Open these image types in Fotobase from the file manager.",
-    "options.associations.failed": "Changing the file association failed: {error}",
+    "options.associations.hint":
+      "Open these image types in Fotobase from the file manager.",
+    "options.associations.failed":
+      "Changing the file association failed: {error}",
     "options.close": "Close",
     "grid.zoom": "Thumbnail size",
     "tree.label": "Folders",
@@ -54,7 +56,8 @@ const messages: Record<string, Dict> = {
     "menu.addToAlbum": "Add to album",
     "menu.deleteFromDisk": "Delete from disk",
     "menu.exit": "Exit",
-    "confirm.deletePhoto": "Move this photo to the trash? The file leaves its folder but stays recoverable from the OS trash.",
+    "confirm.deletePhoto":
+      "Move this photo to the trash? The file leaves its folder but stays recoverable from the OS trash.",
     "app.folderManager": "Folder Manager",
     "folderManager.title": "Folder Manager",
     "folderManager.hint":
@@ -62,7 +65,8 @@ const messages: Record<string, Dict> = {
     "folderManager.mode.once": "Scan once",
     "folderManager.mode.always": "Scan always (watched)",
     "folderManager.remove": "Remove from Fotobase",
-    "folderManager.remove.confirm": "Remove this folder from the catalog? Files stay on disk.",
+    "folderManager.remove.confirm":
+      "Remove this folder from the catalog? Files stay on disk.",
     "folderManager.remove.confirmYes": "Remove",
     "folderManager.remove.confirmNo": "Keep",
     "folderManager.face": "Face detection",
@@ -80,8 +84,10 @@ const messages: Record<string, Dict> = {
     "import.start": "Import",
     "import.cancel": "Cancel",
     "import.running": "Importing {done} of {total} — {file}",
-    "import.report": "Copied {copied}, skipped {duplicates} duplicates, {failed} failed",
-    "import.report.cancelled": "Cancelled: copied {copied}, skipped {duplicates} duplicates",
+    "import.report":
+      "Copied {copied}, skipped {duplicates} duplicates, {failed} failed",
+    "import.report.cancelled":
+      "Cancelled: copied {copied}, skipped {duplicates} duplicates",
     "import.error": "Import failed: {error}",
     "search.placeholder": "Search filenames and folders",
     "search.clear": "Clear search",
@@ -91,6 +97,18 @@ const messages: Record<string, Dict> = {
     "viewer.rating": "Rate {n}",
     "viewer.ratingFailed": "Could not save rating: {error}",
     "options.ratings": "Enable 1–5 ratings (default: single star)",
+    "options.quickTags": "Quick Tags (one per line, up to 10)",
+    "quickTags.title": "Quick Tags",
+    "tags.title": "Tags",
+    "quickTags.apply": "Toggle tag “{tag}” on the selection",
+    "quickTags.slot": "Quick tag {n}",
+    "quickTags.failed": "Could not tag some photos: {error}",
+    "tags.addPlaceholder": "Add tag (use | for nesting, e.g. Vacation|2024)",
+    "tags.remove": "Remove tag “{tag}”",
+    "tags.renameOld": "Tag to rename",
+    "tags.renameNew": "New name",
+    "tags.rename": "Rename",
+    "tags.failed": "Tag change failed: {error}",
     "menu.showImageProperties": "Show image properties",
     "info.exif": "EXIF",
     "info.camera": "Camera",
@@ -118,7 +136,8 @@ const messages: Record<string, Dict> = {
     "options.language": "Sprache",
     "options.updates": "Automatische Updates",
     "options.updates.auto": "Updates automatisch installieren",
-    "options.updates.checkButAsk": "Nach Updates suchen, vor Installation fragen",
+    "options.updates.checkButAsk":
+      "Nach Updates suchen, vor Installation fragen",
     "options.updates.off": "Nie nach Updates suchen",
     "options.clearCache": "Cache-Dateien löschen",
     "options.clearCache.done": "{n} Cache-Dateien entfernt",
@@ -135,8 +154,10 @@ const messages: Record<string, Dict> = {
     "options.gridRenderer.dom": "DOM (Standard)",
     "options.gridRenderer.canvas": "Canvas",
     "options.associations": "Dateizuordnungen",
-    "options.associations.hint": "Diese Bildtypen im Dateimanager mit Fotobase öffnen.",
-    "options.associations.failed": "Ändern der Dateizuordnung fehlgeschlagen: {error}",
+    "options.associations.hint":
+      "Diese Bildtypen im Dateimanager mit Fotobase öffnen.",
+    "options.associations.failed":
+      "Ändern der Dateizuordnung fehlgeschlagen: {error}",
     "options.close": "Schließen",
     "grid.zoom": "Vorschaugröße",
     "tree.label": "Ordner",
@@ -149,7 +170,8 @@ const messages: Record<string, Dict> = {
     "menu.addToAlbum": "Zum Album hinzufügen",
     "menu.deleteFromDisk": "Von Festplatte löschen",
     "menu.exit": "Beenden",
-    "confirm.deletePhoto": "Dieses Foto in den Papierkorb verschieben? Die Datei verlässt ihren Ordner, bleibt aber im Papierkorb wiederherstellbar.",
+    "confirm.deletePhoto":
+      "Dieses Foto in den Papierkorb verschieben? Die Datei verlässt ihren Ordner, bleibt aber im Papierkorb wiederherstellbar.",
     "app.folderManager": "Ordnerverwaltung",
     "folderManager.title": "Ordnerverwaltung",
     "folderManager.hint":
@@ -162,7 +184,8 @@ const messages: Record<string, Dict> = {
     "folderManager.remove.confirmYes": "Entfernen",
     "folderManager.remove.confirmNo": "Behalten",
     "folderManager.face": "Gesichtserkennung",
-    "folderManager.face.placeholder": "Gesichtserkennung ist noch nicht verfügbar",
+    "folderManager.face.placeholder":
+      "Gesichtserkennung ist noch nicht verfügbar",
     "folderManager.error": "Ordnerverwaltung: {error}",
     "app.import": "Importieren…",
     "import.title": "Aus Ordner importieren",
@@ -176,8 +199,10 @@ const messages: Record<string, Dict> = {
     "import.start": "Importieren",
     "import.cancel": "Abbrechen",
     "import.running": "Importiere {done} von {total} — {file}",
-    "import.report": "Kopiert: {copied}, Duplikate übersprungen: {duplicates}, fehlgeschlagen: {failed}",
-    "import.report.cancelled": "Abgebrochen: kopiert {copied}, Duplikate übersprungen {duplicates}",
+    "import.report":
+      "Kopiert: {copied}, Duplikate übersprungen: {duplicates}, fehlgeschlagen: {failed}",
+    "import.report.cancelled":
+      "Abgebrochen: kopiert {copied}, Duplikate übersprungen {duplicates}",
     "import.error": "Import fehlgeschlagen: {error}",
     "search.placeholder": "Dateinamen und Ordner durchsuchen",
     "search.clear": "Suche löschen",
@@ -187,13 +212,27 @@ const messages: Record<string, Dict> = {
     "viewer.rating": "{n} bewerten",
     "viewer.ratingFailed": "Bewertung konnte nicht gespeichert werden: {error}",
     "options.ratings": "1–5-Bewertungen aktivieren (Standard: ein Stern)",
+    "options.quickTags": "Schnell-Tags (einer pro Zeile, bis zu 10)",
+    "quickTags.title": "Schnell-Tags",
+    "tags.title": "Tags",
+    "quickTags.apply": "Tag „{tag}“ für die Auswahl umschalten",
+    "quickTags.slot": "Schnell-Tag {n}",
+    "quickTags.failed": "Einige Fotos konnten nicht getaggt werden: {error}",
+    "tags.addPlaceholder":
+      "Tag hinzufügen (| für Verschachtelung, z. B. Urlaub|2024)",
+    "tags.remove": "Tag „{tag}“ entfernen",
+    "tags.renameOld": "Uzubenennender Tag",
+    "tags.renameNew": "Neuer Name",
+    "tags.rename": "Umbenennen",
+    "tags.failed": "Tag-Änderung fehlgeschlagen: {error}",
     "menu.showImageProperties": "Bildeigenschaften anzeigen",
     "info.exif": "EXIF",
     "info.camera": "Kamera",
     "info.lens": "Objektiv",
     "info.exposure": "Belichtung",
     "info.histogram": "Histogramm",
-    "info.histogramPending": "Das Histogramm erscheint, sobald das Bild gerendert ist.",
+    "info.histogramPending":
+      "Das Histogramm erscheint, sobald das Bild gerendert ist.",
     "info.file": "Datei",
     "info.path": "Pfad",
     "info.size": "Größe",
@@ -219,5 +258,7 @@ export function setLocale(tag: string): void {
 export function t(key: string, vars?: Record<string, string | number>): string {
   const raw = messages[current]?.[key] ?? messages.en[key] ?? key;
   if (vars === undefined) return raw;
-  return raw.replace(/\{(\w+)\}/g, (_, name) => String(vars[name] ?? `{${name}}`));
+  return raw.replace(/\{(\w+)\}/g, (_, name) =>
+    String(vars[name] ?? `{${name}}`),
+  );
 }

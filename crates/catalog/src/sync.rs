@@ -21,6 +21,8 @@ pub enum SyncError {
     UnknownFile(i64),
     #[error("rating {0} out of range 0-5")]
     InvalidRating(u8),
+    #[error("tag name is empty")]
+    EmptyTag,
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -88,6 +90,135 @@ impl Catalog {
 
     pub fn set_tags(&mut self, file_id: i64, tags: Vec<String>) -> SyncResult<()> {
         self.mutate_user_data(file_id, |sc| sc.set_tags(tags))
+    }
+
+    // ---- tags (TASK-03-006, PLAN §5) ------------------------------------
+
+    /// Add one tag: write-through to `dc:subject`; a tag containing `|`
+    /// (nested, e.g. `Vacation|2024`) is also written to
+    /// `lr:hierarchicalSubject` so darktable sees the nesting. Returns the
+    /// photo's tag list after the write.
+    pub fn add_tag(&mut self, file_id: i64, tag: &str) -> SyncResult<Vec<String>> {
+        let tag = tag.trim().to_string();
+        if tag.is_empty() {
+            return Err(SyncError::EmptyTag);
+        }
+        let tags = self.mutate_tags(file_id, |sc| {
+            let mut tags = sc.tags();
+            if !tags.contains(&tag) {
+                tags.push(tag.clone());
+            }
+            sc.set_tags(tags.clone());
+            if tag.contains('|') {
+                let mut hier = sc.hierarchical_tags();
+                if !hier.contains(&tag) {
+                    hier.push(tag.clone());
+                }
+                sc.set_hierarchical_tags(hier);
+            }
+            tags
+        })?;
+        Ok(tags)
+    }
+
+    /// Remove one tag from `dc:subject` (and the matching
+    /// `lr:hierarchicalSubject` entry). Returns the remaining tags.
+    pub fn remove_tag(&mut self, file_id: i64, tag: &str) -> SyncResult<Vec<String>> {
+        let tag = tag.trim().to_string();
+        let tags = self.mutate_tags(file_id, |sc| {
+            let tags: Vec<String> = sc.tags().into_iter().filter(|t| *t != tag).collect();
+            sc.set_tags(tags.clone());
+            let hier: Vec<String> =
+                sc.hierarchical_tags().into_iter().filter(|t| *t != tag).collect();
+            sc.set_hierarchical_tags(hier);
+            tags
+        })?;
+        Ok(tags)
+    }
+
+    /// Rename a tag across the whole library (functional spec: tag rename
+    /// rewrites affected sidecars as a batch job). For each affected photo
+    /// the sidecar's `dc:subject` entry is replaced exactly and each
+    /// `lr:hierarchicalSubject` path segment is renamed, so `Vacation|2024`
+    /// follows a `Vacation` → `Trips` rename. Returns the number of
+    /// sidecars rewritten.
+    pub fn rename_tag(&mut self, old: &str, new: &str) -> SyncResult<usize> {
+        let (old, new) = (old.trim().to_string(), new.trim().to_string());
+        if old.is_empty() || new.is_empty() {
+            return Err(SyncError::EmptyTag);
+        }
+        let pattern: Vec<String> =
+            vec![format!("%|{old}|%"), format!("{old}|%"), format!("%|{old}")];
+        let ids: Vec<i64> = {
+            let mut stmt = self.conn().prepare_cached(
+                "SELECT DISTINCT ft.file_id FROM file_tags ft JOIN tags t ON t.id = ft.tag_id
+                 WHERE t.name = ?1 OR t.name LIKE ?2 OR t.name LIKE ?3 OR t.name LIKE ?4
+                 ORDER BY ft.file_id",
+            )?;
+            let rows = stmt
+                .query_map(rusqlite::params![old, pattern[0], pattern[1], pattern[2]], |r| {
+                    r.get(0)
+                })?;
+            rows.flatten().collect()
+        };
+        for id in &ids {
+            self.mutate_tags(*id, |sc| {
+                let rename_item = |t: String| {
+                    t.split('|')
+                        .map(|seg| if seg == old { new.clone() } else { seg.to_string() })
+                        .collect::<Vec<_>>()
+                        .join("|")
+                };
+                let tags: Vec<String> = sc.tags().into_iter().map(rename_item).collect();
+                sc.set_tags(tags);
+                let hier: Vec<String> =
+                    sc.hierarchical_tags().into_iter().map(rename_item).collect();
+                sc.set_hierarchical_tags(hier);
+                sc.tags()
+            })?;
+        }
+        // The derived cache: stale name rows drop out with their last refs.
+        if !ids.is_empty() {
+            self.conn_mut()
+                .execute("DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM file_tags)", [])?;
+        }
+        Ok(ids.len())
+    }
+
+    /// A photo's tags from the catalog mirror (derived cache, PLAN §5).
+    pub fn file_tags(&self, file_id: i64) -> Result<Vec<String>> {
+        let mut stmt = self.conn().prepare_cached(
+            "SELECT t.name FROM tags t JOIN file_tags ft ON ft.tag_id = t.id
+             WHERE ft.file_id = ?1 ORDER BY t.name",
+        )?;
+        let rows = stmt.query_map([file_id], |r| r.get(0))?;
+        Ok(rows.flatten().collect())
+    }
+
+    /// Every tag in the library with its usage count, name-ordered — the
+    /// rename dialog's source list.
+    pub fn all_tags(&self) -> Result<Vec<(String, i64)>> {
+        let mut stmt = self.conn().prepare_cached(
+            "SELECT t.name, COUNT(ft.file_id) FROM tags t
+             LEFT JOIN file_tags ft ON ft.tag_id = t.id
+             GROUP BY t.id HAVING COUNT(ft.file_id) > 0 ORDER BY t.name",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.flatten().collect())
+    }
+
+    /// Read-modify-write the sidecar's tags via the single mutation pathway;
+    /// the catalog mirror is updated from the written sidecar.
+    fn mutate_tags(
+        &mut self,
+        file_id: i64,
+        apply: impl FnOnce(&mut Sidecar) -> Vec<String>,
+    ) -> SyncResult<Vec<String>> {
+        let mut tags = Vec::new();
+        self.mutate_user_data(file_id, |sc| {
+            tags = apply(sc);
+        })?;
+        Ok(tags)
     }
 
     pub fn set_gps(&mut self, file_id: i64, lat: f64, lon: f64) -> SyncResult<()> {
@@ -161,7 +292,7 @@ impl Catalog {
                     continue;
                 }
             }
-            if self.converge(file_id, &path, mtime, size)? {
+            if self.converge_forced(file_id, &path, mtime, size, full)? {
                 stats.converged += 1;
             }
         }
@@ -212,13 +343,24 @@ impl Catalog {
         stored_mtime: Option<i64>,
         stored_size: Option<i64>,
     ) -> SyncResult<bool> {
+        self.converge_forced(file_id, path, stored_mtime, stored_size, false)
+    }
+
+    fn converge_forced(
+        &mut self,
+        file_id: i64,
+        path: &str,
+        stored_mtime: Option<i64>,
+        stored_size: Option<i64>,
+        force: bool,
+    ) -> SyncResult<bool> {
         let sc_path = sidecar_path(path);
         let md = match std::fs::metadata(&sc_path) {
             Ok(md) => md,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(false),
             Err(err) => return Err(err.into()),
         };
-        if !matches!((stored_mtime, stored_size), (Some(_), Some(_))) {
+        if force || !matches!((stored_mtime, stored_size), (Some(_), Some(_))) {
             // Never synced (or mid-crash state): always re-read.
         } else if sidecar_unchanged(&md, stored_size.unwrap(), stored_mtime.unwrap()) {
             return Ok(false);

@@ -201,6 +201,42 @@ mod tests {
     }
 
     #[test]
+    fn nested_tag_writes_both_dc_subject_and_lr_hierarchical_subject() {
+        // TASK-03-006: a nested tag `A|B` must land in `dc:subject` (so
+        // digiKam sees it) and in `lr:hierarchicalSubject` (the nesting
+        // darktable reads), as proper rdf:Bag fragments.
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("IMG_0007.jpg.xmp");
+        let mut sc = Sidecar::read(&sidecar).unwrap();
+        sc.set_tags(vec!["Vacation|2024".into()]);
+        sc.set_hierarchical_tags(vec!["Vacation|2024".into()]);
+        sc.write(&sidecar).unwrap();
+
+        let raw = std::fs::read_to_string(&sidecar).unwrap();
+        assert!(raw.contains("dc:subject"), "{raw}");
+        assert!(raw.contains("lr:hierarchicalSubject"), "{raw}");
+        assert!(raw.contains("Vacation|2024"), "{raw}");
+
+        let sc2 = Sidecar::read(&sidecar).unwrap();
+        assert_eq!(sc2.tags(), vec!["Vacation|2024"]);
+        assert_eq!(sc2.hierarchical_tags(), vec!["Vacation|2024"]);
+    }
+
+    #[test]
+    fn set_hierarchical_tags_replaces_the_previous_bag_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("IMG_0008.jpg.xmp");
+        let mut sc = Sidecar::read(&sidecar).unwrap();
+        sc.set_hierarchical_tags(vec!["A|1".into(), "B".into()]);
+        sc.set_hierarchical_tags(vec!["C|2".into()]);
+        sc.write(&sidecar).unwrap();
+
+        let sc2 = Sidecar::read(&sidecar).unwrap();
+        assert_eq!(sc2.hierarchical_tags(), vec!["C|2"]);
+        assert_eq!(sc2.raw().matches("<lr:hierarchicalSubject").count(), 1, "{}", sc2.raw());
+    }
+
+    #[test]
     fn external_modification_between_read_and_write_is_visible() {
         // M3: we must never reuse a cached tree as the write base.
         let dir = tempfile::tempdir().unwrap();

@@ -56,6 +56,10 @@
     apply({ ...settings, ratings_enabled: enabled });
   }
 
+  function setQuickTags(tags: string[]): void {
+    apply({ ...settings, quick_tags: tags });
+  }
+
   // File associations (TASK-01-025, PLAN §2M): a checked type registers
   // Fotobase as the OS default viewer for it (unchecking unregisters and
   // restores the previous handler). The persisted list is the checked
@@ -248,6 +252,25 @@
           />
           {t("options.ratings")}
         </label>
+
+        <!-- Quick Tags (TASK-03-006, PLAN §2B): up to 10 one-click tags. -->
+        <fieldset class="options-fieldset">
+          <legend>{t("options.quickTags")}</legend>
+          <textarea
+            class="quick-tags-input"
+            data-testid="quick-tags-input"
+            rows="4"
+            value={settings.quick_tags.join("\n")}
+            onchange={(e) =>
+              setQuickTags(
+                e.currentTarget.value
+                  .split("\n")
+                  .map((line) => line.trim())
+                  .filter((line) => line.length > 0)
+                  .slice(0, 10),
+              )}
+          ></textarea>
+        </fieldset>
 
         <label class="options-row options-check">
           <input

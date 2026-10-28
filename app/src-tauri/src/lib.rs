@@ -25,6 +25,7 @@ pub mod rating;
 pub mod rebuild;
 pub mod settings;
 pub mod stream;
+pub mod tag_commands;
 pub mod thumb;
 
 /// Crate identity, used by the workspace smoke test.
@@ -295,6 +296,61 @@ fn set_rating(file_id: i64, rating: u8, state: tauri::State<'_, AppState>) -> Re
     let cat = guard.as_mut().expect("catalog just inserted");
     rating::apply_rating(cat, file_id, rating, enabled).map_err(|e| e.to_string())?;
     Ok(rating)
+}
+
+/// Tags (TASK-03-006): read a photo's tags from the catalog mirror.
+#[tauri::command]
+fn get_tags(file_id: i64, state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+    with_catalog_sync(&state, |cat| tag_commands::tags(cat, file_id))
+}
+
+/// Add one tag (nested tags use the `|` path separator): write-through to
+/// the sidecar, then the catalog mirror. Returns the updated list.
+#[tauri::command]
+fn add_tag(
+    file_id: i64,
+    tag: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    with_catalog_sync(&state, |cat| tag_commands::add(cat, file_id, &tag))
+}
+
+/// Remove one tag from a photo; returns the remaining list.
+#[tauri::command]
+fn remove_tag(
+    file_id: i64,
+    tag: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    with_catalog_sync(&state, |cat| tag_commands::remove(cat, file_id, &tag))
+}
+
+/// Rename a tag library-wide: every affected sidecar is rewritten (batch
+/// rename, TASK-03-006). Returns the number of sidecars rewritten.
+#[tauri::command]
+fn rename_tag(old: String, new: String, state: tauri::State<'_, AppState>) -> Result<u32, String> {
+    let n = with_catalog_sync(&state, |cat| tag_commands::rename(cat, &old, &new))?;
+    Ok(n as u32)
+}
+
+/// Every tag in the library with usage counts (rename dialog source list).
+#[tauri::command]
+fn list_tags(state: tauri::State<'_, AppState>) -> Result<Vec<tag_commands::TagCount>, String> {
+    with_catalog_sync(&state, |cat| tag_commands::all(cat))
+}
+
+/// [`with_catalog_mut`] for sync-engine errors (tags work through the sync
+/// engine, whose error type is richer than the plain catalog's).
+fn with_catalog_sync<T>(
+    state: &AppState,
+    f: impl FnOnce(&mut Catalog) -> Result<T, fotobase_catalog::SyncError>,
+) -> Result<T, String> {
+    let mut guard = state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
+    if guard.is_none() {
+        *guard =
+            Some(Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?);
+    }
+    f(guard.as_mut().expect("catalog just inserted")).map_err(|e| e.to_string())
 }
 
 /// Info pane payload for one photo (TASK-01-020, PLAN §2D): file properties
@@ -1082,6 +1138,11 @@ pub fn run() {
             search_files,
             list_files,
             set_rating,
+            get_tags,
+            add_tag,
+            remove_tag,
+            rename_tag,
+            list_tags,
             photo_info,
             video_info,
             list_folders,

@@ -21,6 +21,9 @@ export interface Settings {
   file_associations: string[];
   /// Opt-in 1-5 ratings (TASK-03-005, ADR-0002); off = single star.
   ratings_enabled: boolean;
+  /// Quick Tags panel labels (TASK-03-006, PLAN §2B): at most 10 one-click
+  /// tags; empty slots render disabled.
+  quick_tags: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -31,14 +34,32 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
   file_associations: [],
   ratings_enabled: false,
+  quick_tags: [],
 };
 
 // Image types the file-association option (TASK-01-025, PLAN §2M) can
 // register Fotobase as the default viewer for. Mirrors the Rust
 // `associations::IMAGE_EXTS` (the scanner's cataloged image types).
 export const IMAGE_EXTENSIONS: string[] = [
-  "jpg", "jpeg", "png", "gif", "tif", "tiff", "webp", "heic", "heif",
-  "avif", "bmp", "dng", "cr2", "cr3", "nef", "arw", "raf", "orf", "rw2",
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "tif",
+  "tiff",
+  "webp",
+  "heic",
+  "heif",
+  "avif",
+  "bmp",
+  "dng",
+  "cr2",
+  "cr3",
+  "nef",
+  "arw",
+  "raf",
+  "orf",
+  "rw2",
 ];
 
 export const THEME_CHOICES: { value: ThemeSetting; labelKey: string }[] = [
@@ -102,15 +123,21 @@ export async function onRebuildProgress(
   cb: (p: RebuildProgress) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return await listen<RebuildProgress>("rebuild-progress", (e) => cb(e.payload));
+  return await listen<RebuildProgress>("rebuild-progress", (e) =>
+    cb(e.payload),
+  );
 }
 
 // File associations (TASK-01-025, PLAN §2M): register/unregister Fotobase
 // as the OS default viewer for image types. The OS writes happen in the
 // backend; the persisted settings list is the dialog's source of truth.
-export async function listAssociations(): Promise<{ ext: string; registered: boolean }[]> {
+export async function listAssociations(): Promise<
+  { ext: string; registered: boolean }[]
+> {
   const { invoke } = await import("@tauri-apps/api/core");
-  return await invoke<{ ext: string; registered: boolean }[]>("list_associations");
+  return await invoke<{ ext: string; registered: boolean }[]>(
+    "list_associations",
+  );
 }
 
 export async function registerAssociations(exts: string[]): Promise<void> {
@@ -136,7 +163,9 @@ export interface FilePathMatch {
   hash: string | null;
 }
 
-export async function findFileByPath(path: string): Promise<FilePathMatch | null> {
+export async function findFileByPath(
+  path: string,
+): Promise<FilePathMatch | null> {
   const { invoke } = await import("@tauri-apps/api/core");
   return await invoke<FilePathMatch | null>("find_file_by_path", { path });
 }
