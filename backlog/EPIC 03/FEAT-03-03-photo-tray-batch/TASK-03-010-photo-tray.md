@@ -1,6 +1,6 @@
 # task: photo tray — cross-folder selection with hold pinning
 
-**Feature:** [FEAT-03-03-photo-tray-batch](FEAT-03-03-photo-tray-batch.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
+**Feature:** [FEAT-03-03-photo-tray-batch](FEAT-03-03-photo-tray-batch.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-28)
 
 ## Description
 Picasa-style Photo Tray: a temporary cross-folder selection pinned at the bottom of the window; actions (export, batch ops) apply to tray contents; "Hold" pins items (PLAN §2 B "Photo Tray", §6 P2a).
