@@ -2,6 +2,8 @@
 // grouped under year nodes. Pure module — no Svelte — so the grouping rules
 // are unit-testable.
 
+import { sortFolders, type FolderSortOptions } from "./folder-sort";
+
 /** One catalog folder as served by the `list_folders` command. */
 export interface FolderInfo {
   id: number;
@@ -13,6 +15,12 @@ export interface FolderInfo {
   /// Hidden folder (or inside one), listed only while "show hidden" is on
   /// (TASK-03-009): rendered grayed.
   hidden?: boolean;
+  /// Folder-sort aggregates (TASK-03-016): files directly in the folder,
+  /// their summed bytes, and the newest mtime in unix seconds (null when
+  /// empty). Absent values sort as empty.
+  file_count?: number;
+  total_size?: number;
+  newest_mtime?: number | null;
 }
 
 /** A year node in the tree; `year: null` is the trailing "unknown" group. */
@@ -30,10 +38,13 @@ export interface MenuItem {
 
 /**
  * Group folders under year nodes: years newest-first, the unknown-year
- * group last, folders sorted by path inside each group so the tree is
- * stable across re-fetches.
+ * group last, folders sorted inside each group (by name unless `sort` says
+ * otherwise, TASK-03-016) so the tree is stable across re-fetches.
  */
-export function groupFoldersByYear(folders: FolderInfo[]): YearNode[] {
+export function groupFoldersByYear(
+  folders: FolderInfo[],
+  sort: FolderSortOptions = { sort: "name", reverse: false },
+): YearNode[] {
   const byYear = new Map<number | null, FolderInfo[]>();
   for (const folder of folders) {
     const list = byYear.get(folder.year);
@@ -43,15 +54,13 @@ export function groupFoldersByYear(folders: FolderInfo[]): YearNode[] {
       byYear.set(folder.year, [folder]);
     }
   }
-  const byPath = (a: FolderInfo, b: FolderInfo): number =>
-    a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
   return [...byYear.entries()]
     .sort(([a], [b]) => {
       if (a === null) return 1; // unknown year always last
       if (b === null) return -1;
       return b - a; // newest year first
     })
-    .map(([year, fs]) => ({ year, folders: fs.sort(byPath) }));
+    .map(([year, fs]) => ({ year, folders: sortFolders(fs, sort.sort, sort.reverse) }));
 }
 
 /** Display name of a folder: its last path segment. */

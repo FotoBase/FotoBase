@@ -209,6 +209,32 @@ main {
   color: var(--fb-on-accent);
 }
 
+/* Folder sort + flat/tree toolbar (TASK-03-016). */
+.folder-tree .folder-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.folder-tree .folder-options button {
+  display: inline-block;
+  width: auto;
+  border: 1px solid var(--fb-border-soft);
+}
+
+.folder-tree .folder-options select {
+  min-width: 0;
+  flex: 1 1 4rem;
+}
+
+/* Thousands of flat rows: let the browser skip layout/paint off-screen. */
+.folder-tree .folder-flat li {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1.6rem;
+}
+
 /* Folders + Albums stacked in one sidebar column (TASK-03-008). */
 .sidebar {
   flex: 0 0 14rem;

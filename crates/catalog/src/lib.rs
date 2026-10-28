@@ -213,6 +213,13 @@ pub struct FolderInfo {
     /// Hidden itself or inside a hidden folder (TASK-03-009); only listed
     /// while "show hidden" is on.
     pub hidden: bool,
+    /// Files directly in the folder (TASK-03-016 folder sort).
+    pub file_count: i64,
+    /// Summed size in bytes of those files (TASK-03-016 folder sort).
+    pub total_size: i64,
+    /// Newest file `mtime` in whole unix seconds, `None` for an empty
+    /// folder (TASK-03-016 folder sort).
+    pub newest_mtime: Option<i64>,
 }
 
 #[derive(Debug)]
@@ -822,15 +829,17 @@ impl Catalog {
 
     /// All folders in the catalog, path-ordered, each with the year its
     /// newest file falls in (TASK-01-015, PLAN §2B) and its scan mode
-    /// (TASK-01-016, PLAN §2A). `LEFT JOIN` keeps empty folders listed — they
-    /// group under "unknown year" in the tree.
+    /// (TASK-01-016, PLAN §2A), plus the count/size/newest-mtime aggregates the
+    /// folder sort uses (TASK-03-016). `LEFT JOIN` keeps empty folders listed —
+    /// they group under "unknown year" in the tree.
     pub fn list_folders(&self) -> Result<Vec<FolderInfo>> {
         let visible = if self.show_hidden { "" } else { "WHERE f.hidden_eff = 0 " };
         let sql = format!(
             "SELECT f.id, f.path, f.scan_mode, MAX(COALESCE( \
              CASE WHEN length(fi.taken_at) >= 4 \
                   THEN CAST(substr(fi.taken_at, 1, 4) AS INTEGER) END, \
-                  CAST(strftime('%Y', fi.mtime, 'unixepoch') AS INTEGER))), f.hidden_eff \
+                  CAST(strftime('%Y', fi.mtime, 'unixepoch') AS INTEGER))), f.hidden_eff, \
+             COUNT(fi.id), COALESCE(SUM(fi.size), 0), CAST(MAX(fi.mtime) AS INTEGER) \
              FROM folders f LEFT JOIN files fi ON fi.folder_id = f.id \
              {visible}GROUP BY f.id, f.path ORDER BY f.path"
         );
@@ -843,6 +852,9 @@ impl Catalog {
                 scan_mode: ScanMode::from_db(&mode),
                 year: r.get(3)?,
                 hidden: r.get(4)?,
+                file_count: r.get(5)?,
+                total_size: r.get(6)?,
+                newest_mtime: r.get(7)?,
             })
         })?;
         Ok(rows.flatten().collect())

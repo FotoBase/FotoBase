@@ -81,6 +81,27 @@ pub enum CaptionMode {
     Resolution,
 }
 
+/// Key the Folders view sorts by (TASK-03-016, PLAN §6 P2a). Name is A→Z,
+/// date is newest first, size is largest first; the reverse flag flips any.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FolderSort {
+    #[default]
+    Name,
+    Date,
+    Size,
+}
+
+/// Folders-view layout (TASK-03-016): the P1 year-grouped tree, or one flat
+/// sortable list of every folder.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FolderView {
+    #[default]
+    Tree,
+    Flat,
+}
+
 /// The General-tab settings (PLAN §2 Options dialog — General tab).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
@@ -120,6 +141,13 @@ pub struct Settings {
     /// Thumbnail caption mode (TASK-03-015).
     #[serde(default)]
     pub caption_mode: CaptionMode,
+    /// Folders-view sort key, reverse flag, and layout (TASK-03-016).
+    #[serde(default)]
+    pub folder_sort: FolderSort,
+    #[serde(default)]
+    pub folder_sort_reverse: bool,
+    #[serde(default)]
+    pub folder_view: FolderView,
 }
 
 fn default_trash_window_days() -> u32 {
@@ -140,6 +168,9 @@ impl Default for Settings {
             show_hidden: false,
             trash_window_days: default_trash_window_days(),
             caption_mode: CaptionMode::default(),
+            folder_sort: FolderSort::default(),
+            folder_sort_reverse: false,
+            folder_view: FolderView::default(),
         }
     }
 }

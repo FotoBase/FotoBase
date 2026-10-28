@@ -3,6 +3,7 @@
 // reads/writes through IPC commands. Defaults match the Rust side exactly.
 
 import type { CaptionMode } from "./captions";
+import type { FolderSortKey, FolderViewMode } from "./folder-sort";
 
 export type UpdateMode = "auto" | "check-but-ask" | "off";
 
@@ -32,6 +33,10 @@ export interface Settings {
   show_hidden: boolean;
   /// Catalog-trash undo window in days (TASK-03-012).
   trash_window_days: number;
+  /// Folders-view sort key, reverse flag, and layout (TASK-03-016).
+  folder_sort: FolderSortKey;
+  folder_sort_reverse: boolean;
+  folder_view: FolderViewMode;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -46,6 +51,9 @@ export const DEFAULT_SETTINGS: Settings = {
   show_hidden: false,
   trash_window_days: 30,
   caption_mode: "none",
+  folder_sort: "name",
+  folder_sort_reverse: false,
+  folder_view: "tree",
 };
 
 // Image types the file-association option (TASK-01-025, PLAN §2M) can

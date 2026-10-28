@@ -3,7 +3,7 @@
 // for the context menu.
 
 import { flushSync } from "svelte";
-import { cleanup, render, screen } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import FolderTree from "./FolderTree.svelte";
 import type { FolderInfo } from "./folder-tree";
@@ -106,5 +106,78 @@ describe("FolderTree hidden folders (TASK-03-009)", () => {
     });
     expect(screen.getByTestId("folder-1").getAttribute("data-hidden")).toBe("true");
     expect(screen.getByTestId("folder-2").getAttribute("data-hidden")).toBeNull();
+  });
+});
+
+describe("FolderTree sort and view (TASK-03-016)", () => {
+  const folders: FolderInfo[] = [
+    { ...f(1, "/p/Beta", 2021), total_size: 5, newest_mtime: 10 },
+    { ...f(2, "/p/alpha", 2023), total_size: 50, newest_mtime: 30 },
+    { ...f(3, "/p/gamma", 2023), total_size: 500, newest_mtime: 20 },
+  ];
+  const flatIds = (): string[] =>
+    [...document.querySelectorAll("[data-testid='folder-flat'] button")].map((b) =>
+      b.getAttribute("data-testid") ?? "",
+    );
+
+  it("tree view (default) keeps the year groups and no flat list", () => {
+    render(FolderTree, { folders, onselect: vi.fn() });
+    expect(screen.getByTestId("year-2023")).toBeTruthy();
+    expect(screen.queryByTestId("folder-flat")).toBeNull();
+  });
+
+  it("flat view lists every folder in one list, sorted, without year headings", () => {
+    render(FolderTree, {
+      folders,
+      onselect: vi.fn(),
+      options: { view: "flat", sort: "size", reverse: false },
+    });
+    expect(screen.queryByTestId("year-2023")).toBeNull();
+    expect(flatIds()).toEqual(["folder-3", "folder-2", "folder-1"]);
+  });
+
+  it("reverse flips the flat list", () => {
+    render(FolderTree, {
+      folders,
+      onselect: vi.fn(),
+      options: { view: "flat", sort: "date", reverse: true },
+    });
+    expect(flatIds()).toEqual(["folder-1", "folder-3", "folder-2"]);
+  });
+
+  it("the toolbar reports view, sort, and reverse changes", async () => {
+    const onoptionschange = vi.fn();
+    render(FolderTree, { folders, onselect: vi.fn(), onoptionschange });
+
+    await fireEvent.click(screen.getByTestId("folder-view-flat"));
+    expect(onoptionschange).toHaveBeenLastCalledWith({
+      view: "flat",
+      sort: "name",
+      reverse: false,
+    });
+
+    await fireEvent.change(screen.getByTestId("folder-sort"), { target: { value: "size" } });
+    expect(onoptionschange).toHaveBeenLastCalledWith({
+      view: "tree",
+      sort: "size",
+      reverse: false,
+    });
+
+    await fireEvent.click(screen.getByTestId("folder-sort-reverse"));
+    expect(onoptionschange).toHaveBeenLastCalledWith({
+      view: "tree",
+      sort: "name",
+      reverse: true,
+    });
+  });
+
+  it("selection survives a view switch", async () => {
+    const { rerender } = render(FolderTree, {
+      folders,
+      selected: [2],
+      onselect: vi.fn(),
+    });
+    await rerender({ options: { view: "flat", sort: "name", reverse: false } });
+    expect(screen.getByTestId("folder-2").getAttribute("aria-pressed")).toBe("true");
   });
 });

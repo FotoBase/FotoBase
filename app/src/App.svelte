@@ -41,6 +41,12 @@
   import { queryLibraryItems } from "./lib/search";
   import { findFileByPath, loadSettings, saveSettings, takeOpenFiles, type Settings } from "./lib/settings";
   import { captionModeFromSettings, settingsWithCaptionMode } from "./lib/captions";
+  import {
+    DEFAULT_FOLDER_VIEW,
+    folderViewFromSettings,
+    settingsWithFolderView,
+    type FolderViewOptions,
+  } from "./lib/folder-sort";
   import { shortcuts, type ShortcutHandlers } from "./lib/shortcuts";
   import { applyTheme, resolveTheme, systemPrefersDark, watchSystemTheme } from "./lib/theme";
   import { actionIds, tray, type TrayPhoto } from "./lib/tray.svelte.js";
@@ -55,6 +61,8 @@
   let settings = $state<Settings | null>(null);
   let photos = $state<GridItem[]>([]);
   let folders = $state<FolderInfo[]>([]);
+  // Folder sort + flat/tree layout (TASK-03-016), persisted in settings.
+  let folderView = $state<FolderViewOptions>({ ...DEFAULT_FOLDER_VIEW });
   let selectedFolders = $state<number[]>([]);
   // Albums (TASK-03-008): the sidebar list, the album whose photos the grid
   // shows (null = the folder/search view), and the menus + dialog around it.
@@ -246,6 +254,17 @@
     });
   });
 
+  // Folder view options (TASK-03-016): saved on change, like the caption mode.
+  function changeFolderView(next: FolderViewOptions): void {
+    folderView = next;
+    const updated = settings ? settingsWithFolderView(settings, next) : null;
+    if (!updated) return;
+    settings = updated;
+    void saveSettings(updated).catch(() => {
+      // Browser dev / backend down: the choice still holds for the session.
+    });
+  }
+
   $effect(() => {
     // Startup: load persisted settings, apply the language, then honor the
     // update policy (auto installs, check-but-ask prompts, off does
@@ -254,6 +273,7 @@
       const s = await loadSettings();
       settings = s;
       gridState.captionMode = captionModeFromSettings(s);
+      folderView = folderViewFromSettings(s);
       setLocale(s.language);
       // Codec probe (TASK-02-005): fire-and-forget so it never blocks
       // startup (functional spec); the cached matrix drives the HTML5 vs
@@ -698,6 +718,8 @@
           selectedAlbum = null;
         }}
         onfoldercontextmenu={openFolderMenu}
+        options={folderView}
+        onoptionschange={changeFolderView}
       />
       <AlbumList
         {albums}
