@@ -16,6 +16,12 @@ export interface GridItem {
   /// Hidden photo (or in a hidden folder), listed only while "show hidden"
   /// is on (TASK-03-009): rendered grayed.
   hidden?: boolean;
+  /// Caption / tag names / pixel size mirrored from the catalog row, for the
+  /// thumbnail caption modes (TASK-03-015). Absent in older payloads.
+  caption?: string | null;
+  tags?: string[];
+  width?: number | null;
+  height?: number | null;
 }
 
 /// Grid gap in px, both between cells and between rows.
@@ -70,8 +76,13 @@ export function thumbSrcset(
 
 /// Scroll offset that puts the row of item `index` at the top of the
 /// viewport (TASK-03-010: a tray click jumps to the photo in the grid).
-export function revealScrollTop(index: number, columns: number, size: number): number {
-  return Math.floor(index / columns) * (size + GRID_GAP);
+export function revealScrollTop(
+  index: number,
+  columns: number,
+  size: number,
+  captionHeight = 0,
+): number {
+  return Math.floor(index / columns) * (size + GRID_GAP + captionHeight);
 }
 
 /// Keyboard grid navigation (TASK-01-024): the neighbor of cell `index` in
@@ -177,11 +188,11 @@ export function cellAt(
   thumbSize: number,
   columns: number,
   itemCount: number,
+  captionHeight = 0,
 ): number | null {
-  const step = thumbSize + GRID_GAP;
-  const col = Math.floor(offsetX / step);
+  const col = Math.floor(offsetX / (thumbSize + GRID_GAP));
   if (col < 0 || col >= columns) return null;
-  const row = Math.floor((offsetY + scrollTop) / step);
+  const row = Math.floor((offsetY + scrollTop) / (thumbSize + GRID_GAP + captionHeight));
   if (row < 0) return null;
   const index = row * columns + col;
   if (index >= itemCount) return null;

@@ -69,13 +69,30 @@ pub struct FileInfo {
     /// Only ever `true` while "show hidden" is on — otherwise the row is not
     /// listed at all.
     pub hidden: bool,
+    /// `dc:description` mirror (TASK-03-015: caption mode under thumbnails).
+    pub caption: Option<String>,
+    /// Tag names, sorted (TASK-03-015: tags caption mode).
+    pub tags: Vec<String>,
+    /// Pixel dimensions from `files`, `None` until extracted (TASK-03-015:
+    /// resolution caption mode).
+    pub width: Option<i64>,
+    pub height: Option<i64>,
 }
+
+/// Separates tag names inside the one `group_concat` column; tag names can
+/// hold any printable character, never a unit separator.
+const TAG_SEP: char = '\u{1f}';
 
 /// Grid-row SQL columns; pairs with [`file_info_row`]. `f` is the `files`
 /// alias the caller must use.
 const FILE_INFO_COLS: &str = "f.id, f.filename, f.hash, f.media_type,
      COALESCE((SELECT m.rating FROM metadata m WHERE m.file_id = f.id), 0),
-     (f.hidden OR EXISTS (SELECT 1 FROM folders hd WHERE hd.id = f.folder_id AND hd.hidden_eff = 1))";
+     (f.hidden OR EXISTS (SELECT 1 FROM folders hd WHERE hd.id = f.folder_id AND hd.hidden_eff = 1)),
+     (SELECT m.caption FROM metadata m WHERE m.file_id = f.id),
+     (SELECT group_concat(name, char(31)) FROM
+         (SELECT t.name FROM file_tags ft JOIN tags t ON t.id = ft.tag_id
+          WHERE ft.file_id = f.id ORDER BY t.name)),
+     f.width, f.height";
 
 /// Appended to a `WHERE` on `files f`: drops hidden photos and photos in
 /// hidden folders (TASK-03-009). Skipped while "show hidden" is on.
@@ -90,6 +107,13 @@ fn file_info_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FileInfo> {
         media_type: r.get(3)?,
         rating: r.get(4)?,
         hidden: r.get(5)?,
+        caption: r.get(6)?,
+        tags: r
+            .get::<_, Option<String>>(7)?
+            .map(|joined| joined.split(TAG_SEP).map(str::to_owned).collect())
+            .unwrap_or_default(),
+        width: r.get(8)?,
+        height: r.get(9)?,
     })
 }
 

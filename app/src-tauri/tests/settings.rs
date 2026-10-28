@@ -5,7 +5,7 @@
 //! smallest thing that satisfies the spec and survives catalog rebuilds,
 //! since the catalog is a rebuildable cache per PLAN §3 rule 2).
 
-use fotobase_lib::settings::{Settings, UpdateMode};
+use fotobase_lib::settings::{CaptionMode, Settings, UpdateMode};
 use tempfile::TempDir;
 
 fn write_settings(dir: &TempDir, json: &str) {
@@ -103,4 +103,34 @@ fn hidden_and_trash_settings_round_trip() {
     let loaded = Settings::load(dir.path());
     assert!(loaded.show_hidden);
     assert_eq!(loaded.trash_window_days, 7);
+}
+
+#[test]
+fn caption_mode_defaults_to_none_and_survives_old_files() {
+    // TASK-03-015: captions are off unless chosen; a settings.json from
+    // before the field existed keeps the user's other settings.
+    assert_eq!(Settings::default().caption_mode, CaptionMode::None);
+
+    let dir = TempDir::new().expect("tempdir");
+    write_settings(&dir, r#"{"language":"de","update_mode":"off","show_tooltips":false}"#);
+    let s = Settings::load(dir.path());
+    assert_eq!(s.language, "de");
+    assert_eq!(s.caption_mode, CaptionMode::None);
+}
+
+#[test]
+fn caption_mode_round_trips_every_mode_as_kebab_case() {
+    for (mode, wire) in [
+        (CaptionMode::None, "none"),
+        (CaptionMode::Filename, "filename"),
+        (CaptionMode::Caption, "caption"),
+        (CaptionMode::Tags, "tags"),
+        (CaptionMode::Resolution, "resolution"),
+    ] {
+        let dir = TempDir::new().expect("tempdir");
+        Settings { caption_mode: mode, ..Settings::default() }.save(dir.path()).expect("save");
+        let raw = std::fs::read_to_string(dir.path().join("settings.json")).expect("read");
+        assert!(raw.contains(&format!("\"caption_mode\": \"{wire}\"")), "{raw}");
+        assert_eq!(Settings::load(dir.path()).caption_mode, mode);
+    }
 }

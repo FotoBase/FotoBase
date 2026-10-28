@@ -4,6 +4,7 @@
 // position, so switching renderers (config-driven, user-overridable) loses
 // none of it. Svelte 5 runes in a `.svelte.ts` module keep this reactive.
 
+import { DEFAULT_CAPTION_MODE, type CaptionMode } from "./captions";
 import { ALL_TIME } from "./filters";
 
 export type GridRenderer = "dom" | "canvas";
@@ -33,6 +34,9 @@ class GridState {
   videosOnly = $state(false);
   /// Date-slider position (`DATE_STEPS` index); `ALL_TIME` = no restriction.
   dateStep = $state(ALL_TIME);
+  /// Thumbnail caption mode (TASK-03-015). Shared by both renderers; the
+  /// shell seeds it from, and persists it to, the `caption_mode` setting.
+  captionMode = $state<CaptionMode>(DEFAULT_CAPTION_MODE);
   /// Per-hash cache-bust versions (PLAN §3 rule 3). A cold-start miss serves
   /// the placeholder; when the queued render lands, the backend emits
   /// `thumb-rendered` and the shell bumps the hash's version here — every
@@ -98,6 +102,7 @@ export function resetGridState(): void {
   gridState.clearFilters();
   gridState.thumbVersions = {};
   gridState.revealRequest = null;
+  gridState.captionMode = DEFAULT_CAPTION_MODE;
 }
 
 /// Which renderer to mount for a persisted setting. Canvas only when

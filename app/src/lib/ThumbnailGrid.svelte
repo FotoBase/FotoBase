@@ -17,6 +17,8 @@
     type VirtualItem,
   } from "@tanstack/virtual-core";
   import { untrack } from "svelte";
+  import CaptionModeSelect from "./CaptionModeSelect.svelte";
+  import { captionStripHeight, captionText } from "./captions";
   import { columnCount, debounce, GRID_GAP, nextCell, revealScrollTop, rowItems, thumbSrcset, thumbUri, visibleHashes, type GridItem } from "./grid";
   import { gridState, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
@@ -64,6 +66,8 @@
     scrollEl?.querySelector<HTMLElement>(`[data-cell-index="${target}"]`)?.focus();
   }
 
+  const captionH = $derived(captionStripHeight(gridState.captionMode, gridState.thumbSize));
+
   let scrollEl = $state<HTMLDivElement | null>(null);
   let virtualRows = $state<VirtualItem[]>([]);
   let totalSize = $state(0);
@@ -90,7 +94,12 @@
     const index = items.findIndex((i) => i.id === request.id);
     if (index < 0) return;
     const cols = columnCount(el.clientWidth, gridState.thumbSize, GRID_GAP);
-    el.scrollTop = revealScrollTop(index, cols, gridState.thumbSize);
+    el.scrollTop = revealScrollTop(
+      index,
+      cols,
+      gridState.thumbSize,
+      captionStripHeight(gridState.captionMode, gridState.thumbSize),
+    );
     gridState.selection = new Set([request.id]);
     gridState.revealRequest = null;
   });
@@ -102,6 +111,10 @@
     // rebuilds when the zoom level or the collection changes. Zoom lives in
     // the shared grid store (TASK-01-014) so both renderers stay in sync.
     const size = gridState.thumbSize;
+    // The caption strip changes the row height, so a mode flip between
+    // none and on rebuilds the virtualizer; flips between text modes keep
+    // the same height and only re-render the strip text.
+    const strip = captionStripHeight(gridState.captionMode, size);
     void items.length;
 
     const cols = columnCount(el.clientWidth, size, GRID_GAP);
@@ -111,7 +124,7 @@
     const virtualizer = new Virtualizer({
       getScrollElement: () => el,
       count: rowCount,
-      estimateSize: () => size + GRID_GAP,
+      estimateSize: () => size + GRID_GAP + strip,
       overscan,
       observeElementOffset,
       observeElementRect,
@@ -155,6 +168,7 @@
       step={ZOOM_STEP}
       bind:value={gridState.thumbSize}
     />
+    <CaptionModeSelect />
   </div>
   <div class="grid-scroll" data-testid="grid-scroll" bind:this={scrollEl}>
     <div class="grid-inner" style="height: {totalSize}px">
@@ -170,7 +184,7 @@
               data-testid="grid-cell"
               data-hidden={item.hidden ? "true" : undefined}
               data-cell-index={row.index * columns + localIdx}
-              style="--thumb-size: {gridState.thumbSize}px"
+              style="--thumb-size: {gridState.thumbSize}px; --caption-h: {captionH}px"
               tabindex="0"
               ondblclick={() => onopen(item)}
               oncontextmenu={(e) => {
@@ -190,6 +204,10 @@
                 />
               {:else}
                 <div class="grid-cell-placeholder" data-testid="grid-placeholder"></div>
+              {/if}
+              {#if captionH > 0}
+                {@const text = captionText(item, gridState.captionMode)}
+                <div class="grid-caption" data-testid="grid-caption" title={text || undefined}>{text}</div>
               {/if}
             </div>
           {/each}

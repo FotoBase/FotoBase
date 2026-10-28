@@ -138,3 +138,12 @@ describe("pickRenderer", () => {
     expect(pickRenderer("bogus" as GridRenderer)).toBe("dom");
   });
 });
+
+describe("gridState caption mode (TASK-03-015)", () => {
+  it("defaults to none and resets with the store", () => {
+    expect(gridState.captionMode).toBe("none");
+    gridState.captionMode = "tags";
+    resetGridState();
+    expect(gridState.captionMode).toBe("none");
+  });
+});

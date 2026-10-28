@@ -37,7 +37,7 @@
 
 ## feat: view options
 
-- [ ] `03-015` (M) Thumbnail captions (none/filename/caption/tags/resolution).
+- [x] `03-015` (M) Thumbnail captions (none/filename/caption/tags/resolution).
 - [ ] `03-016` (S) Folder sort (name/date/size, reverse), flat vs tree view.
 - [ ] `03-017` (S) Single-click-to-edit option (General options).
 - [ ] `03-018` (S) View-time display modes: sepia, B&W (no edit applied).
