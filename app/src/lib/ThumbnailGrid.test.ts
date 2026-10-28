@@ -332,3 +332,39 @@ describe("ThumbnailGrid captions (TASK-03-015)", () => {
     expect(screen.getAllByTestId("grid-caption")[0].getAttribute("title")).toBe("Sunset");
   });
 });
+
+describe("ThumbnailGrid single-click-to-edit (TASK-03-017)", () => {
+  const click = (init: MouseEventInit = {}): void => {
+    const cell = screen.getAllByTestId("grid-cell")[0];
+    cell.dispatchEvent(new MouseEvent("click", { bubbles: true, ...init }));
+    flushSync();
+  };
+
+  it("option off: a click selects and does not open", () => {
+    const onopen = vi.fn();
+    render(ThumbnailGrid, { items: makeItems(10), onopen });
+    click();
+    expect(onopen).not.toHaveBeenCalled();
+    expect([...gridState.selection]).toEqual([0]);
+  });
+
+  it("option on: a plain click opens the photo", () => {
+    const onopen = vi.fn();
+    render(ThumbnailGrid, { items: makeItems(10), onopen, singleClickEdit: true });
+    click();
+    expect(onopen).toHaveBeenCalledTimes(1);
+    expect(onopen.mock.calls[0][0].id).toBe(0);
+  });
+
+  it("option on: modifier-click toggles selection instead of opening", () => {
+    const onopen = vi.fn();
+    render(ThumbnailGrid, { items: makeItems(10), onopen, singleClickEdit: true });
+    click({ ctrlKey: true });
+    expect([...gridState.selection]).toEqual([0]);
+    click({ metaKey: true });
+    expect(gridState.selection.size).toBe(0);
+    click({ shiftKey: true });
+    expect([...gridState.selection]).toEqual([0]);
+    expect(onopen).not.toHaveBeenCalled();
+  });
+});

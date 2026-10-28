@@ -148,6 +148,10 @@ pub struct Settings {
     pub folder_sort_reverse: bool,
     #[serde(default)]
     pub folder_view: FolderView,
+    /// A single click opens the edit view instead of selecting (TASK-03-017,
+    /// PLAN §6 P2a). Off by default.
+    #[serde(default)]
+    pub single_click_edit: bool,
 }
 
 fn default_trash_window_days() -> u32 {
@@ -171,6 +175,7 @@ impl Default for Settings {
             folder_sort: FolderSort::default(),
             folder_sort_reverse: false,
             folder_view: FolderView::default(),
+            single_click_edit: false,
         }
     }
 }

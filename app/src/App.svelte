@@ -757,6 +757,7 @@
           items={photos}
           onvisible={prioritizeVisible}
           onopen={(item) => openViewer(item)}
+          singleClickEdit={settings?.single_click_edit ?? false}
           oncontextmenu={openPhotoMenu}
         />
       {:else}
@@ -764,6 +765,7 @@
           items={photos}
           onvisible={prioritizeVisible}
           onopen={(item) => openViewer(item)}
+          singleClickEdit={settings?.single_click_edit ?? false}
           oncontextmenu={openPhotoMenu}
         />
       {/if}

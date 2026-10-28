@@ -37,6 +37,8 @@ export interface Settings {
   folder_sort: FolderSortKey;
   folder_sort_reverse: boolean;
   folder_view: FolderViewMode;
+  /// Single click opens the edit view instead of selecting (TASK-03-017).
+  single_click_edit: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -54,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   folder_sort: "name",
   folder_sort_reverse: false,
   folder_view: "tree",
+  single_click_edit: false,
 };
 
 // Image types the file-association option (TASK-01-025, PLAN §2M) can

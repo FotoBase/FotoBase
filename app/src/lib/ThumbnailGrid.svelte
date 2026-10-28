@@ -34,6 +34,9 @@
     /// Called with the photo the user right-clicked (TASK-01-021): the shell
     /// opens its per-photo context menu at the pointer.
     oncontextmenu?: (e: { x: number; y: number; item: GridItem }) => void;
+    /// Single-click-to-edit (TASK-03-017): a plain click opens the photo;
+    /// ctrl/cmd/shift-click still toggles selection.
+    singleClickEdit?: boolean;
   }
 
   let {
@@ -42,6 +45,7 @@
     onvisible = () => {},
     onopen = () => {},
     oncontextmenu = () => {},
+    singleClickEdit = false,
   }: Props = $props();
 
   const REPORT_DEBOUNCE_MS = 100;
@@ -64,6 +68,16 @@
     if (target === null) return;
     gridState.selection = new Set([items[target].id]);
     scrollEl?.querySelector<HTMLElement>(`[data-cell-index="${target}"]`)?.focus();
+  }
+
+  function onCellClick(e: MouseEvent, item: GridItem): void {
+    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+      gridState.toggleSelection(item.id);
+    } else if (singleClickEdit) {
+      onopen(item);
+    } else {
+      gridState.selection = new Set([item.id]);
+    }
   }
 
   const captionH = $derived(captionStripHeight(gridState.captionMode, gridState.thumbSize));
@@ -186,6 +200,7 @@
               data-cell-index={row.index * columns + localIdx}
               style="--thumb-size: {gridState.thumbSize}px; --caption-h: {captionH}px"
               tabindex="0"
+              onclick={(e) => onCellClick(e, item)}
               ondblclick={() => onopen(item)}
               oncontextmenu={(e) => {
                 e.preventDefault();

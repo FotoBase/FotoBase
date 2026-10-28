@@ -178,3 +178,19 @@ fn folder_sort_and_view_round_trip_as_kebab_case() {
         }
     }
 }
+
+#[test]
+fn single_click_edit_defaults_off_survives_old_files_and_round_trips() {
+    // TASK-03-017: single click selects (option off) unless the user opts in;
+    // a settings.json from before the field existed keeps the others.
+    assert!(!Settings::default().single_click_edit);
+
+    let dir = TempDir::new().expect("tempdir");
+    write_settings(&dir, r#"{"language":"de","update_mode":"off","show_tooltips":false}"#);
+    let s = Settings::load(dir.path());
+    assert_eq!(s.language, "de");
+    assert!(!s.single_click_edit);
+
+    Settings { single_click_edit: true, ..Settings::default() }.save(dir.path()).expect("save");
+    assert!(Settings::load(dir.path()).single_click_edit);
+}

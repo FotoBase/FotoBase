@@ -1,6 +1,6 @@
 # task: single-click-to-edit option
 
-**Feature:** [FEAT-03-07-view-options](FEAT-03-07-view-options.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-07-view-options](FEAT-03-07-view-options.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
 
 ## Description
 General option: single click opens the edit view instead of requiring double-click (PLAN §6 P2a "single-click-to-edit option"). Small Picasa-parity preference.
@@ -18,5 +18,5 @@ General option: single click opens the edit view instead of requiring double-cli
 - E2e: with option off, single click selects only; with option on, single click opens the edit view; restart → persisted.
 
 ## Acceptance criteria
-- [ ] 03-017: single-click-to-edit option in General options, default off.
-- [ ] 03-017: behavior switches correctly and persists.
+- [x] 03-017: single-click-to-edit option in General options, default off.
+- [x] 03-017: behavior switches correctly and persists.

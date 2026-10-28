@@ -294,3 +294,53 @@ describe("CanvasThumbnailGrid captions (TASK-03-015)", () => {
     expect(calls.some((c) => c.method === "fillText")).toBe(true);
   });
 });
+
+describe("CanvasThumbnailGrid single-click-to-edit (TASK-03-017)", () => {
+  const clickAt = (x: number, y: number, init: MouseEventInit = {}): void => {
+    const canvas = screen.getByTestId("grid-canvas");
+    const ev = new MouseEvent("click", { bubbles: true, ...init });
+    Object.defineProperty(ev, "offsetX", { value: x });
+    Object.defineProperty(ev, "offsetY", { value: y });
+    canvas.dispatchEvent(ev);
+    flushSync();
+  };
+
+  it("option off: a click selects and does not open", async () => {
+    const onopen = vi.fn();
+    render(CanvasThumbnailGrid, { items: makeItems(100), loadImage: fakeLoadImage, onopen });
+    await settle();
+    clickAt(10, 10);
+    expect(onopen).not.toHaveBeenCalled();
+    expect(gridState.selection.has(0)).toBe(true);
+  });
+
+  it("option on: a plain click opens the photo under the pointer", async () => {
+    const onopen = vi.fn();
+    render(CanvasThumbnailGrid, {
+      items: makeItems(100),
+      loadImage: fakeLoadImage,
+      onopen,
+      singleClickEdit: true,
+    });
+    await settle();
+    clickAt(200, 10);
+    expect(onopen).toHaveBeenCalledWith({ id: 1, filename: "photo-1.jpg", hash: HASH(1) });
+    expect(gridState.selection.size).toBe(0);
+  });
+
+  it("option on: modifier-click toggles selection instead of opening", async () => {
+    const onopen = vi.fn();
+    render(CanvasThumbnailGrid, {
+      items: makeItems(100),
+      loadImage: fakeLoadImage,
+      onopen,
+      singleClickEdit: true,
+    });
+    await settle();
+    clickAt(10, 10, { ctrlKey: true });
+    expect(gridState.selection.has(0)).toBe(true);
+    clickAt(10, 10, { metaKey: true });
+    expect(gridState.selection.has(0)).toBe(false);
+    expect(onopen).not.toHaveBeenCalled();
+  });
+});
