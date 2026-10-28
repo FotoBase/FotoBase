@@ -7,7 +7,7 @@
 
 /// Ordered migration SQL. Index 0 upgrades a version-0 database to version 1.
 pub const MIGRATIONS: &[&str] =
-    &[MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5];
+    &[MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6];
 
 const MIGRATION_V1: &str = "
 CREATE TABLE folders (
@@ -144,6 +144,66 @@ CREATE TABLE missing_file_tags (
 );
 CREATE INDEX idx_missing_size ON missing_files(size, media_type);
 CREATE INDEX idx_missing_hash ON missing_files(hash);
+";
+
+/// TASK-03-007: captions become searchable. `files_fts` gains a `caption`
+/// column fed from `metadata.caption` (PLAN §5: FTS over filename, folder,
+/// caption, …). FTS is derived data, so the table is dropped and rebuilt
+/// from the current rows rather than altered. `files` triggers carry the
+/// caption along; `metadata` triggers refresh the row when the caption
+/// changes (guarded so scan-time EXIF writes don't touch the index).
+const MIGRATION_V6: &str = "
+DROP TRIGGER files_fts_insert;
+DROP TRIGGER files_fts_delete;
+DROP TRIGGER files_fts_update;
+DROP TABLE files_fts;
+CREATE VIRTUAL TABLE files_fts USING fts5(filename, folder, caption);
+
+CREATE TRIGGER files_fts_insert AFTER INSERT ON files BEGIN
+    INSERT INTO files_fts(rowid, filename, folder, caption)
+    VALUES (NEW.id, NEW.filename, (SELECT path FROM folders WHERE id = NEW.folder_id),
+            (SELECT caption FROM metadata WHERE file_id = NEW.id));
+END;
+
+CREATE TRIGGER files_fts_delete AFTER DELETE ON files BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.id;
+END;
+
+CREATE TRIGGER files_fts_update AFTER UPDATE ON files BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.id;
+    INSERT INTO files_fts(rowid, filename, folder, caption)
+    VALUES (NEW.id, NEW.filename, (SELECT path FROM folders WHERE id = NEW.folder_id),
+            (SELECT caption FROM metadata WHERE file_id = NEW.id));
+END;
+
+CREATE TRIGGER files_fts_caption_insert AFTER INSERT ON metadata
+WHEN NEW.caption IS NOT NULL BEGIN
+    DELETE FROM files_fts WHERE rowid = NEW.file_id;
+    INSERT INTO files_fts(rowid, filename, folder, caption)
+        SELECT f.id, f.filename, d.path, NEW.caption
+        FROM files f JOIN folders d ON d.id = f.folder_id WHERE f.id = NEW.file_id;
+END;
+
+CREATE TRIGGER files_fts_caption_update AFTER UPDATE OF caption ON metadata
+WHEN OLD.caption IS NOT NEW.caption BEGIN
+    DELETE FROM files_fts WHERE rowid = NEW.file_id;
+    INSERT INTO files_fts(rowid, filename, folder, caption)
+        SELECT f.id, f.filename, d.path, NEW.caption
+        FROM files f JOIN folders d ON d.id = f.folder_id WHERE f.id = NEW.file_id;
+END;
+
+CREATE TRIGGER files_fts_caption_delete AFTER DELETE ON metadata
+WHEN OLD.caption IS NOT NULL BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.file_id;
+    INSERT INTO files_fts(rowid, filename, folder, caption)
+        SELECT f.id, f.filename, d.path, NULL
+        FROM files f JOIN folders d ON d.id = f.folder_id WHERE f.id = OLD.file_id;
+END;
+
+INSERT INTO files_fts(rowid, filename, folder, caption)
+    SELECT f.id, f.filename, d.path, m.caption
+    FROM files f JOIN folders d ON d.id = f.folder_id
+    LEFT JOIN metadata m ON m.file_id = f.id;
 ";
 
 use rusqlite::Connection;

@@ -393,8 +393,8 @@ impl Catalog {
         Ok(hits > 0)
     }
 
-    /// Live full-text search over filename + folder (PLAN §5 `files_fts`,
-    /// TASK-01-008). Returns matching file ids, best matches first, at most
+    /// Live full-text search over filename + folder + caption (PLAN §5
+    /// `files_fts`, TASK-01-008, TASK-03-007). Returns matching file ids, best matches first, at most
     /// `limit` of them.
     ///
     /// Whitespace-separated tokens are AND-combined and prefix-matched so the

@@ -15,7 +15,7 @@
   import { t } from "./i18n.svelte.js";
   import InfoPane from "./InfoPane.svelte";
   import VideoPlayer from "./VideoPlayer.svelte";
-  import { nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
+  import { isEditableTarget, nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
   import { probeAndCache } from "./codec-probe";
   import { ratingForKey, setRating, toggleStar } from "./rating";
 
@@ -174,6 +174,7 @@
   }
 
   function onKeydown(e: KeyboardEvent): void {
+    if (isEditableTarget(e.target)) return;
     // A video is open: playback keys go to the player (space = play/pause,
     // arrows = seek); navigation keys stay with the viewer.
     const playerKeys = isVideo && [" ", "ArrowLeft", "ArrowRight"].includes(e.key);

@@ -147,41 +147,99 @@ impl Element {
     }
 
     /// Language-alternative property (`dc:description`): the `x-default`
-    /// (or first) `rdf:li` text of the `rdf:Alt` child; falls back to direct
-    /// text, then the attribute form.
+    /// `rdf:li` text of the `rdf:Alt` child, else the first non-empty one;
+    /// falls back to direct text, then the attribute form.
     fn child_alt_text(&self, prefix: &str, local: &str) -> Option<String> {
         let attr_name = format!("{prefix}:{local}");
         if let Some(node) = self.find_child(prefix, local) {
             if let Some(alt) = node.find_child("rdf", "Alt") {
-                for li in &alt.children {
-                    if let Child::Element(li_el) = li {
-                        if li_el.prefix == "rdf" && li_el.local == "li" {
-                            let mut text = String::new();
-                            for ch in &li_el.children {
-                                if let Child::Text(t) = ch {
-                                    text.push_str(t);
-                                }
-                            }
-                            if !text.trim().is_empty() {
-                                return Some(text);
-                            }
+                let items: Vec<(&Element, String)> = alt
+                    .children
+                    .iter()
+                    .filter_map(|c| match c {
+                        Child::Element(li) if li.prefix == "rdf" && li.local == "li" => {
+                            Some((li, li.direct_text()))
                         }
-                    }
+                        _ => None,
+                    })
+                    .filter(|(_, text)| !text.trim().is_empty())
+                    .collect();
+                let default = items.iter().find(|(li, _)| li.attr("xml:lang") == Some("x-default"));
+                if let Some((_, text)) = default.or_else(|| items.first()) {
+                    return Some(text.clone());
                 }
             }
-            let direct = node
-                .children
-                .iter()
-                .filter_map(|c| match c {
-                    Child::Text(t) => Some(t.as_str()),
-                    _ => None,
-                })
-                .collect::<String>();
+            let direct = node.direct_text();
             if !direct.trim().is_empty() {
                 return Some(direct);
             }
         }
         self.attr(&attr_name).map(str::to_string)
+    }
+
+    fn direct_text(&self) -> String {
+        self.children
+            .iter()
+            .filter_map(|c| match c {
+                Child::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Set the `x-default` entry of a language-alternative property, the
+    /// form darktable/digiKam/exiv2 read for `dc:description`. Other
+    /// languages in an existing `rdf:Alt` are kept; the legacy plain-text and
+    /// attribute forms are upgraded in place (no duplicate value).
+    fn set_alt_default(&mut self, prefix: &str, local: &str, text: &str) {
+        self.attributes.retain(|(k, _)| *k != format!("{prefix}:{local}"));
+        let li = || Element {
+            prefix: "rdf".to_string(),
+            local: "li".to_string(),
+            attributes: vec![("xml:lang".to_string(), "x-default".to_string())],
+            children: vec![Child::Text(text.to_string())],
+        };
+        let new_alt = || Element {
+            prefix: "rdf".to_string(),
+            local: "Alt".to_string(),
+            attributes: Vec::new(),
+            children: vec![Child::Element(li())],
+        };
+        let Some(node) = self.find_child_mut(prefix, local) else {
+            self.children.push(Child::Element(Element {
+                prefix: prefix.to_string(),
+                local: local.to_string(),
+                attributes: Vec::new(),
+                children: vec![Child::Element(new_alt())],
+            }));
+            return;
+        };
+        match node.find_child_mut("rdf", "Alt") {
+            Some(alt) => {
+                let existing = alt.children.iter_mut().find_map(|c| match c {
+                    Child::Element(e)
+                        if e.prefix == "rdf"
+                            && e.local == "li"
+                            && e.attr("xml:lang") == Some("x-default") =>
+                    {
+                        Some(e)
+                    }
+                    _ => None,
+                });
+                match existing {
+                    Some(e) => {
+                        e.children.clear();
+                        e.children.push(Child::Text(text.to_string()));
+                    }
+                    // x-default goes first, as the XMP spec asks.
+                    None => alt.children.insert(0, Child::Element(li())),
+                }
+            }
+            None => {
+                node.children.clear();
+                node.children.push(Child::Element(new_alt()));
+            }
+        }
     }
 
     /// Drop a simple property in both forms: child element and attribute.
@@ -352,7 +410,7 @@ impl XmpTree {
                         if text.trim().is_empty() && parent.children.is_empty() {
                             parent.children.push(Child::Whitespace(text));
                         } else {
-                            parent.children.push(Child::Text(text));
+                            push_text(parent, &text);
                         }
                     }
                 }
@@ -381,7 +439,24 @@ impl XmpTree {
                 Ok(Event::Decl(_)) => {}
                 Ok(Event::Eof) => break,
                 Err(err) => return Err(SidecarError::malformed(path, format!("{err}"))),
-                Ok(Event::GeneralRef(_)) => {}
+                // `&amp;`, `&#10;`, … arrive as their own events; dropping them
+                // would silently eat characters from values on the next write.
+                Ok(Event::GeneralRef(r)) => {
+                    let resolved = match r.resolve_char_ref() {
+                        Ok(Some(ch)) => ch.to_string(),
+                        _ => match &*r {
+                            "lt" => "<".to_string(),
+                            "gt" => ">".to_string(),
+                            "amp" => "&".to_string(),
+                            "quot" => "\"".to_string(),
+                            "apos" => "'".to_string(),
+                            other => format!("&{other};"),
+                        },
+                    };
+                    if let Some(parent) = stack.last_mut() {
+                        push_text(parent, &resolved);
+                    }
+                }
             }
         }
 
@@ -499,6 +574,21 @@ impl XmpTree {
             root.children.push(Child::Element(desc));
         }
         self.description_mut().expect("just created")
+    }
+}
+
+/// Append text to an element, merging with a preceding text run (entity
+/// references split one value into several parser events). A lone leading
+/// whitespace child is absorbed so it is not lost from the value.
+fn push_text(parent: &mut Element, text: &str) {
+    match parent.children.last_mut() {
+        Some(Child::Text(prev)) => prev.push_str(text),
+        Some(Child::Whitespace(ws)) => {
+            let merged = format!("{ws}{text}");
+            parent.children.pop();
+            parent.children.push(Child::Text(merged));
+        }
+        _ => parent.children.push(Child::Text(text.to_string())),
     }
 }
 
@@ -667,8 +757,18 @@ impl Sidecar {
         self.tree.description().and_then(|d| d.child_alt_text("dc", "description"))
     }
 
+    /// Write the caption as the `x-default` entry of `dc:description`.
     pub fn set_caption(&mut self, caption: &str) {
-        self.tree.ensure_description_ns("dc").set_or_replace_child("dc", "description", caption);
+        self.tree.ensure_description_ns("dc").set_alt_default("dc", "description", caption);
+    }
+
+    /// Remove `dc:description` entirely (every language: the field is
+    /// cleared, nothing resurfaces). A sidecar without a description is
+    /// left untouched.
+    pub fn clear_caption(&mut self) {
+        if let Some(d) = self.tree.description_mut() {
+            d.remove_prop("dc", "description");
+        }
     }
 
     pub fn tags(&self) -> Vec<String> {
