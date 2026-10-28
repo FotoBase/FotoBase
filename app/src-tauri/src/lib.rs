@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use fotobase_catalog::Catalog;
+use fotobase_catalog::{Catalog, SyncError};
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
@@ -296,6 +296,27 @@ fn set_rating(file_id: i64, rating: u8, state: tauri::State<'_, AppState>) -> Re
     let cat = guard.as_mut().expect("catalog just inserted");
     rating::apply_rating(cat, file_id, rating, enabled).map_err(|e| e.to_string())?;
     Ok(rating)
+}
+
+/// Captions (TASK-03-007): read a photo's caption from the catalog mirror.
+#[tauri::command]
+fn get_caption(file_id: i64, state: tauri::State<'_, AppState>) -> Result<Option<String>, String> {
+    with_catalog_sync(&state, |cat| cat.file_caption(file_id).map_err(SyncError::from))
+}
+
+/// Write a photo's caption to `dc:description` (sidecar first, then the
+/// catalog mirror + FTS). A blank caption clears the field. Returns the
+/// caption that landed so the UI shows what is actually stored.
+#[tauri::command]
+fn set_caption(
+    file_id: i64,
+    caption: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    with_catalog_sync(&state, |cat| {
+        cat.set_caption(file_id, &caption)?;
+        cat.file_caption(file_id).map_err(SyncError::from)
+    })
 }
 
 /// Tags (TASK-03-006): read a photo's tags from the catalog mirror.
@@ -1138,6 +1159,8 @@ pub fn run() {
             search_files,
             list_files,
             set_rating,
+            get_caption,
+            set_caption,
             get_tags,
             add_tag,
             remove_tag,

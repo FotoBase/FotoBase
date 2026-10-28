@@ -1,6 +1,6 @@
 # task: captions written to dc:description
 
-**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
 
 ## Description
 Per-photo caption stored in `dc:description` (PLAN §2 B Captions, §5 mapping), searchable via 03-013, editable inline. Depends on the sidecar merge-on-write design (00-010, hard gate for EPIC-03).
@@ -19,6 +19,6 @@ Per-photo caption stored in `dc:description` (PLAN §2 B Captions, §5 mapping),
 - Integration: caption → search finds it → rebuild → caption + searchability survive.
 
 ## Acceptance criteria
-- [ ] 03-007: captions land in `dc:description` and are searchable.
-- [ ] 03-007: captions survive catalog rebuild.
-- [ ] 03-007: originals unchanged (checksum).
+- [x] 03-007: captions land in `dc:description` and are searchable.
+- [x] 03-007: captions survive catalog rebuild.
+- [x] 03-007: originals unchanged (checksum).

@@ -4,6 +4,19 @@
 
 import { isThumbHash } from "./grid";
 
+/// Is the key event aimed at a text field? Single-key viewer shortcuts
+/// (S, I, F, space, digits, arrows) must stay out of the way while the user
+/// types a caption or a tag.
+export function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLSelectElement ||
+    target.closest('[contenteditable=""], [contenteditable="true"]') !== null
+  );
+}
+
 /// Advance one photo, wrapping from the last to the first. An empty list
 /// degenerates to index 0 — navigation on nothing must never panic.
 export function nextIndex(index: number, count: number): number {

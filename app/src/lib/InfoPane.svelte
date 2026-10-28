@@ -9,6 +9,7 @@
 <script lang="ts">
   import type { GridItem } from "./grid";
   import { t } from "./i18n.svelte.js";
+  import CaptionEditor from "./CaptionEditor.svelte";
   import TagEditor from "./TagEditor.svelte";
   import { previewUri } from "./viewer";
   import {
@@ -145,6 +146,12 @@
       <dt>{t("info.modified")}</dt>
       <dd data-testid="info-modified">{info ? formatDate(info.mtime) : MISSING}</dd>
     </dl>
+  </section>
+  <!-- Caption (TASK-03-007, PLAN §2B): written to dc:description through
+       the sidecar by the backend. -->
+  <section>
+    <h3>{t("caption.title")}</h3>
+    <CaptionEditor photoId={photo?.id ?? null} />
   </section>
   <!-- Tag editor (TASK-03-006, PLAN §2B): edit the visible photo's tags;
        every change is written through to the sidecar by the backend. -->

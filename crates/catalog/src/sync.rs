@@ -84,8 +84,28 @@ impl Catalog {
         self.mutate_user_data(file_id, |sc| sc.clear_rating())
     }
 
+    /// Write the caption to `dc:description` (TASK-03-007). Blank input
+    /// clears the field, so an emptied editor never leaves an empty
+    /// `dc:description` behind.
     pub fn set_caption(&mut self, file_id: i64, caption: &str) -> SyncResult<()> {
+        if caption.trim().is_empty() {
+            return self.clear_caption(file_id);
+        }
         self.mutate_user_data(file_id, |sc| sc.set_caption(caption))
+    }
+
+    /// Remove `dc:description` from the sidecar and clear the mirror + FTS.
+    pub fn clear_caption(&mut self, file_id: i64) -> SyncResult<()> {
+        self.mutate_user_data(file_id, |sc| sc.clear_caption())
+    }
+
+    /// A photo's caption from the catalog mirror (derived cache, PLAN §5).
+    pub fn file_caption(&self, file_id: i64) -> Result<Option<String>> {
+        let caption = self
+            .conn()
+            .query_row("SELECT caption FROM metadata WHERE file_id = ?1", [file_id], |r| r.get(0))
+            .optional()?;
+        Ok(caption.flatten())
     }
 
     pub fn set_tags(&mut self, file_id: i64, tags: Vec<String>) -> SyncResult<()> {
