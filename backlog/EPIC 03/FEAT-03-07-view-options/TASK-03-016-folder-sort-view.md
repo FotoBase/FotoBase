@@ -1,6 +1,6 @@
 # task: folder sort and flat vs tree view
 
-**Feature:** [FEAT-03-07-view-options](FEAT-03-07-view-options.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-07-view-options](FEAT-03-07-view-options.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
 
 ## Description
 Folder sorting (name/date/size, with reverse) and a flat vs tree folder view, working over the full library (PLAN §6 P2a). Pure view-layer, no catalog changes.
@@ -19,5 +19,5 @@ Folder sorting (name/date/size, with reverse) and a flat vs tree folder view, wo
 - E2e: switch flat/tree, cycle sorts, restart → persisted.
 
 ## Acceptance criteria
-- [ ] 03-016: folders sortable by name/date/size with reverse; persists.
-- [ ] 03-016: flat and tree views both work over the full library without jank.
+- [x] 03-016: folders sortable by name/date/size with reverse; persists.
+- [x] 03-016: flat and tree views both work over the full library without jank.

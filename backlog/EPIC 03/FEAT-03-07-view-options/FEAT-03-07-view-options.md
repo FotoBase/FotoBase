@@ -9,13 +9,13 @@
 - Sepia/B&W display modes apply at view time only — no recipe, no sidecar write; originals unchanged (checksum).
 
 - [x] `03-015` (M) Thumbnail captions (none/filename/caption/tags/resolution).
-- [ ] `03-016` (S) Folder sort (name/date/size, reverse), flat vs tree view.
+- [x] `03-016` (S) Folder sort (name/date/size, reverse), flat vs tree view.
 - [ ] `03-017` (S) Single-click-to-edit option (General options).
 - [ ] `03-018` (S) View-time display modes: sepia, B&W (no edit applied).
 
 ## Tasks
 
 - [x] [TASK-03-015-thumbnail-captions.md](TASK-03-015-thumbnail-captions.md) — thumbnail caption modes
-- [ ] [TASK-03-016-folder-sort-view.md](TASK-03-016-folder-sort-view.md) — folder sort and flat vs tree view
+- [x] [TASK-03-016-folder-sort-view.md](TASK-03-016-folder-sort-view.md) — folder sort and flat vs tree view
 - [ ] [TASK-03-017-single-click-edit-option.md](TASK-03-017-single-click-edit-option.md) — single-click-to-edit option
 - [ ] [TASK-03-018-view-display-modes.md](TASK-03-018-view-display-modes.md) — view-time sepia and B&W display modes

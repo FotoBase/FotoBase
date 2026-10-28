@@ -5,7 +5,7 @@
 //! smallest thing that satisfies the spec and survives catalog rebuilds,
 //! since the catalog is a rebuildable cache per PLAN §3 rule 2).
 
-use fotobase_lib::settings::{CaptionMode, Settings, UpdateMode};
+use fotobase_lib::settings::{CaptionMode, FolderSort, FolderView, Settings, UpdateMode};
 use tempfile::TempDir;
 
 fn write_settings(dir: &TempDir, json: &str) {
@@ -132,5 +132,49 @@ fn caption_mode_round_trips_every_mode_as_kebab_case() {
         let raw = std::fs::read_to_string(dir.path().join("settings.json")).expect("read");
         assert!(raw.contains(&format!("\"caption_mode\": \"{wire}\"")), "{raw}");
         assert_eq!(Settings::load(dir.path()).caption_mode, mode);
+    }
+}
+
+#[test]
+fn folder_view_defaults_to_tree_by_name_and_survives_old_files() {
+    // TASK-03-016: the P1 behavior (year tree, name order) is the default; a
+    // settings.json from before the fields existed keeps the user's others.
+    let d = Settings::default();
+    assert_eq!(d.folder_view, FolderView::Tree);
+    assert_eq!(d.folder_sort, FolderSort::Name);
+    assert!(!d.folder_sort_reverse);
+
+    let dir = TempDir::new().expect("tempdir");
+    write_settings(&dir, r#"{"language":"de","update_mode":"off","show_tooltips":false}"#);
+    let s = Settings::load(dir.path());
+    assert_eq!(s.language, "de");
+    assert_eq!(s.folder_view, FolderView::Tree);
+    assert_eq!(s.folder_sort, FolderSort::Name);
+    assert!(!s.folder_sort_reverse);
+}
+
+#[test]
+fn folder_sort_and_view_round_trip_as_kebab_case() {
+    for (sort, wire) in
+        [(FolderSort::Name, "name"), (FolderSort::Date, "date"), (FolderSort::Size, "size")]
+    {
+        for (view, view_wire) in [(FolderView::Tree, "tree"), (FolderView::Flat, "flat")] {
+            let dir = TempDir::new().expect("tempdir");
+            Settings {
+                folder_sort: sort,
+                folder_sort_reverse: true,
+                folder_view: view,
+                ..Settings::default()
+            }
+            .save(dir.path())
+            .expect("save");
+            let raw = std::fs::read_to_string(dir.path().join("settings.json")).expect("read");
+            assert!(raw.contains(&format!("\"folder_sort\": \"{wire}\"")), "{raw}");
+            assert!(raw.contains(&format!("\"folder_view\": \"{view_wire}\"")), "{raw}");
+            let loaded = Settings::load(dir.path());
+            assert_eq!(loaded.folder_sort, sort);
+            assert_eq!(loaded.folder_view, view);
+            assert!(loaded.folder_sort_reverse);
+        }
     }
 }
