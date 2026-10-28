@@ -23,6 +23,14 @@ pub enum SyncError {
     InvalidRating(u8),
     #[error("tag name is empty")]
     EmptyTag,
+    #[error("album name is empty")]
+    EmptyAlbumName,
+    #[error("album date {0:?} is not a YYYY-MM-DD date")]
+    InvalidAlbumDate(String),
+    #[error("no album with id {0}")]
+    UnknownAlbum(i64),
+    #[error("file {file_id} is not in album {album_id}")]
+    NotInAlbum { album_id: i64, file_id: i64 },
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -54,6 +62,8 @@ struct UserData {
     caption: Option<String>,
     tags: Vec<String>,
     gps: Option<(f64, f64)>,
+    /// `fb:Albums` ids (TASK-03-008).
+    albums: Vec<String>,
 }
 
 impl UserData {
@@ -65,6 +75,7 @@ impl UserData {
             caption: sc.caption(),
             tags: sc.tags(),
             gps: sc.gps(),
+            albums: sc.albums(),
         }
     }
 }
@@ -248,7 +259,7 @@ impl Catalog {
     /// Write-through: sidecar write succeeds first, catalog update second,
     /// both inside one logical transaction. Sidecar failure → error, catalog
     /// untouched.
-    fn mutate_user_data(
+    pub(crate) fn mutate_user_data(
         &mut self,
         file_id: i64,
         apply: impl FnOnce(&mut Sidecar),
@@ -265,9 +276,12 @@ impl Catalog {
         sc.write(&sc_path)?;
 
         let data = UserData::from_sidecar(&sc);
-        apply_user_data(&tx, file_id, &data)?;
+        let placeholders = apply_user_data(&tx, file_id, &data)?;
         record_sidecar_stat(&tx, file_id, &sc_path)?;
         tx.commit()?;
+        if placeholders {
+            self.persist_album_definitions()?;
+        }
         Ok(())
     }
 
@@ -389,9 +403,12 @@ impl Catalog {
         let sc = Sidecar::read(&sc_path)?;
         let data = UserData::from_sidecar(&sc);
         let tx = self.conn_mut().transaction()?;
-        apply_user_data(&tx, file_id, &data)?;
+        let placeholders = apply_user_data(&tx, file_id, &data)?;
         record_sidecar_stat(&tx, file_id, &sc_path)?;
         tx.commit()?;
+        if placeholders {
+            self.persist_album_definitions()?;
+        }
         Ok(true)
     }
 }
@@ -412,7 +429,10 @@ fn sidecar_unchanged(md: &std::fs::Metadata, stored_size: i64, stored_mtime_nano
     md.len() as i64 == stored_size && mtime_nanos(md).ok() == Some(stored_mtime_nanos)
 }
 
-fn apply_user_data(tx: &rusqlite::Transaction<'_>, file_id: i64, data: &UserData) -> Result<()> {
+/// Mirror one sidecar's user data into the catalog. Returns `true` when an
+/// album id without a definition forced a placeholder album (the caller
+/// re-persists `albums.json`).
+fn apply_user_data(tx: &rusqlite::Transaction<'_>, file_id: i64, data: &UserData) -> Result<bool> {
     tx.execute("INSERT OR IGNORE INTO metadata (file_id) VALUES (?1)", [file_id])?;
     tx.execute(
         "UPDATE metadata SET rating = ?1, caption = ?2, latitude = ?3, longitude = ?4
@@ -436,7 +456,7 @@ fn apply_user_data(tx: &rusqlite::Transaction<'_>, file_id: i64, data: &UserData
             [file_id, tag_id],
         )?;
     }
-    Ok(())
+    crate::albums::apply_membership(tx, file_id, &data.albums)
 }
 
 /// Record (mtime, size) of the sidecar we just synced, so later reads can

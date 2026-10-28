@@ -5,10 +5,12 @@
 //! for user data. Corruption is detected on startup (`quick_check`) and callers
 //! trigger the rebuild-from-sidecars recovery path.
 
+pub mod albums;
 pub mod migrations;
 pub mod missing;
 pub mod sync;
 
+pub use albums::AlbumInfo;
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
 pub use sync::{sidecar_path, SyncError, SyncStats};
@@ -190,9 +192,14 @@ impl Catalog {
 
         migrations::migrate(&conn)?;
 
-        let cat = Catalog { conn, path };
+        let mut cat = Catalog { conn, path };
         // Cheap corruption check on startup; full `integrity_check` is opt-in.
         cat.quick_check()?;
+        // Album definitions live beside the catalog (TASK-03-008); a failure
+        // here must not lock the user out of their library.
+        if let Err(err) = cat.restore_album_definitions() {
+            tracing::warn!(error = %err, "restoring album definitions failed");
+        }
         Ok(cat)
     }
 

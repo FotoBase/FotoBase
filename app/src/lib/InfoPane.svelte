@@ -9,6 +9,7 @@
 <script lang="ts">
   import type { GridItem } from "./grid";
   import { t } from "./i18n.svelte.js";
+  import AlbumMembership from "./AlbumMembership.svelte";
   import CaptionEditor from "./CaptionEditor.svelte";
   import TagEditor from "./TagEditor.svelte";
   import { previewUri } from "./viewer";
@@ -26,9 +27,11 @@
   interface Props {
     /// The photo the viewer currently shows; `null` renders placeholders.
     photo?: GridItem | null;
+    /// Fired after the photo's album membership changed (TASK-03-008).
+    onalbumschanged?: () => void;
   }
 
-  let { photo = null }: Props = $props();
+  let { photo = null, onalbumschanged = () => {} }: Props = $props();
 
   let info = $state<PhotoInfo | null>(null);
 
@@ -158,5 +161,11 @@
   <section>
     <h3>{t("tags.title")}</h3>
     <TagEditor photoId={photo?.id ?? null} />
+  </section>
+  <!-- Albums (TASK-03-008, PLAN §2 B): tick the albums this photo is in;
+       membership is written to the sidecar's fb:Albums bag. -->
+  <section>
+    <h3>{t("albums.title")}</h3>
+    <AlbumMembership photoId={photo?.id ?? null} onchanged={onalbumschanged} />
   </section>
 </aside>

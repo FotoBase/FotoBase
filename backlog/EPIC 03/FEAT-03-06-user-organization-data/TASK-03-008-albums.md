@@ -1,6 +1,6 @@
 # task: albums with fb:Albums sidecar namespace
 
-**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-06-user-organization-data](FEAT-03-06-user-organization-data.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
 
 ## Description
 Virtual albums: create (name/date/place/description), delete, add/remove photos; membership stored in the custom `fb:Albums` XMP namespace so albums rebuild from sidecars (PLAN §2 B Albums, §5 mapping). Depends on the sidecar merge-on-write design (00-010, hard gate for EPIC-03).
@@ -22,6 +22,6 @@ Virtual albums: create (name/date/place/description), delete, add/remove photos;
 - E2e: create album, add from two folders, album list shows correct count; delete album leaves photos intact.
 
 ## Acceptance criteria
-- [ ] 03-008: albums create/delete/add/remove work; name/date/place/description supported.
-- [ ] 03-008: membership in `fb:Albums`, rebuildable after catalog delete.
-- [ ] 03-008: album list UI present; originals never touched.
+- [x] 03-008: albums create/delete/add/remove work; name/date/place/description supported.
+- [x] 03-008: membership in `fb:Albums`, rebuildable after catalog delete.
+- [x] 03-008: album list UI present; originals never touched.
