@@ -268,3 +268,67 @@ describe("ThumbnailGrid hidden photos (TASK-03-009)", () => {
     expect(cells[1].getAttribute("data-hidden")).toBe("true");
   });
 });
+
+describe("ThumbnailGrid captions (TASK-03-015)", () => {
+  const captioned = (): GridItem[] => [
+    {
+      id: 1,
+      filename: "a.jpg",
+      hash: HASH(1),
+      caption: "Sunset",
+      tags: ["beach", "Vacation|Italy"],
+      width: 4000,
+      height: 3000,
+    },
+    { id: 2, filename: "b.jpg", hash: HASH(2) },
+  ];
+
+  const captions = () => screen.queryAllByTestId("grid-caption").map((el) => el.textContent);
+
+  it("renders no caption strip in none mode", () => {
+    render(ThumbnailGrid, { items: captioned() });
+    expect(captions()).toEqual([]);
+  });
+
+  it("switches through all five modes instantly, from the toolbar", async () => {
+    render(ThumbnailGrid, { items: captioned() });
+    const select = screen.getByTestId("caption-mode") as HTMLSelectElement;
+    const expected: Record<string, (string | null)[]> = {
+      filename: ["a.jpg", "b.jpg"],
+      caption: ["Sunset", ""],
+      tags: ["beach, Italy", ""],
+      resolution: ["4000 × 3000", ""],
+      none: [],
+    };
+    for (const [mode, texts] of Object.entries(expected)) {
+      await fireEvent.change(select, { target: { value: mode } });
+      flushSync();
+      expect(gridState.captionMode).toBe(mode);
+      expect(captions()).toEqual(texts);
+    }
+  });
+
+  it("reserves the same strip height for every caption mode (no layout thrash)", () => {
+    gridState.captionMode = "filename";
+    render(ThumbnailGrid, { items: captioned() });
+    const rowHeight = () => screen.getAllByTestId("grid-cell")[0].parentElement?.style.height;
+    const filenameHeight = rowHeight();
+    expect(filenameHeight).toBe("186px"); // 160 + 8 gap + 18 strip
+
+    gridState.captionMode = "tags";
+    flushSync();
+    flushSync();
+    expect(rowHeight()).toBe(filenameHeight);
+  });
+
+  it("keeps the original row height in none mode", () => {
+    render(ThumbnailGrid, { items: captioned() });
+    expect(screen.getAllByTestId("grid-cell")[0].parentElement?.style.height).toBe("168px");
+  });
+
+  it("exposes the full text as a tooltip so ellipsized values stay readable", () => {
+    gridState.captionMode = "caption";
+    render(ThumbnailGrid, { items: captioned() });
+    expect(screen.getAllByTestId("grid-caption")[0].getAttribute("title")).toBe("Sunset");
+  });
+});

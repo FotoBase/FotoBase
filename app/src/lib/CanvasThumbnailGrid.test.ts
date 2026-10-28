@@ -53,12 +53,15 @@ beforeEach(() => {
     "drawImage",
     "fillText",
     "beginPath",
+    "rect",
+    "clip",
     "save",
     "restore",
     "setTransform",
   ]) {
     ctx[method] = (...args: unknown[]) => calls.push({ method, args });
   }
+  ctx.measureText = (text: string) => ({ width: text.length * 6 });
   HTMLCanvasElement.prototype.getContext = vi
     .fn()
     .mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
@@ -266,5 +269,28 @@ describe("CanvasThumbnailGrid reveal (tray jump, TASK-03-010)", () => {
     expect(screen.getByTestId("canvas-grid-scroll").scrollTop).toBe(125 * 168);
     expect([...gridState.selection]).toEqual([500]);
     expect(gridState.revealRequest).toBeNull();
+  });
+});
+
+describe("CanvasThumbnailGrid captions (TASK-03-015)", () => {
+  it("draws the caption text under each visible thumbnail", () => {
+    gridState.captionMode = "filename";
+    render(CanvasThumbnailGrid, { items: makeItems(8) });
+    const texts = calls.filter((c) => c.method === "fillText").map((c) => c.args[0]);
+    expect(texts).toContain("photo-0.jpg");
+    expect(texts).toContain("photo-3.jpg");
+  });
+
+  it("draws no text in none mode", () => {
+    render(CanvasThumbnailGrid, { items: makeItems(8) });
+    expect(calls.some((c) => c.method === "fillText")).toBe(false);
+  });
+
+  it("repaints when the mode changes", () => {
+    render(CanvasThumbnailGrid, { items: makeItems(8) });
+    gridState.captionMode = "filename";
+    flushSync();
+    flushSync();
+    expect(calls.some((c) => c.method === "fillText")).toBe(true);
   });
 });

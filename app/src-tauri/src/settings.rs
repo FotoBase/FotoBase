@@ -67,6 +67,20 @@ pub enum Theme {
     Dark,
 }
 
+/// What the grid prints under each thumbnail (TASK-03-015, PLAN §6 P2a
+/// "Thumbnail captions"). Display-only: resolved from the grid row, never
+/// written back to a sidecar.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptionMode {
+    #[default]
+    None,
+    Filename,
+    Caption,
+    Tags,
+    Resolution,
+}
+
 /// The General-tab settings (PLAN §2 Options dialog — General tab).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
@@ -103,6 +117,9 @@ pub struct Settings {
     /// swept on startup.
     #[serde(default = "default_trash_window_days")]
     pub trash_window_days: u32,
+    /// Thumbnail caption mode (TASK-03-015).
+    #[serde(default)]
+    pub caption_mode: CaptionMode,
 }
 
 fn default_trash_window_days() -> u32 {
@@ -122,6 +139,7 @@ impl Default for Settings {
             quick_tags: Vec::new(),
             show_hidden: false,
             trash_window_days: default_trash_window_days(),
+            caption_mode: CaptionMode::default(),
         }
     }
 }

@@ -3,6 +3,7 @@
   // first wiring of the Options dialog (TASK-01-022): settings load at
   // startup, the dialog persists every change, and the update-mode policy
   // runs once on startup.
+  import { untrack } from "svelte";
   import AlbumDialog from "./lib/AlbumDialog.svelte";
   import AlbumList from "./lib/AlbumList.svelte";
   import BatchDialog from "./lib/BatchDialog.svelte";
@@ -38,7 +39,8 @@
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadPhotoInfo } from "./lib/info-pane";
   import { queryLibraryItems } from "./lib/search";
-  import { findFileByPath, loadSettings, takeOpenFiles, type Settings } from "./lib/settings";
+  import { findFileByPath, loadSettings, saveSettings, takeOpenFiles, type Settings } from "./lib/settings";
+  import { captionModeFromSettings, settingsWithCaptionMode } from "./lib/captions";
   import { shortcuts, type ShortcutHandlers } from "./lib/shortcuts";
   import { applyTheme, resolveTheme, systemPrefersDark, watchSystemTheme } from "./lib/theme";
   import { actionIds, tray, type TrayPhoto } from "./lib/tray.svelte.js";
@@ -231,6 +233,19 @@
     }
   }
 
+  // Caption mode (TASK-03-015): the grid toolbar flips the shared store; the
+  // choice is persisted as the `caption_mode` setting. Settings are read
+  // untracked so only a mode change (not an Options edit) triggers a save.
+  $effect(() => {
+    const mode = gridState.captionMode;
+    const next = untrack(() => (settings ? settingsWithCaptionMode(settings, mode) : null));
+    if (!next) return;
+    settings = next;
+    void saveSettings(next).catch(() => {
+      // Browser dev / backend down: the choice still holds for the session.
+    });
+  });
+
   $effect(() => {
     // Startup: load persisted settings, apply the language, then honor the
     // update policy (auto installs, check-but-ask prompts, off does
@@ -238,6 +253,7 @@
     void (async () => {
       const s = await loadSettings();
       settings = s;
+      gridState.captionMode = captionModeFromSettings(s);
       setLocale(s.language);
       // Codec probe (TASK-02-005): fire-and-forget so it never blocks
       // startup (functional spec); the cached matrix drives the HTML5 vs

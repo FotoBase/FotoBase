@@ -2,6 +2,8 @@
 // Rust `settings` module: the backend owns persistence; the frontend only
 // reads/writes through IPC commands. Defaults match the Rust side exactly.
 
+import type { CaptionMode } from "./captions";
+
 export type UpdateMode = "auto" | "check-but-ask" | "off";
 
 /// Library grid renderer (TASK-01-014). Default DOM; canvas is an explicit
@@ -13,6 +15,8 @@ export type GridRendererSetting = "dom" | "canvas";
 export type ThemeSetting = "system" | "light" | "dark";
 
 export interface Settings {
+  /// Thumbnail caption mode (TASK-03-015).
+  caption_mode: CaptionMode;
   language: string;
   update_mode: UpdateMode;
   show_tooltips: boolean;
@@ -41,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   quick_tags: [],
   show_hidden: false,
   trash_window_days: 30,
+  caption_mode: "none",
 };
 
 // Image types the file-association option (TASK-01-025, PLAN §2M) can

@@ -20,6 +20,8 @@
     type VirtualItem,
   } from "@tanstack/virtual-core";
   import { untrack } from "svelte";
+  import CaptionModeSelect from "./CaptionModeSelect.svelte";
+  import { captionStripHeight, captionText, ellipsize } from "./captions";
   import {
     cellAt,
     columnCount,
@@ -62,6 +64,8 @@
 
   const REPORT_DEBOUNCE_MS = 100;
 
+  const captionH = $derived(captionStripHeight(gridState.captionMode, gridState.thumbSize));
+
   let scrollEl = $state<HTMLDivElement | null>(null);
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let virtualRows = $state<VirtualItem[]>([]);
@@ -88,7 +92,7 @@
     const index = items.findIndex((i) => i.id === request.id);
     if (index < 0) return;
     const cols = columnCount(el.clientWidth, gridState.thumbSize, GRID_GAP);
-    el.scrollTop = revealScrollTop(index, cols, gridState.thumbSize);
+    el.scrollTop = revealScrollTop(index, cols, gridState.thumbSize, captionH);
     gridState.selection = new Set([request.id]);
     gridState.revealRequest = null;
   });
@@ -107,6 +111,7 @@
     // Reactive inputs: zoom level and collection size rebuild the
     // virtualizer; scroll position is restored from the shared store.
     const size = gridState.thumbSize;
+    const strip = captionH;
     void items.length;
 
     const cols = columnCount(el.clientWidth, size, GRID_GAP);
@@ -116,7 +121,7 @@
     const virtualizer = new Virtualizer({
       getScrollElement: () => el,
       count: rowCount,
-      estimateSize: () => size + GRID_GAP,
+      estimateSize: () => size + GRID_GAP + strip,
       overscan,
       observeElementOffset,
       observeElementRect,
@@ -163,6 +168,8 @@
     if (!canvas) return;
     void virtualRows;
     const size = gridState.thumbSize;
+    const strip = captionH;
+    const mode = gridState.captionMode;
     void gridState.selection.size;
 
     const draw = (): void => {
@@ -176,8 +183,13 @@
       canvas.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
+      if (strip > 0) {
+        ctx.font = `${Math.round(strip * 0.65)}px sans-serif`;
+        ctx.textBaseline = "middle";
+      }
 
       const step = size + GRID_GAP;
+      const rowStep = step + strip;
       // Clamp to the scrollable range: row starts come from the virtualizer
       // (which clamps to the collection), so an out-of-range scrollTop must
       // not push every cell off-canvas.
@@ -190,7 +202,7 @@
           const item = rowItemsInRow[col];
           const x = col * step;
           const y = row.start - scrollTop;
-          if (y + size < 0 || y > h) continue; // overscan guard: offscreen cells
+          if (y + size + strip < 0 || y > h) continue; // overscan guard: offscreen cells
 
           // Versioned URI (grid store): after a `thumb-rendered` event the
           // version bumps, so imgCache misses on the new key and re-fetches
@@ -221,6 +233,18 @@
                 });
             }
           }
+
+          if (strip > 0) {
+            const text = ellipsize(
+              captionText(item, mode),
+              size - 8,
+              (str) => ctx.measureText(str).width,
+            );
+            if (text !== "") {
+              ctx.fillStyle = paletteVar("--fb-muted", "#9a9a9a");
+              ctx.fillText(text, x + 4, y + size + strip / 2);
+            }
+          }
         }
       }
 
@@ -234,7 +258,7 @@
           const row = Math.floor(index / columns);
           const col = index % columns;
           const x = col * step;
-          const y = row * step - scrollTop;
+          const y = row * rowStep - scrollTop;
           if (y + size < 0 || y > h) continue;
           ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
         }
@@ -254,6 +278,7 @@
       gridState.thumbSize,
       columns,
       items.length,
+      captionH,
     );
     if (index === null) return;
     gridState.toggleSelection(items[index].id);
@@ -269,6 +294,7 @@
       gridState.thumbSize,
       columns,
       items.length,
+      captionH,
     );
     if (index === null) return;
     oncontextmenu({ x: e.clientX, y: e.clientY, item: items[index] });
@@ -283,6 +309,7 @@
       gridState.thumbSize,
       columns,
       items.length,
+      captionH,
     );
     if (index === null) return;
     onopen(items[index]);
@@ -301,6 +328,7 @@
       step={ZOOM_STEP}
       bind:value={gridState.thumbSize}
     />
+    <CaptionModeSelect />
   </div>
   <div class="grid-scroll canvas-grid-scroll" data-testid="canvas-grid-scroll" bind:this={scrollEl}>
     <div class="canvas-spacer" style="height: {totalSize}px" data-testid="canvas-spacer"></div>

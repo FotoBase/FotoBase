@@ -245,3 +245,17 @@ describe("revealScrollTop (tray jump, TASK-03-010)", () => {
     expect(revealScrollTop(3, 4, 160)).toBe(0);
   });
 });
+
+describe("caption strip geometry (TASK-03-015)", () => {
+  it("revealScrollTop adds the caption strip to every row step", () => {
+    expect(revealScrollTop(8, 4, 160)).toBe(2 * 168);
+    expect(revealScrollTop(8, 4, 160, 18)).toBe(2 * 186);
+  });
+
+  it("cellAt hits rows at the caption-extended step", () => {
+    // Row 1 starts at 160 + 8 + 18 = 186.
+    expect(cellAt(10, 190, 0, 160, 4, 100, 18)).toBe(4);
+    expect(cellAt(10, 180, 0, 160, 4, 100)).toBe(4);
+    expect(cellAt(10, 180, 0, 160, 4, 100, 18)).toBe(0);
+  });
+});
