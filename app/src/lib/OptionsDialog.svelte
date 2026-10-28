@@ -68,6 +68,10 @@
     apply({ ...settings, ratings_enabled: enabled });
   }
 
+  function setSingleClickEdit(on: boolean): void {
+    apply({ ...settings, single_click_edit: on });
+  }
+
   function setShowHidden(show: boolean): void {
     apply({ ...settings, show_hidden: show });
   }
@@ -276,6 +280,18 @@
             onchange={(e) => setRatingsEnabled(e.currentTarget.checked)}
           />
           {t("options.ratings")}
+        </label>
+
+        <!-- Single-click-to-edit (TASK-03-017): grids open a photo on one
+             click; modifier-click still selects. -->
+        <label class="options-row options-check">
+          <input
+            type="checkbox"
+            data-testid="single-click-edit"
+            checked={settings.single_click_edit}
+            onchange={(e) => setSingleClickEdit(e.currentTarget.checked)}
+          />
+          {t("options.singleClickEdit")}
         </label>
 
         <!-- Hidden items (TASK-03-009) and the catalog-trash undo window

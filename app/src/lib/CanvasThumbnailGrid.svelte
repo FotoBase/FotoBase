@@ -51,6 +51,9 @@
     oncontextmenu?: (e: { x: number; y: number; item: GridItem }) => void;
     /// Called with the photo the user opened (double-click — TASK-01-019).
     onopen?: (item: GridItem) => void;
+    /// Single-click-to-edit (TASK-03-017): a plain click opens the photo;
+    /// ctrl/cmd/shift-click still toggles selection.
+    singleClickEdit?: boolean;
   }
 
   let {
@@ -60,6 +63,7 @@
     onvisible = () => {},
     oncontextmenu = () => {},
     onopen = () => {},
+    singleClickEdit = false,
   }: Props = $props();
 
   const REPORT_DEBOUNCE_MS = 100;
@@ -281,6 +285,10 @@
       captionH,
     );
     if (index === null) return;
+    if (singleClickEdit && !(e.ctrlKey || e.metaKey || e.shiftKey)) {
+      onopen(items[index]);
+      return;
+    }
     gridState.toggleSelection(items[index].id);
   }
 

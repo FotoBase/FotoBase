@@ -7,6 +7,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import OptionsDialog from "./OptionsDialog.svelte";
+import { t } from "./i18n.svelte.js";
 import {
   DEFAULT_SETTINGS,
   registerAssociations,
@@ -256,5 +257,22 @@ describe("OptionsDialog show hidden refresh (TASK-03-009)", () => {
     await fireEvent.click(screen.getByTestId("show-hidden"));
     await settle();
     expect(order.slice(-2)).toEqual(["saved", "refresh"]);
+  });
+});
+
+describe("OptionsDialog single-click-to-edit (TASK-03-017)", () => {
+  it("is off by default; toggling applies and persists", async () => {
+    expect(DEFAULT_SETTINGS.single_click_edit).toBe(false);
+    expect(t("options.singleClickEdit")).not.toBe("options.singleClickEdit");
+    const base: Settings = { ...DEFAULT_SETTINGS };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+    expect((screen.getByTestId("single-click-edit") as HTMLInputElement).checked).toBe(false);
+
+    await fireEvent.click(screen.getByTestId("single-click-edit"));
+    await settle();
+
+    expect(onchange).toHaveBeenCalledWith({ ...base, single_click_edit: true });
+    expect(saveSettings).toHaveBeenCalledWith({ ...base, single_click_edit: true });
   });
 });
