@@ -57,7 +57,7 @@ When a file is renamed or moved outside Fotobase, the scanner must re-associate 
 2. **Scan-time matching:** on scan, a new-looking path is first probed by (size, mtime) against the missing-file set; candidates are confirmed by hash match. A confirmed match re-associates: the catalog row keeps its user-data provenance, and the sidecar follows the original.
 3. **Sidecar follows the original:** if the sidecar did not move along (user moved only the original), Fotobase renames/moves the old sidecar to the new location after association — with the merge-on-write backup discipline applied to the destination if one already exists (then: merge two packets, ours-wins only on fields we own, unknown fields from both preserved).
 4. **Ambiguity:** if two missing files match the same hash (true duplicates), associate to the one whose sidecar/user data is richer; log the ambiguity; never silently drop either sidecar (keep the loser as `.fb-bak` next to the winner).
-5. **Inside-app moves** (batch rename/move, 03-008) use the same sidecar-follows-original rule directly, no matching needed.
+5. **Inside-app moves** (batch rename/move, 03-011, `fotobase_scanner::batch`) use the same sidecar-follows-original rule directly, no matching needed. Per photo the order is original → sidecar (+ its `.fb-bak`) → catalog row; a target whose original *or* `.xmp` already exists is a collision (refused or auto-suffixed, never merged or overwritten). A failure aborts the batch and rolls the already-moved photos back. A hard kill mid-photo leaves the original at the new path and the sidecar/row at the old one — the next scan handles that through steps 2–3 above.
 
 ## 5. Locking & concurrency protocol
 

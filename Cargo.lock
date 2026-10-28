@@ -1281,6 +1281,7 @@ dependencies = [
  "nix",
  "notify",
  "rusqlite",
+ "serde",
  "sha2",
  "tempfile",
  "thiserror 2.0.21",

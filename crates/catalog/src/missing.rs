@@ -91,7 +91,6 @@ impl Catalog {
     /// Re-create the file row from a missing record at its new location,
     /// restoring the snapshotted user data. The catalogue id is new (the old
     /// row was deleted); identity comes from the content, not the rowid.
-    /// The original filename is restored so the sidecar name stays consistent.
     pub fn reassociate_file(
         &mut self,
         missing_id: i64,
@@ -122,17 +121,10 @@ impl Catalog {
         let folder_id: i64 =
             self.conn()
                 .query_row("SELECT id FROM folders WHERE path = ?1", [new_folder], |r| r.get(0))?;
-        let original_name = std::path::Path::new(&rec.path)
+        let filename = std::path::Path::new(new_path)
             .file_name()
-            .and_then(|n| n.to_str())
-            .map(str::to_string)
-            .unwrap_or_else(|| {
-                std::path::Path::new(new_path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or_default()
-                    .to_string()
-            });
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
 
         self.conn().execute(
             "INSERT INTO files(folder_id, path, filename, size, mtime, hash, media_type)
@@ -140,7 +132,7 @@ impl Catalog {
             rusqlite::params![
                 folder_id,
                 new_path,
-                original_name,
+                filename,
                 new_size,
                 new_mtime,
                 rec.hash,

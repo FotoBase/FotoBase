@@ -22,6 +22,9 @@
     /// "Add to album" was pressed: the shell opens its album picker at the
     /// anchor for these ids.
     onaddtoalbum?: (e: { ids: number[]; x: number; y: number }) => void;
+    /// "Rename…" / "Move…" was pressed: the shell opens the batch dialog for
+    /// the tray's photos.
+    onbatch?: (e: { mode: "rename" | "move"; ids: number[] }) => void;
   }
 
   let {
@@ -29,6 +32,7 @@
     resolve = () => [],
     onjump = () => {},
     onaddtoalbum = () => {},
+    onbatch = () => {},
   }: Props = $props();
 
   function addSelection(): void {
@@ -59,6 +63,18 @@
       data-testid="tray-add-to-album"
       disabled={tray.count === 0}
       onclick={addToAlbum}>{t("tray.addToAlbum")}</button
+    >
+    <button
+      type="button"
+      data-testid="tray-rename"
+      disabled={tray.count === 0}
+      onclick={() => onbatch({ mode: "rename", ids: tray.ids })}>{t("tray.rename")}</button
+    >
+    <button
+      type="button"
+      data-testid="tray-move"
+      disabled={tray.count === 0}
+      onclick={() => onbatch({ mode: "move", ids: tray.ids })}>{t("tray.move")}</button
     >
     <button
       type="button"

@@ -27,7 +27,7 @@
 ## feat: photo tray & batch
 
 - [x] `03-010` (M) Photo Tray: cross-folder selection, "Hold" pinning, actions apply to tray.
-- [ ] `03-011` (M) Batch rename to pattern; batch move between folders (real file moves, catalog follows).
+- [x] `03-011` (M) Batch rename to pattern; batch move between folders (real file moves, catalog follows).
 - [ ] `03-012` (M) Catalog trash: soft-delete + undo window for remove-from-album, hide, unlink.
 
 ## feat: search & filters

@@ -13,6 +13,7 @@ fotobase-video = { path = "../video" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 notify = "6"
 sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
 tracing.workspace = true
 thiserror.workspace = true
 
