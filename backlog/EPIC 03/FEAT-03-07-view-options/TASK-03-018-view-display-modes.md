@@ -1,6 +1,6 @@
 # task: view-time sepia and B&W display modes
 
-**Feature:** [FEAT-03-07-view-options](FEAT-03-07-view-options.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
+**Feature:** [FEAT-03-07-view-options](FEAT-03-07-view-options.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-28)
 
 ## Description
 View-time display modes (sepia, B&W) applied at display only — no recipe, no sidecar write, originals unchanged (PLAN §6 P2a "display modes (sepia/B&W view modes)").
