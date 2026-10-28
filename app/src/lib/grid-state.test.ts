@@ -3,6 +3,7 @@
 // sync feature-wise (switching renderers must not lose zoom or selection).
 
 import { beforeEach, describe, expect, it } from "vitest";
+import { ALL_TIME } from "./filters";
 import {
   DEFAULT_THUMB_SIZE,
   ZOOM_MAX,
@@ -52,6 +53,29 @@ describe("gridState", () => {
     expect(gridState.searchQuery).toBe("beach");
     resetGridState();
     expect(gridState.searchQuery).toBe("");
+  });
+
+  it("carries the library filters in the shared store (TASK-03-014)", () => {
+    expect(gridState.starredOnly).toBe(false);
+    expect(gridState.videosOnly).toBe(false);
+    expect(gridState.dateStep).toBe(ALL_TIME);
+    expect(gridState.filtersActive).toBe(false);
+
+    gridState.videosOnly = true;
+    expect(gridState.filtersActive).toBe(true);
+    gridState.videosOnly = false;
+    gridState.dateStep = 2;
+    expect(gridState.filtersActive).toBe(true);
+
+    gridState.starredOnly = true;
+    gridState.clearFilters();
+    expect(gridState.filtersActive).toBe(false);
+    expect(gridState.starredOnly).toBe(false);
+    expect(gridState.dateStep).toBe(ALL_TIME);
+
+    gridState.starredOnly = true;
+    resetGridState();
+    expect(gridState.starredOnly).toBe(false);
   });
 
   it("bumps per-hash thumb versions monotonically and resets cleanly", () => {

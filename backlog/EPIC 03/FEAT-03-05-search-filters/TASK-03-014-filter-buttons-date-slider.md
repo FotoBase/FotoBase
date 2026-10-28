@@ -1,6 +1,6 @@
 # task: filter buttons and date slider
 
-**Feature:** [FEAT-03-05-search-filters](FEAT-03-05-search-filters.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-05-search-filters](FEAT-03-05-search-filters.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
 
 ## Description
 Filter buttons (starred, video) and a date slider restricting the library to the last N days/months (PLAN §2 C "Filter buttons" + "Date slider", §6 P2a). Combines with live search; grid updates without jank.
@@ -21,6 +21,6 @@ Filter buttons (starred, video) and a date slider restricting the library to the
 - Perf: filter toggle on 50k fixture re-renders without jank (frame budget check).
 
 ## Acceptance criteria
-- [ ] 03-014: starred and video filter buttons work.
-- [ ] 03-014: date slider restricts to last N days/months.
-- [ ] 03-014: filters combine with search and apply in grid and viewer.
+- [x] 03-014: starred and video filter buttons work.
+- [x] 03-014: date slider restricts to last N days/months.
+- [x] 03-014: filters combine with search and apply in grid and viewer.

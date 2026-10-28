@@ -15,6 +15,8 @@
   import PhotoTray from "./lib/PhotoTray.svelte";
   import QuickTags from "./lib/QuickTags.svelte";
   import SearchBar from "./lib/SearchBar.svelte";
+  import FilterBar from "./lib/FilterBar.svelte";
+  import { cutoffDate } from "./lib/filters";
   import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
   import TrashDialog from "./lib/TrashDialog.svelte";
   import Viewer from "./lib/Viewer.svelte";
@@ -22,7 +24,6 @@
   import {
     addToAlbum,
     deleteAlbum,
-    listAlbumFiles,
     listAlbums,
     removeFromAlbum,
     setAlbumCover,
@@ -36,7 +37,7 @@
   import { gridState, pickRenderer } from "./lib/grid-state.svelte.js";
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadPhotoInfo } from "./lib/info-pane";
-  import { listLibraryItems } from "./lib/search";
+  import { queryLibraryItems } from "./lib/search";
   import { findFileByPath, loadSettings, takeOpenFiles, type Settings } from "./lib/settings";
   import { shortcuts, type ShortcutHandlers } from "./lib/shortcuts";
   import { applyTheme, resolveTheme, systemPrefersDark, watchSystemTheme } from "./lib/theme";
@@ -163,16 +164,31 @@
     })();
   }, 150);
 
+  // The one grid query (TASK-03-014): folder selection / album view, live
+  // search and the filter buttons + date slider AND-combine in the backend.
+  // The filter state is read before the first `await`, so calling this from
+  // an `$effect` tracks every input. The shell's `photos` feed both the grid
+  // and the viewer, so the two always show the same filtered set.
+  let loadSeq = 0;
+  function loadPhotos(sel: number[], album: number | null): Promise<GridItem[]> {
+    return queryLibraryItems({
+      // An album view takes the place of the folder filter.
+      folders: album !== null ? [] : sel,
+      album,
+      query: gridState.searchQuery,
+      starred: gridState.starredOnly,
+      videosOnly: gridState.videosOnly,
+      takenSince: cutoffDate(gridState.dateStep),
+    });
+  }
+
   // Library refresh (TASK-01-016): the startup load and every Folder
   // Manager change (mode applied / folder removed) re-read folders + files,
   // so the grid mirrors the catalog immediately.
   async function refreshLibrary(): Promise<void> {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      photos =
-        selectedAlbum !== null
-          ? await listAlbumFiles<GridItem>(selectedAlbum, gridState.searchQuery)
-          : await invoke<GridItem[]>("list_files");
+      photos = await loadPhotos(selectedFolders, selectedAlbum);
       folders = await invoke<FolderInfo[]>("list_folders");
       albums = await listAlbums();
     } catch {
@@ -189,10 +205,7 @@
   async function refreshView(): Promise<void> {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      photos =
-        selectedAlbum !== null
-          ? await listAlbumFiles<GridItem>(selectedAlbum, gridState.searchQuery)
-          : await listLibraryItems(selectedFolders, gridState.searchQuery);
+      photos = await loadPhotos(selectedFolders, selectedAlbum);
       folders = await invoke<FolderInfo[]>("list_folders");
       albums = await listAlbums();
       const visible = new Set(folders.map((f) => f.id));
@@ -211,7 +224,7 @@
         selectedAlbum = null;
       }
       if (selectedAlbum !== null) {
-        photos = await listAlbumFiles<GridItem>(selectedAlbum, gridState.searchQuery);
+        photos = await loadPhotos(selectedFolders, selectedAlbum);
       }
     } catch {
       // Browser dev / backend down: keep what is shown.
@@ -361,14 +374,15 @@
     // album view (TASK-03-008) takes the place of the folder filter; the
     // search box still narrows it.
     const sel = selectedFolders;
-    const query = gridState.searchQuery;
     const album = selectedAlbum;
+    // The filter state is read here too (inside `loadPhotos`' synchronous
+    // prefix), so toggling a button or moving the slider re-queries.
+    const seq = ++loadSeq;
     void (async () => {
       try {
-        photos =
-          album !== null
-            ? await listAlbumFiles<GridItem>(album, query)
-            : await listLibraryItems(sel, query);
+        const rows = await loadPhotos(sel, album);
+        // A slower, older query must not overwrite a newer one's result.
+        if (seq === loadSeq) photos = rows;
       } catch {
         // Browser dev / backend down: nothing to show.
         photos = [];
@@ -496,12 +510,14 @@
 
   // Tray click (TASK-03-010): show the photo in the grid. When the current
   // folder/album/search view hides it, widen the view to the whole library
-  // first; the grid scrolls to it as soon as the reloaded list contains it.
+  // first (search and filters included); the grid scrolls to it as soon as
+  // the reloaded list contains it.
   function jumpToPhoto(photo: TrayPhoto): void {
     if (!photos.some((p) => p.id === photo.id)) {
       selectedFolders = [];
       selectedAlbum = null;
       searchEl?.clear();
+      gridState.clearFilters();
     }
     gridState.revealRequest = { id: photo.id };
   }
@@ -682,6 +698,9 @@
       <!-- Live search (TASK-01-018): debounced into the shared store; the
            effect above re-queries FTS and both renderers narrow. -->
       <SearchBar bind:this={searchEl} />
+      <!-- Filter buttons + date slider (TASK-03-014): same store-driven path
+           as the search; they AND-combine with it and apply in the viewer. -->
+      <FilterBar />
       <!-- Quick Tags (TASK-03-006, PLAN §2B): one click applies/removes one
            of the 10 configured tags on the whole selection. -->
       {#if settings && (gridState.selection.size > 0 || tray.count > 0)}
