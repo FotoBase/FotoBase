@@ -1,6 +1,6 @@
 # task: filter buttons and date slider
 
-**Feature:** [FEAT-03-05-search-filters](FEAT-03-05-search-filters.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-28)
+**Feature:** [FEAT-03-05-search-filters](FEAT-03-05-search-filters.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-28)
 
 ## Description
 Filter buttons (starred, video) and a date slider restricting the library to the last N days/months (PLAN §2 C "Filter buttons" + "Date slider", §6 P2a). Combines with live search; grid updates without jank.
