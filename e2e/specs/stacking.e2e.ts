@@ -64,6 +64,22 @@ describe("stacking", () => {
     const suggestion = $('[data-testid="stack-suggestion"]');
     await suggestion.waitForDisplayed();
     expect(await $$('[data-testid="stack-suggestion"]').length).toBe(1);
+    // TEMP debug
+    console.log(
+      "DEBUG row:",
+      await browser.execute(() => {
+        const row = document.querySelector('[data-testid="stack-suggestion"]') as HTMLElement;
+        const files = row.querySelector(".ss-files") as HTMLElement;
+        const dlg = document.querySelector(".ss-dialog") as HTMLElement;
+        return JSON.stringify({
+          html: row.outerHTML,
+          filesRect: files?.getBoundingClientRect(),
+          dialogRect: dlg?.getBoundingClientRect(),
+          cols: getComputedStyle(row).gridTemplateColumns,
+          win: [window.innerWidth, window.innerHeight],
+        });
+      }),
+    );
     await expect(suggestion).toHaveText(expect.stringContaining(PAIR_JPEG));
     await expect(suggestion).toHaveText(expect.stringContaining(PAIR_RAW));
 
