@@ -6,6 +6,7 @@
 
 import { DEFAULT_CAPTION_MODE, type CaptionMode } from "./captions";
 import { ALL_TIME } from "./filters";
+import type { GridSort } from "./search";
 
 export type GridRenderer = "dom" | "canvas";
 
@@ -34,6 +35,8 @@ class GridState {
   videosOnly = $state(false);
   /// Date-slider position (`DATE_STEPS` index); `ALL_TIME` = no restriction.
   dateStep = $state(ALL_TIME);
+  /// Grid order (TASK-03-019). Not a filter: `clearFilters` leaves it alone.
+  sort = $state<GridSort>("path");
   /// Thumbnail caption mode (TASK-03-015). Shared by both renderers; the
   /// shell seeds it from, and persists it to, the `caption_mode` setting.
   captionMode = $state<CaptionMode>(DEFAULT_CAPTION_MODE);
@@ -100,6 +103,7 @@ export function resetGridState(): void {
   gridState.scrollTop = 0;
   gridState.searchQuery = "";
   gridState.clearFilters();
+  gridState.sort = "path";
   gridState.thumbVersions = {};
   gridState.revealRequest = null;
   gridState.captionMode = DEFAULT_CAPTION_MODE;

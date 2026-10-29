@@ -1,6 +1,6 @@
 # task: date/time adjustment — shift, timezone fix, multi-camera merge
 
-**Feature:** [FEAT-03-01-metadata-editing-stacking](FEAT-03-01-metadata-editing-stacking.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-01-metadata-editing-stacking](FEAT-03-01-metadata-editing-stacking.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-29)
 
 ## Description
 Let the user shift capture time, fix timezones, and merge multi-camera sets so chronology is consistent; adjusted time is written to the sidecar so it survives catalog rebuild (PLAN §6 P2a deliverable). Depends on the sidecar merge-on-write design doc (task 00-010, hard gate for EPIC-03).
@@ -22,6 +22,6 @@ Let the user shift capture time, fix timezones, and merge multi-camera sets so c
 - E2e: multi-camera fixture shows interleaved chronological order after merge.
 
 ## Acceptance criteria
-- [ ] 03-019: capture-time shift, timezone fix, and multi-camera merge produce consistent ordering.
-- [ ] 03-019: adjustments are written to sidecars and rebuildable.
-- [ ] 03-019: originals unchanged (checksum).
+- [x] 03-019: capture-time shift, timezone fix, and multi-camera merge produce consistent ordering.
+- [x] 03-019: adjustments are written to sidecars and rebuildable.
+- [x] 03-019: originals unchanged (checksum).

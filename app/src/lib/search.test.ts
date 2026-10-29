@@ -22,6 +22,7 @@ const view = (over: Partial<LibraryView> = {}): LibraryView => ({
   starred: false,
   videosOnly: false,
   takenSince: null,
+  sort: "path",
   ...over,
 });
 
@@ -35,7 +36,13 @@ describe("queryLibraryItems", () => {
       starred: false,
       videosOnly: false,
       takenSince: null,
+      sort: "path",
     });
+  });
+
+  it("sends the capture-time sort (TASK-03-019)", async () => {
+    await queryLibraryItems(view({ sort: "capture" }));
+    expect(vi.mocked(invoke).mock.calls[0][1]).toMatchObject({ sort: "capture" });
   });
 
   it("treats a whitespace-only query as no search text", async () => {
@@ -67,6 +74,7 @@ describe("queryLibraryItems", () => {
       starred: true,
       videosOnly: true,
       takenSince: "2026-01-01",
+      sort: "path",
     });
   });
 

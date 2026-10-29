@@ -11,6 +11,8 @@
   import { t } from "./i18n.svelte.js";
   import AlbumMembership from "./AlbumMembership.svelte";
   import CaptionEditor from "./CaptionEditor.svelte";
+  import DateTimeDialog from "./DateTimeDialog.svelte";
+  import { formatCaptureTime } from "./datetime";
   import TagEditor from "./TagEditor.svelte";
   import { previewUri } from "./viewer";
   import {
@@ -34,6 +36,10 @@
   let { photo = null, onalbumschanged = () => {} }: Props = $props();
 
   let info = $state<PhotoInfo | null>(null);
+  // Date/time adjustment (TASK-03-019): the dialog writes the sidecar; the
+  // tick re-reads the info so the captured time shows the new value.
+  let dateTimeOpen = $state(false);
+  let reloadTick = $state(0);
 
   // Reload whenever the viewer navigates (functional spec: the pane updates
   // live as photos change). A monotonically increasing token discards stale
@@ -41,6 +47,7 @@
   let requestSeq = 0;
   $effect(() => {
     const p = photo;
+    void reloadTick;
     const seq = ++requestSeq;
     void (async () => {
       const loaded = p ? await loadPhotoInfo(p.id) : null;
@@ -123,6 +130,22 @@
       <dd data-testid="info-exposure">{(info && formatExposure(info)) ?? MISSING}</dd>
     </dl>
   </section>
+  <!-- Capture time (TASK-03-019, PLAN §6 P2a): shift / timezone fix /
+       multi-camera merge, written to the sidecar's exif:DateTimeOriginal. -->
+  <section>
+    <h3>{t("info.captured")}</h3>
+    <p class="info-captured" data-testid="info-captured">
+      {formatCaptureTime(info?.taken_at ?? null)}
+    </p>
+    <button
+      type="button"
+      data-testid="info-adjust-time"
+      disabled={!photo}
+      onclick={() => (dateTimeOpen = true)}
+    >
+      {t("info.adjustTime")}
+    </button>
+  </section>
   <section>
     <h3>{t("info.histogram")}</h3>
     <canvas class="info-histogram" data-testid="info-histogram" bind:this={chart} width="256" height="96"
@@ -169,3 +192,8 @@
     <AlbumMembership photoId={photo?.id ?? null} onchanged={onalbumschanged} />
   </section>
 </aside>
+<DateTimeDialog
+  bind:open={dateTimeOpen}
+  ids={photo ? [photo.id] : []}
+  onapplied={() => reloadTick++}
+/>

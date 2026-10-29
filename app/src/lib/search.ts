@@ -8,6 +8,10 @@
 
 import type { GridItem } from "./grid";
 
+/// Grid order: path (default; best match / album order where those apply) or
+/// chronological by capture time, adjusted times included (TASK-03-019).
+export type GridSort = "path" | "capture";
+
 export interface LibraryView {
   /// Folders-view selection; empty = the whole library.
   folders: number[];
@@ -18,6 +22,7 @@ export interface LibraryView {
   videosOnly: boolean;
   /// `YYYY-MM-DD` cutoff from the date slider, `null` = all time.
   takenSince: string | null;
+  sort: GridSort;
 }
 
 export async function queryLibraryItems(view: LibraryView): Promise<GridItem[]> {
@@ -30,5 +35,6 @@ export async function queryLibraryItems(view: LibraryView): Promise<GridItem[]> 
     starred: view.starred,
     videosOnly: view.videosOnly,
     takenSince: view.takenSince,
+    sort: view.sort,
   });
 }

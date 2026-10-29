@@ -16,6 +16,27 @@ const FILE_DATE: &str = "COALESCE(CASE WHEN f.taken_at GLOB \
     '[0-9][0-9][0-9][0-9][-:][0-9][0-9][-:][0-9][0-9]*' \
     THEN replace(substr(f.taken_at, 1, 10), ':', '-') END, date(f.mtime, 'unixepoch'))";
 
+/// Capture instant of a file in Unix seconds: `taken_at` (ISO with or
+/// without offset, or EXIF's colon-date form; a naive reading counts as UTC),
+/// else the `mtime`. Sorting by the instant keeps photos from cameras in
+/// different timezones in true chronological order.
+const CAPTURE_TS: &str = "COALESCE(unixepoch(CASE WHEN f.taken_at GLOB \
+    '[0-9][0-9][0-9][0-9]:[0-9][0-9]:[0-9][0-9]*' \
+    THEN replace(substr(f.taken_at, 1, 10), ':', '-') || substr(f.taken_at, 11) \
+    ELSE f.taken_at END), CAST(f.mtime AS INTEGER))";
+
+/// Grid order (TASK-03-019): adjusted capture times show up here, so a
+/// merged multi-camera set interleaves.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FileSort {
+    /// Best search match, album order inside an album, otherwise by path.
+    #[default]
+    Path,
+    /// Chronological by capture instant; ties keep the `Path` order.
+    Capture,
+}
+
 /// What the grid asks for. Every field narrows; `Default` is the whole
 /// (non-hidden) library, path-ordered.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -34,6 +55,7 @@ pub struct FileQuery {
     pub videos_only: bool,
     /// Date-slider cutoff, `YYYY-MM-DD`, inclusive.
     pub taken_since: Option<String>,
+    pub sort: FileSort,
 }
 
 fn is_iso_date(s: &str) -> bool {
@@ -107,6 +129,10 @@ impl Catalog {
             params.push(Box::new(cutoff.clone()));
             conds.push_str(&format!(" AND {FILE_DATE} >= ?"));
         }
+        let order = match query.sort {
+            FileSort::Path => order.to_string(),
+            FileSort::Capture => format!("{CAPTURE_TS}, {order}"),
+        };
         params.push(Box::new(limit as i64));
 
         let sql = format!(

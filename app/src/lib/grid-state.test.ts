@@ -55,6 +55,16 @@ describe("gridState", () => {
     expect(gridState.searchQuery).toBe("");
   });
 
+  it("carries the grid sort, outside the filters (TASK-03-019)", () => {
+    expect(gridState.sort).toBe("path");
+    gridState.sort = "capture";
+    gridState.clearFilters();
+    expect(gridState.sort).toBe("capture");
+    expect(gridState.filtersActive).toBe(false);
+    resetGridState();
+    expect(gridState.sort).toBe("path");
+  });
+
   it("carries the library filters in the shared store (TASK-03-014)", () => {
     expect(gridState.starredOnly).toBe(false);
     expect(gridState.videosOnly).toBe(false);
