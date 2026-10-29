@@ -85,17 +85,17 @@ fn set_caption_upgrades_the_attribute_form_without_duplicating() {
     let path = dir.path().join("photo.jpg.xmp");
     std::fs::write(
         &path,
-        r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" dc:description="legacy"/></rdf:RDF></x:xmpmeta>"#,
+        r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" dc:description="attribute-form"/></rdf:RDF></x:xmpmeta>"#,
     )
     .unwrap();
 
     let mut sc = Sidecar::read(&path).unwrap();
-    assert_eq!(sc.caption().as_deref(), Some("legacy"));
+    assert_eq!(sc.caption().as_deref(), Some("attribute-form"));
     sc.set_caption("fresh");
     sc.write(&path).unwrap();
 
     let raw = std::fs::read_to_string(&path).unwrap();
-    assert!(!raw.contains("legacy"), "{raw}");
+    assert!(!raw.contains("attribute-form"), "{raw}");
     assert_eq!(raw.matches("fresh").count(), 1, "{raw}");
     assert_eq!(Sidecar::read(&path).unwrap().caption().as_deref(), Some("fresh"));
 }

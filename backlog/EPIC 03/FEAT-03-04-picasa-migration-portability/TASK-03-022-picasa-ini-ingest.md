@@ -1,6 +1,6 @@
 # task: picasa.ini ingest on first scan
 
-**Feature:** [FEAT-03-04-picasa-migration-portability](FEAT-03-04-picasa-migration-portability.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-04-picasa-migration-portability](FEAT-03-04-picasa-migration-portability.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-29)
 
 ## Description
 On first scan of a folder, read `Picasa.ini` files and convert legacy stars, albums, and faces into XMP sidecars — the "your old library, restored" onboarding hook (PLAN §1 onboarding, §6 P2a). Depends on the sidecar merge-on-write design (00-010, hard gate for EPIC-03).
@@ -20,6 +20,6 @@ On first scan of a folder, read `Picasa.ini` files and convert legacy stars, alb
 - Integration: real-world Picasa library fixture migrates with zero loss vs a hand-verified expected sidecar set; second scan changes nothing.
 
 ## Acceptance criteria
-- [ ] 03-022: first-scan ingest converts legacy stars, albums, faces to XMP.
-- [ ] 03-022: a real Picasa library test case migrates with no loss.
-- [ ] 03-022: idempotent; `.ini` files untouched.
+- [x] 03-022: first-scan ingest converts legacy stars, albums, faces to XMP.
+- [x] 03-022: a real Picasa library test case migrates with no loss.
+- [x] 03-022: idempotent; `.ini` files untouched.

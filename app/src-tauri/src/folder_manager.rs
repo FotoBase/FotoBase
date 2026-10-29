@@ -102,7 +102,7 @@ impl FolderManager {
         let report =
             scan_folder(&mut cat, Path::new(path), &std::sync::atomic::AtomicBool::new(false))
                 .map_err(|e| format!("scan {path}: {e}"))?;
-        if report.changed() {
+        if report.changed() || !report.folder_ini_offered.is_empty() {
             if let Some(hook) = &self.on_change {
                 hook(&report);
             }

@@ -186,8 +186,11 @@ fn with_folder_manager<T>(
         // after startup never reaches the UI (perf decision run: the grid
         // scrolled EMPTY, so no thumb:// request ever happened).
         let catalog_path = state.catalog_path.clone();
-        let hook = std::sync::Arc::new(move |_report: &fotobase_scanner::ScanReport| {
+        let hook = std::sync::Arc::new(move |report: &fotobase_scanner::ScanReport| {
             let _ = app_handle.emit("library-changed", ());
+            if !report.folder_ini_offered.is_empty() {
+                let _ = app_handle.emit("folder-ini-offered", &report.folder_ini_offered);
+            }
             spawn_hash_backfill(catalog_path.clone(), app_handle.clone());
         });
         let fm = folder_manager::FolderManager::open_with(
@@ -471,6 +474,35 @@ fn stack_suggestions(
         i64::from(guard.stack_window_secs)
     };
     with_catalog(&state, |cat| cat.stack_suggestions(window))
+}
+
+/// Folders whose folder-ini migration offer is still unanswered
+/// (TASK-03-022). A scan records the offer; nothing is migrated until the
+/// user accepts.
+#[tauri::command]
+fn folder_ini_pending_folders(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+    with_catalog(&state, |cat| cat.folder_ini_pending_folders())
+}
+
+/// Accept the migration for one folder: its stars, albums and faces
+/// become XMP sidecar data. The ini itself is never modified.
+#[tauri::command]
+fn ingest_folder_ini(
+    path: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_catalog::FolderIniReport, String> {
+    let report = with_catalog_sync(&state, |cat| cat.ingest_folder_ini(&path))?;
+    if report.written > 0 || report.albums_created > 0 {
+        let _ = app.emit("library-changed", ());
+    }
+    Ok(report)
+}
+
+/// Decline the migration for one folder; scans never offer it again.
+#[tauri::command]
+fn decline_folder_ini(path: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    with_catalog_mut(&state, |cat| cat.decline_folder_ini_ingest(&path))
 }
 
 /// Albums (TASK-03-008): every album with its photo count and cover.
@@ -1635,6 +1667,9 @@ pub fn run() {
             unstack,
             list_stack,
             stack_suggestions,
+            folder_ini_pending_folders,
+            ingest_folder_ini,
+            decline_folder_ini,
             list_albums,
             create_album,
             update_album,

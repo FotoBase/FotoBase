@@ -7,16 +7,21 @@
 pub const CRATE_NAME: &str = "fotobase-metadata";
 
 mod datetime;
+mod folder_ini;
 mod folder_meta;
 mod gps;
 mod sidecar;
 
 pub use datetime::CaptureTime;
+pub use folder_ini::{
+    folder_ini_files, is_folder_ini_name, FaceRect, FolderIni, FolderIniAlbum, FolderIniFace,
+    FolderIniPhoto, FOLDER_INI_FILE, FOLDER_INI_HIDDEN_FILE, UNNAMED_ALBUM, UNNAMED_CONTACT,
+};
 pub use folder_meta::{FolderMeta, FolderMetaError, FOLDER_META_FILE};
 pub use gps::{parse_coordinate, GpsAxis, GpsParseError};
 pub use sidecar::{
-    backup_path, tmp_path, FbNs, QuickXmlBackend, Sidecar, SidecarBackend, SidecarError,
-    StackMembership, StackRole, FB_NS,
+    backup_path, tmp_path, FaceRegion, FbNs, QuickXmlBackend, Sidecar, SidecarBackend,
+    SidecarError, StackMembership, StackRole, FB_NS,
 };
 
 #[cfg(test)]

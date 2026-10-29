@@ -15,6 +15,8 @@
   import ImportDialog from "./lib/ImportDialog.svelte";
   import OptionsDialog from "./lib/OptionsDialog.svelte";
   import PhotoTray from "./lib/PhotoTray.svelte";
+  import FolderIniDialog from "./lib/FolderIniDialog.svelte";
+  import { onFolderIniOffered, folderIniPendingFolders } from "./lib/folder-ini";
   import QuickTags from "./lib/QuickTags.svelte";
   import StackPicker from "./lib/StackPicker.svelte";
   import StackSuggestionsDialog from "./lib/StackSuggestionsDialog.svelte";
@@ -62,6 +64,10 @@
   let folderManagerOpen = $state(false);
   let importOpen = $state(false);
   let trashOpen = $state(false);
+  // Folder ini migration offer (TASK-03-022): folders a scan found an ini
+  // in; the dialog opens whenever one is waiting for an answer.
+  let folderIniOpen = $state(false);
+  let folderIniFolders = $state<string[]>([]);
   // Stacking (TASK-03-021): suggested RAW+JPEG pairs / edited versions, and
   // the picker a stack badge opens.
   let stackSuggestionsOpen = $state(false);
@@ -411,6 +417,29 @@
         });
       } catch {
         // Browser dev: no backend, no events.
+      }
+    })();
+    return () => unlisten?.();
+  });
+
+  // Folder ini offers (TASK-03-022): a scan that meets a folder's ini
+  // announces it on `folder-ini-offered`; offers recorded earlier
+  // (a previous session never answered) are read once at startup. Either
+  // way the user decides — nothing migrates by itself.
+  $effect(() => {
+    let unlisten: (() => void) | null = null;
+    const offer = (found: string[]): void => {
+      const fresh = found.filter((f) => !folderIniFolders.includes(f));
+      if (fresh.length === 0) return;
+      folderIniFolders = [...folderIniFolders, ...fresh];
+      folderIniOpen = true;
+    };
+    void (async () => {
+      try {
+        offer(await folderIniPendingFolders());
+        unlisten = await onFolderIniOffered(offer);
+      } catch {
+        // Browser dev: no backend, no offers.
       }
     })();
     return () => unlisten?.();
@@ -771,6 +800,11 @@
     <ImportDialog bind:open={importOpen} onchanged={refreshLibrary} />
   {/if}
   <TrashDialog bind:open={trashOpen} onchanged={refreshView} />
+  <FolderIniDialog
+    bind:open={folderIniOpen}
+    bind:folders={folderIniFolders}
+    onmigrated={() => void refreshLibrary()}
+  />
   <StackSuggestionsDialog bind:open={stackSuggestionsOpen} onapplied={() => void refreshView()} />
   <StackPicker
     bind:open={stackPicker.open}

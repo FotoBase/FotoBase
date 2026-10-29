@@ -321,9 +321,10 @@ impl Watcher {
                             Ok(r) => {
                                 tracing::debug!(root = %root.display(), added = r.added,
                                     updated = r.updated, removed = r.removed, "watched rescan");
-                                // Real change: wake the UI (and only then —
-                                // no-op rescans must not trigger re-lists).
-                                if r.changed() {
+                                // Real change (or a fresh folder ini offer): wake
+                                // the UI — and only then, no-op rescans must not
+                                // trigger re-lists.
+                                if r.changed() || !r.folder_ini_offered.is_empty() {
                                     if let Some(hook) = &on_change {
                                         hook(&r);
                                     }
