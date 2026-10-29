@@ -194,7 +194,7 @@
       {#each virtualRows as row (row.key)}
         <div
           class="grid-row"
-          style="transform: translateY({row.start}px); height: {row.size}px; grid-template-columns: repeat({columns}, var(--thumb-size))"
+          style="--thumb-size: {gridState.thumbSize}px; transform: translateY({row.start}px); height: {row.size}px; grid-template-columns: repeat({columns}, var(--thumb-size))"
         >
           {#each rowItems(items, columns, row.index) as item, localIdx (item.id)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->

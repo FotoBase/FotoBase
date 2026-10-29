@@ -62,34 +62,6 @@ describe("stacking", () => {
   it("lists every photo of the library before anything is stacked", async () => {
     await waitForCellCount(3);
     expect(await badges().length).toBe(0);
-    // TEMP debug
-    fs.mkdirSync("screenshots", { recursive: true });
-    await browser.saveScreenshot("screenshots/initial-grid.png");
-    console.log(
-      "DEBUG grid:",
-      await browser.execute(() => {
-        const r = (el: Element | null) => {
-          const b = el?.getBoundingClientRect();
-          return b && [b.x, b.y, b.width, b.height].map(Math.round);
-        };
-        const g = document.querySelector('[data-testid="grid-scroll"]');
-        const inner = document.querySelector(".grid-inner") as HTMLElement;
-        return JSON.stringify({
-          scroll: r(g),
-          inner: r(inner),
-          innerH: inner.style.height,
-          rows: Array.from(document.querySelectorAll(".grid-row")).map((e) => [
-            (e as HTMLElement).style.cssText,
-            r(e),
-          ]),
-          cells: Array.from(document.querySelectorAll('[data-testid="grid-cell"]')).map((e) => r(e)),
-          imgs: Array.from(document.querySelectorAll('[data-testid="grid-cell"] > *')).map((e) => [
-            e.tagName,
-            r(e),
-          ]),
-        });
-      }),
-    );
   });
 
   it("offers the RAW+JPEG pair and stacks it into one thumbnail with a badge", async () => {
@@ -123,33 +95,6 @@ describe("stacking", () => {
   });
 
   it("opens the picker from the badge and switches the top of the stack", async () => {
-    // TEMP debug
-    fs.mkdirSync("screenshots", { recursive: true });
-    await browser.saveScreenshot("screenshots/before-badge-click.png");
-    console.log(
-      "DEBUG badge:",
-      await browser.execute(() => {
-        const b = document.querySelector('[data-testid="stack-badge"]') as HTMLElement;
-        const r = b.getBoundingClientRect();
-        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-        const cs = getComputedStyle(b);
-        return JSON.stringify({
-          rect: r,
-          hit: hit?.outerHTML.slice(0, 200),
-          display: cs.display,
-          vis: cs.visibility,
-          pe: cs.pointerEvents,
-          win: [window.innerWidth, window.innerHeight, window.scrollY],
-          overlays: document.querySelectorAll(".ss-backdrop,.stack-picker,.context-menu").length,
-          grid: (() => {
-            const g = document.querySelector('[data-testid="grid-scroll"]') as HTMLElement;
-            const gr = g.getBoundingClientRect();
-            return { top: g.scrollTop, h: g.clientHeight, y: gr.y, bottom: gr.bottom };
-          })(),
-        });
-      }),
-    );
-    await badges()[0].scrollIntoView({ block: "center", inline: "center" });
     await badges()[0].click();
     await $('[data-testid="stack-picker"]').waitForDisplayed();
     await browser.waitUntil(async () => (await members().length) === 2);
