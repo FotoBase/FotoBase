@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fotobase.github.io/ns/portable-export-v1.schema.json",
+  "title": "Fotobase Portable Export v1",
+  "description": "User data exported by Fotobase (albums, tags, edit recipes). Each section is present only when it was picked for export. See docs/portable-export.md.",
+  "type": "object",
+  "required": ["spec", "version", "exported_at", "generator"],
+  "additionalProperties": false,
+  "properties": {
+    "spec": { "const": "fotobase.export" },
+    "version": { "type": "integer", "minimum": 1 },
+    "exported_at": {
+      "type": "string",
+      "description": "UTC export time, RFC 3339 (YYYY-MM-DDTHH:MM:SSZ).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "generator": { "type": "string" },
+    "albums": { "type": "array", "items": { "$ref": "#/$defs/album" } },
+    "tags": { "type": "array", "items": { "$ref": "#/$defs/tag" } },
+    "recipes": { "type": "array", "items": { "$ref": "#/$defs/recipe" } },
+    "unreadable_recipes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/unreadableRecipe" }
+    }
+  },
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Absolute path of the original photo as cataloged."
+    },
+    "album": {
+      "type": "object",
+      "required": ["id", "name", "members"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable album UUID, the value written to members' fb:Albums."
+        },
+        "name": { "type": "string" },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "place": { "type": "string" },
+        "description": { "type": "string" },
+        "members": {
+          "type": "array",
+          "description": "Member photos in album order.",
+          "items": { "$ref": "#/$defs/path" }
+        }
+      }
+    },
+    "tag": {
+      "type": "object",
+      "required": ["name", "files"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "files": { "type": "array", "items": { "$ref": "#/$defs/path" } }
+      }
+    },
+    "recipe": {
+      "type": "object",
+      "required": ["file", "recipe"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "$ref": "#/$defs/path" },
+        "recipe": { "$ref": "recipe-v1.schema.json" }
+      }
+    },
+    "unreadableRecipe": {
+      "type": "object",
+      "description": "An fb:Recipe that is not a conforming v1 recipe, kept verbatim so no data is lost.",
+      "required": ["file", "raw", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "$ref": "#/$defs/path" },
+        "raw": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    }
+  }
+}

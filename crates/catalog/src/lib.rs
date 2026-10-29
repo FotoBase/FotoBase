@@ -12,6 +12,7 @@ pub mod hidden;
 pub mod metadata_edit;
 pub mod migrations;
 pub mod missing;
+pub mod portable;
 pub mod query;
 pub mod relocate;
 pub mod stacks;
@@ -24,6 +25,7 @@ pub use folder_ini::{FolderIniReport, FolderIniStatus};
 pub use metadata_edit::{FieldError, GpsEdit, MetadataEdit, MetadataField};
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
+pub use portable::{ExportFormat, ExportReport, ExportSections, PortableExport};
 pub use query::{FileQuery, FileSort};
 pub use relocate::BatchFile;
 pub use stacks::{StackKind, StackSuggestion, DEFAULT_PAIR_WINDOW_SECS};
@@ -52,6 +54,9 @@ pub enum CatalogError {
     /// A library query the caller built wrongly (e.g. a malformed date cutoff).
     #[error("invalid query: {0}")]
     InvalidQuery(String),
+    /// A portable export (TASK-03-023) that cannot be written.
+    #[error("export failed: {0}")]
+    Export(String),
     #[error(transparent)]
     Sql(#[from] rusqlite::Error),
     #[error(transparent)]

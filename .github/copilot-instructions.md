@@ -53,6 +53,7 @@ Before touching anything that writes metadata, read `docs/sidecar-merge-on-write
 | `docs/adr/adr-0001…0012`                                | Accepted decisions (ADR-0010: GitHub Releases only; ADR-0012: versioning & releases) |
 | `docs/edit-recipe-spec-v1.md` + `recipe-v1.schema.json` | Edit recipe JSON (versioned, unknown-op-skip)                                        |
 | `docs/sidecar-merge-on-write.md`                        | All XMP sidecar writes                                                               |
+| `docs/portable-export.md` + `portable-export-v1.schema.json` | Portable user-data export (JSON/CSV, §5 anti-lock-in)                         |
 | `docs/webkitgtk-perf-protocol.md`                       | Perf runs, `perf-report.json` schema, DOM-vs-canvas decision                         |
 | `docs/workflows/release-checklist.md`                   | Per-release steps                                                                    |
 | `docs/workflows/lint-format.md`                         | Lint/format/commit policy                                                            |

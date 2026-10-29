@@ -1,6 +1,6 @@
 # task: portable export of user data to JSON/CSV
 
-**Feature:** [FEAT-03-04-picasa-migration-portability](FEAT-03-04-picasa-migration-portability.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-04-picasa-migration-portability](FEAT-03-04-picasa-migration-portability.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-29)
 
 ## Description
 Built-in portable export of albums, tags, and edit recipes to JSON/CSV, available at any time — the anti-lock-in guarantee (PLAN §5 "Portability guarantee": no data held hostage in the catalog).
@@ -20,6 +20,6 @@ Built-in portable export of albums, tags, and edit recipes to JSON/CSV, availabl
 - Integration: export → importable/readable: a parser test round-trips the JSON back into equivalent structures.
 
 ## Acceptance criteria
-- [ ] 03-023: albums, tags, recipes export to JSON/CSV at any time.
-- [ ] 03-023: recipe JSON validates against the versioned schema.
-- [ ] 03-023: a user can verify their data outside the app (documented example in repo).
+- [x] 03-023: albums, tags, recipes export to JSON/CSV at any time.
+- [x] 03-023: recipe JSON validates against the versioned schema.
+- [x] 03-023: a user can verify their data outside the app (documented example in repo).
