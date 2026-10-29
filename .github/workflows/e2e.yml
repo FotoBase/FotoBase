@@ -1,0 +1,84 @@
+name: e2e
+
+# End-to-end suite: WebdriverIO + tauri-driver (PLAN §4) driving the real app
+# on ubuntu-latest under xvfb. Same shape as perf-smoke: push to main, manual
+# dispatch, weekly schedule (WebView drift, protocol §10). The pull_request
+# trigger is limited to changes of the suite itself, so a change to e2e/ is
+# proven before it merges (workflow_dispatch only exists once a workflow is on
+# the default branch).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "e2e/**"
+      - ".github/workflows/e2e.yml"
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 04:30 UTC — after perf-smoke, so the two never build at once.
+    - cron: "30 4 * * 1"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system deps (Tauri/WebKitGTK + xvfb for the headless run)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libde265-dev \
+            libaom-dev \
+            webkit2gtk-driver \
+            xvfb
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: cargo install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: Build frontend (embedded via custom-protocol)
+        working-directory: app
+        run: npm ci && npm run build
+
+      - name: cargo build (debug app for the driver)
+        run: cargo build -p fotobase --features tauri/custom-protocol
+
+      - name: npm ci (e2e)
+        working-directory: e2e
+        run: npm ci
+
+      - name: Typecheck the suite
+        working-directory: e2e
+        run: npm run typecheck
+
+      - name: Run e2e specs
+        working-directory: e2e
+        run: xvfb-run -a npm test
+
+      - name: Upload failure screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: e2e/screenshots
+          if-no-files-found: ignore

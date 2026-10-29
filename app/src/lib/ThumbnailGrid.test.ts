@@ -398,3 +398,14 @@ describe("ThumbnailGrid stack badge (TASK-03-021)", () => {
     expect(gridState.selection.size).toBe(0);
   });
 });
+
+describe("ThumbnailGrid row layout", () => {
+  it("defines --thumb-size on the row, where grid-template-columns reads it", () => {
+    // `repeat(N, var(--thumb-size))` is invalid (one column, cells stacked)
+    // when the property is only set on the cells below the row.
+    const { container } = render(ThumbnailGrid, { items: makeItems(10) });
+    const row = container.querySelector<HTMLElement>(".grid-row");
+    expect(row).not.toBeNull();
+    expect(row!.style.getPropertyValue("--thumb-size")).toBe(`${gridState.thumbSize}px`);
+  });
+});
