@@ -1,6 +1,6 @@
 # task: info-pane metadata editing — date, GPS, artist, copyright
 
-**Feature:** [FEAT-03-01-metadata-editing-stacking](FEAT-03-01-metadata-editing-stacking.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-29)
+**Feature:** [FEAT-03-01-metadata-editing-stacking](FEAT-03-01-metadata-editing-stacking.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-29)
 
 ## Description
 Editable fields in the info pane for date, GPS, artist, copyright, round-tripping through XMP sidecars per PLAN §5 (user data lives in sidecars; catalog is cache). Depends on the sidecar merge-on-write design doc (00-010, hard gate for EPIC-03).
