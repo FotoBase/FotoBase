@@ -96,6 +96,8 @@ describe("stacking", () => {
 
   it("opens the picker from the badge and switches the top of the stack", async () => {
     // TEMP debug
+    fs.mkdirSync("screenshots", { recursive: true });
+    await browser.saveScreenshot("screenshots/before-badge-click.png");
     console.log(
       "DEBUG badge:",
       await browser.execute(() => {

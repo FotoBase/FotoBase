@@ -10,6 +10,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { browser } from "@wdio/globals";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const appBinary =
@@ -90,6 +91,14 @@ export const config: WebdriverIO.Config = {
       },
     });
     await waitForPort(DRIVER_PORT, 30_000);
+  },
+
+  // A failing step leaves a screenshot of the app (uploaded by the workflow).
+  async afterTest(test, _context, { passed }) {
+    if (passed) return;
+    fs.mkdirSync(path.join(import.meta.dirname, "screenshots"), { recursive: true });
+    const name = test.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+    await browser.saveScreenshot(path.join(import.meta.dirname, "screenshots", `${name}.png`));
   },
 
   afterSession() {
