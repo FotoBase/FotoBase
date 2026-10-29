@@ -15,6 +15,7 @@ use tauri_plugin_updater::UpdaterExt;
 pub mod associations;
 pub mod batch_commands;
 pub mod codec;
+pub mod datetime_commands;
 pub mod display_profile;
 pub mod emit_pacer;
 pub mod file_menu;
@@ -45,6 +46,14 @@ const REBUILD_QUEUE_CAPACITY: usize = 2;
 /// each request gets a unique key; the single worker serializes them.
 const IMPORT_QUEUE_CAPACITY: usize = 2;
 
+/// Capacity of the date/time adjustment queue: bounded, per PLAN §3 rule 4.
+/// Batches differ in selection and parameters, so each gets a unique key;
+/// the single worker serializes them (one sidecar writer at a time).
+const DATETIME_QUEUE_CAPACITY: usize = 4;
+
+/// Sequence number for unique date/time job keys.
+static DATETIME_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Sequence number for unique import job keys.
 static IMPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -74,6 +83,8 @@ struct AppState {
     /// Bounded queue for import jobs (TASK-01-017); unique keys, the
     /// worker serializes concurrent imports.
     imports: fotobase_jobs::Queue<import::ImportReport>,
+    /// Bounded queue for date/time adjustment batches (TASK-03-019).
+    datetime_jobs: fotobase_jobs::Queue<fotobase_catalog::AdjustReport>,
     /// Cancel token of the most recently started import (TASK-01-017):
     /// `cancel_import` trips it, the running job observes the flag.
     import_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
@@ -294,8 +305,13 @@ fn list_files(
 /// view, live search text and the filter buttons / date slider AND-combine
 /// in a single catalog query. `starred` resolves to the rating threshold for
 /// the current rating mode; `taken_since` is the date slider's `YYYY-MM-DD`
-/// cutoff. Ids and metadata only — no image bytes over IPC.
+/// cutoff; `sort` is `path` (default) or `capture` (TASK-03-019: chronological,
+/// adjusted capture times included). Ids and metadata only — no image bytes
+/// over IPC.
 #[tauri::command]
+// Each argument is one named IPC field the frontend sends; bundling them
+// would change the wire shape for no gain.
+#[allow(clippy::too_many_arguments)]
 fn query_files(
     text: Option<String>,
     folders: Option<Vec<i64>>,
@@ -303,6 +319,7 @@ fn query_files(
     starred: Option<bool>,
     videos_only: Option<bool>,
     taken_since: Option<String>,
+    sort: Option<fotobase_catalog::FileSort>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<fotobase_catalog::FileInfo>, String> {
     let min_rating = if starred == Some(true) {
@@ -317,6 +334,7 @@ fn query_files(
         min_rating,
         videos_only: videos_only == Some(true),
         taken_since,
+        sort: sort.unwrap_or_default(),
     };
     with_catalog(&state, |cat| cat.query_files(&query, usize::MAX))
 }
@@ -583,6 +601,72 @@ fn preview_batch_rename(
     state: tauri::State<'_, AppState>,
 ) -> Result<fotobase_scanner::batch::BatchPlan, String> {
     with_catalog_str(&state, |cat| batch_commands::preview_rename(cat, &ids, &spec, policy))
+}
+
+/// Date/time adjustment preview (TASK-03-019): per photo, the capture time
+/// now and after `adjustment` — catalog data only, nothing is written.
+#[tauri::command]
+fn preview_datetime_adjustment(
+    ids: Vec<i64>,
+    adjustment: fotobase_catalog::TimeAdjustment,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::TimePreview>, String> {
+    with_catalog_str(&state, |cat| datetime_commands::preview(cat, &ids, &adjustment))
+}
+
+/// Shift / timezone fix / multi-camera merge (TASK-03-019, PLAN §6 P2a; a merge
+/// is a shift by the clock difference the dialog computes): one
+/// sidecar write per photo, catalog second, originals untouched. Heavy work
+/// runs in the bounded job queue (§3 rule 4) on a blocking thread with its own
+/// catalog connection; progress streams on the `datetime-progress` event.
+#[tauri::command]
+async fn adjust_datetime(
+    ids: Vec<i64>,
+    adjustment: fotobase_catalog::TimeAdjustment,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_catalog::AdjustReport, String> {
+    adjustment.validate().map_err(|e| e.to_string())?;
+    let queue = state.datetime_jobs.clone();
+    let job_app = app.clone();
+    let catalog_path = state.catalog_path.clone();
+    let seq = DATETIME_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let handle = queue
+        .try_enqueue(
+            format!("datetime-{seq}"),
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |ctx| {
+                let app = job_app.clone();
+                let ids = ids.clone();
+                let catalog_path = catalog_path.clone();
+                let ctx = ctx.clone();
+                async move {
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        let cancel = std::sync::atomic::AtomicBool::new(false);
+                        datetime_commands::run(&catalog_path, &ids, &adjustment, &cancel, &|p| {
+                            if ctx.is_cancelled() {
+                                cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
+                            let _ = app.emit(datetime_commands::DATETIME_EVENT, p);
+                        })
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(report)) => fotobase_jobs::Outcome::Done(report),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("datetime task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue datetime adjustment: {e}"))?;
+    let outcome = handle.result().await;
+    let _ = app.emit("library-changed", ());
+    match outcome.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("date/time adjustment cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
 }
 
 /// Batch rename: real file renames, sidecars and catalog rows following.
@@ -1348,6 +1432,9 @@ pub fn run() {
             let imports = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(IMPORT_QUEUE_CAPACITY)
             });
+            let datetime_jobs = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(DATETIME_QUEUE_CAPACITY)
+            });
             let persisted = settings::Settings::load(&data_dir);
             // OS-opened files (TASK-01-025): whatever the OS passed on the
             // command line that is an existing supported image is parked
@@ -1363,6 +1450,7 @@ pub fn run() {
                 thumbs,
                 rebuilds,
                 imports,
+                datetime_jobs,
                 import_cancel: Mutex::new(None),
                 settings: Mutex::new(persisted),
                 pending_update: Mutex::new(None),
@@ -1470,6 +1558,8 @@ pub fn run() {
             remove_tag,
             rename_tag,
             list_tags,
+            preview_datetime_adjustment,
+            adjust_datetime,
             preview_batch_rename,
             batch_rename,
             preview_batch_move,

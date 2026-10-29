@@ -27,7 +27,13 @@ This is the highest data-loss-risk area of the app. Everything here is normative
 | Hidden (photo) | `fb:Hidden` | boolean | §11 Q6 |
 | Hidden (folder) | `.fotobase` folder metadata file, one JSON flag `hidden` | per folder | §11 Q6 |
 
-Standard fields stay standard so other apps interoperate: `xmp:Rating`, `dc:subject`, `lr:hierarchicalSubject`, `dc:description`, `exif:GPS*`, `mwg-rs:Regions` (§5 table).
+Standard fields stay standard so other apps interoperate: `xmp:Rating`, `dc:subject`, `lr:hierarchicalSubject`, `dc:description`, `exif:GPS*`, `exif:DateTimeOriginal`, `mwg-rs:Regions` (§5 table).
+
+### Capture time (`exif:DateTimeOriginal`)
+
+- The date/time adjustment tools (shift, timezone fix, multi-camera merge; 03-019) write the adjusted capture time to `exif:DateTimeOriginal` as ISO-8601 (`2024-06-01T10:00:00+02:00`; no offset suffix when the source had none). `xmp:CreateDate` and `photoshop:DateCreated` are updated only when the packet already carries them, so no app sees two capture dates; they are never invented.
+- Base for an adjustment: the sidecar's value, else the catalog's `files.taken_at`, else the file `mtime` (UTC). `files.taken_at` mirrors the sidecar value on write-through and on rebuild; a sidecar without the field never clears the cached value.
+- One sidecar write per photo per batch (§3 coalescing); a photo that cannot be adjusted (unreadable date, out of range, I/O error) is reported and skipped, never half-written.
 
 ### Folder-level `.fotobase` file
 

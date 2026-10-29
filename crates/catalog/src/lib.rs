@@ -6,6 +6,7 @@
 //! trigger the rebuild-from-sidecars recovery path.
 
 pub mod albums;
+pub mod datetime;
 pub mod hidden;
 pub mod migrations;
 pub mod missing;
@@ -15,9 +16,10 @@ pub mod sync;
 pub mod trash;
 
 pub use albums::AlbumInfo;
+pub use datetime::{AdjustError, AdjustFailure, AdjustReport, TimeAdjustment, TimePreview};
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
-pub use query::FileQuery;
+pub use query::{FileQuery, FileSort};
 pub use relocate::BatchFile;
 pub use sync::{sidecar_path, SyncError, SyncStats};
 pub use trash::{TrashAction, TrashEntry, UndoReport, DEFAULT_TRASH_WINDOW_DAYS};

@@ -36,6 +36,8 @@ pub enum SyncError {
     #[error(transparent)]
     Sidecar(#[from] SidecarError),
     #[error(transparent)]
+    Adjust(#[from] crate::datetime::AdjustError),
+    #[error(transparent)]
     FolderMeta(#[from] FolderMetaError),
     #[error("no trash entry with id {0}")]
     UnknownTrashEntry(i64),
@@ -74,6 +76,9 @@ struct UserData {
     albums: Vec<String>,
     /// `fb:Hidden` (TASK-03-009).
     hidden: bool,
+    /// `exif:DateTimeOriginal` as ISO text (TASK-03-019); `None` leaves the
+    /// catalog's scan-time value alone.
+    taken_at: Option<String>,
 }
 
 impl UserData {
@@ -87,6 +92,7 @@ impl UserData {
             gps: sc.gps(),
             albums: sc.albums(),
             hidden: sc.hidden(),
+            taken_at: sc.capture_time().map(|t| t.to_xmp()),
         }
     }
 }
@@ -275,6 +281,19 @@ impl Catalog {
         file_id: i64,
         apply: impl FnOnce(&mut Sidecar),
     ) -> SyncResult<()> {
+        self.try_mutate_user_data(file_id, |sc| {
+            apply(sc);
+            Ok(())
+        })
+    }
+
+    /// [`Self::mutate_user_data`] for edits that can be refused: an `Err`
+    /// from `apply` leaves the sidecar and the catalog untouched.
+    pub(crate) fn try_mutate_user_data(
+        &mut self,
+        file_id: i64,
+        apply: impl FnOnce(&mut Sidecar) -> SyncResult<()>,
+    ) -> SyncResult<()> {
         let tx = self.conn_mut().transaction()?;
         let path: String = tx
             .query_row("SELECT path FROM files WHERE id = ?1", [file_id], |r| r.get(0))
@@ -283,7 +302,7 @@ impl Catalog {
         let sc_path = sidecar_path(&path);
 
         let mut sc = Sidecar::read(&sc_path)?;
-        apply(&mut sc);
+        apply(&mut sc)?;
         sc.write(&sc_path)?;
 
         let data = UserData::from_sidecar(&sc);
@@ -460,8 +479,8 @@ fn apply_user_data(tx: &rusqlite::Transaction<'_>, file_id: i64, data: &UserData
     )?;
 
     tx.execute(
-        "UPDATE files SET hidden = ?1 WHERE id = ?2",
-        rusqlite::params![data.hidden, file_id],
+        "UPDATE files SET hidden = ?1, taken_at = COALESCE(?2, taken_at) WHERE id = ?3",
+        rusqlite::params![data.hidden, data.taken_at, file_id],
     )?;
 
     tx.execute("DELETE FROM file_tags WHERE file_id = ?1", [file_id])?;

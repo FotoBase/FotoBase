@@ -7,6 +7,11 @@
   import { t } from "./i18n.svelte.js";
   import { ALL_TIME, DATE_STEPS, dateStepLabel } from "./filters";
   import { gridState } from "./grid-state.svelte.js";
+  import type { GridSort } from "./search";
+
+  function onsort(event: Event & { currentTarget: HTMLSelectElement }): void {
+    gridState.sort = event.currentTarget.value as GridSort;
+  }
 
   /// Same tens-of-ms window as the search box.
   const DEBOUNCE_MS = 80;
@@ -54,6 +59,13 @@
   >
     {t("filters.videos")}
   </button>
+  <label class="filter-sort">
+    <span>{t("filters.sort")}</span>
+    <select data-testid="filter-sort" value={gridState.sort} onchange={onsort}>
+      <option value="path">{t("filters.sortPath")}</option>
+      <option value="capture">{t("filters.sortCapture")}</option>
+    </select>
+  </label>
   <label class="filter-date">
     <span class="filter-date-label" data-testid="filter-date-label">{dateStepLabel(position)}</span>
     <input

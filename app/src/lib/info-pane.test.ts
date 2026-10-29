@@ -181,6 +181,64 @@ describe("InfoPane", () => {
     renderPane({ id: 1, filename: "a.jpg", hash: "a".repeat(32) });
     await waitFor(() => expect(screen.getByTestId("info-camera").textContent).toBe("—"));
   });
+
+  // TASK-03-019: capture time + the date/time adjustment entry point.
+  it("shows the capture time, or a dash when none is known", async () => {
+    vi.mocked(invoke).mockResolvedValue({ ...PHOTO_A, taken_at: "2024-06-01T12:00:00+02:00" });
+    renderPane({ id: 1, filename: "a.jpg", hash: "a".repeat(32) });
+    await waitFor(() =>
+      expect(screen.getByTestId("info-captured").textContent?.trim()).toBe(
+        "2024-06-01 12:00:00 +02:00",
+      ),
+    );
+    cleanup();
+
+    vi.mocked(invoke).mockResolvedValue(PHOTO_A);
+    renderPane({ id: 1, filename: "a.jpg", hash: "a".repeat(32) });
+    await waitFor(() => expect(screen.getByTestId("info-camera").textContent).toBe("Canon EOS R5"));
+    expect(screen.getByTestId("info-captured").textContent?.trim()).toBe("—");
+  });
+
+  it("opens the date/time dialog for the shown photo and re-reads the info after applying", async () => {
+    let taken: string | null = "2024-06-01T12:00:00+02:00";
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "photo_info") return { ...PHOTO_A, taken_at: taken };
+      if (cmd === "preview_datetime_adjustment") return [];
+      if (cmd === "adjust_datetime") {
+        taken = "2024-06-01T10:00:00+02:00";
+        return { adjusted: 1, failed: [], cancelled: false };
+      }
+      return null;
+    });
+    renderPane({ id: 1, filename: "a.jpg", hash: "a".repeat(32) });
+    await waitFor(() =>
+      expect(screen.getByTestId("info-captured").textContent?.trim()).toBe(
+        "2024-06-01 12:00:00 +02:00",
+      ),
+    );
+
+    await fireEvent.click(screen.getByTestId("info-adjust-time"));
+    await fireEvent.change(screen.getByTestId("dt-direction"), { target: { value: "earlier" } });
+    await fireEvent.input(screen.getByTestId("dt-hours"), { target: { value: "2" } });
+    await fireEvent.click(screen.getByTestId("dt-apply"));
+
+    await waitFor(() =>
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("adjust_datetime", {
+        ids: [1],
+        adjustment: { kind: "shift", seconds: -7200 },
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("info-captured").textContent?.trim()).toBe(
+        "2024-06-01 10:00:00 +02:00",
+      ),
+    );
+  });
+
+  it("disables Adjust without a photo", () => {
+    renderPane(null);
+    expect((screen.getByTestId("info-adjust-time") as HTMLButtonElement).disabled).toBe(true);
+  });
 });
 
 // --- Viewer integration -----------------------------------------------------

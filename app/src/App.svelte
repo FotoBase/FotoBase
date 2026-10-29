@@ -9,6 +9,7 @@
   import BatchDialog from "./lib/BatchDialog.svelte";
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
+  import DateTimeDialog from "./lib/DateTimeDialog.svelte";
   import FolderManagerDialog from "./lib/FolderManagerDialog.svelte";
   import FolderTree from "./lib/FolderTree.svelte";
   import ImportDialog from "./lib/ImportDialog.svelte";
@@ -88,6 +89,9 @@
     mode: "rename",
     ids: [],
   });
+  // Date/time adjustment (TASK-03-019): opened from the photo menu, acts on
+  // the right-clicked photo or the whole selection it belongs to.
+  let dateTimeDialog = $state<{ open: boolean; ids: number[] }>({ open: false, ids: [] });
   let folderMenu = $state<{ open: boolean; x: number; y: number; folder: FolderInfo | null }>({
     open: false,
     x: 0,
@@ -189,6 +193,7 @@
       starred: gridState.starredOnly,
       videosOnly: gridState.videosOnly,
       takenSince: cutoffDate(gridState.dateStep),
+      sort: gridState.sort,
     });
   }
 
@@ -435,6 +440,7 @@
     { id: "locate-on-disk", label: t("menu.locateOnDisk") },
     { id: "delete-from-disk", label: t("menu.deleteFromDisk") },
     { id: "add-to-album", label: t("menu.addToAlbum"), disabled: albums.length === 0 },
+    { id: "adjust-date-time", label: t("menu.adjustDateTime") },
     photoMenu.item !== null && tray.has(photoMenu.item.id)
       ? { id: "remove-from-tray", label: t("menu.removeFromTray") }
       : { id: "add-to-tray", label: t("menu.addToTray") },
@@ -500,6 +506,8 @@
         y: photoMenu.y,
         ids: targetIds(item.id, gridState.selection),
       };
+    } else if (id === "adjust-date-time") {
+      dateTimeDialog = { open: true, ids: targetIds(item.id, gridState.selection) };
     } else if (id === "add-to-tray") {
       // Same target rule as the other photo actions: the whole selection when
       // the clicked photo is part of it, otherwise just that photo.
@@ -818,6 +826,11 @@
     bind:open={albumDialog.open}
     album={albumDialog.album}
     onsaved={handleAlbumSaved}
+  />
+  <DateTimeDialog
+    bind:open={dateTimeDialog.open}
+    ids={dateTimeDialog.ids}
+    onapplied={() => void refreshLibrary()}
   />
   <BatchDialog
     bind:open={batchDialog.open}

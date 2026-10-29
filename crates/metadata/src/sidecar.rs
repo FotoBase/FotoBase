@@ -17,6 +17,8 @@ use quick_xml::events::{BytesDecl, Event};
 use quick_xml::Reader;
 use quick_xml::XmlVersion;
 
+use crate::datetime::CaptureTime;
+
 /// The Fotobase XMP namespace URI (00-010 §2).
 pub const FB_NS: &str = "https://fotobase.github.io/ns/1.0/";
 
@@ -849,6 +851,34 @@ impl Sidecar {
         let d = self.tree.ensure_description_ns("exif");
         d.set_or_replace_child("exif", "GPSLatitude", &format_gps(lat, 'N', 'S'));
         d.set_or_replace_child("exif", "GPSLongitude", &format_gps(lon, 'E', 'W'));
+    }
+
+    /// Capture time from `exif:DateTimeOriginal` (TASK-03-019). Absent or
+    /// unparseable reads as `None` — the catalog then keeps its own value.
+    pub fn capture_time(&self) -> Option<CaptureTime> {
+        self.tree
+            .description()
+            .and_then(|d| d.child_text_or_attr("exif", "DateTimeOriginal"))
+            .and_then(|t| CaptureTime::parse(&t))
+    }
+
+    /// Write the capture time to `exif:DateTimeOriginal`. Capture-date
+    /// fields other tools keep in sync with it (`xmp:CreateDate`,
+    /// `photoshop:DateCreated`) follow when the packet already carries them,
+    /// so no app sees two different capture dates; they are never invented.
+    pub fn set_capture_time(&mut self, time: &CaptureTime) {
+        let text = time.to_xmp();
+        let d = self.tree.ensure_description_ns("exif");
+        d.attributes.retain(|(k, _)| k != "exif:DateTimeOriginal");
+        d.set_or_replace_child("exif", "DateTimeOriginal", &text);
+        for (prefix, local) in [("xmp", "CreateDate"), ("photoshop", "DateCreated")] {
+            let attr = format!("{prefix}:{local}");
+            if d.child_text(prefix, local).is_some() {
+                d.set_or_replace_child(prefix, local, &text);
+            } else if let Some((_, v)) = d.attributes.iter_mut().find(|(k, _)| *k == attr) {
+                *v = text.clone();
+            }
+        }
     }
 
     // ---- write path (merge-on-write, 00-010 §3) --------------------------

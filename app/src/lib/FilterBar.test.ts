@@ -50,6 +50,18 @@ describe("FilterBar", () => {
     expect(btn.getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("sort select switches between path and capture time (TASK-03-019)", () => {
+    render(FilterBar);
+    const select = screen.getByTestId("filter-sort") as HTMLSelectElement;
+    expect(select.value).toBe("path");
+
+    fireEvent.change(select, { target: { value: "capture" } });
+    flushSync();
+    expect(gridState.sort).toBe("capture");
+    // The sort is not a filter: it never lights the "filters active" state.
+    expect(gridState.filtersActive).toBe(false);
+  });
+
   it("videos toggle is independent of the starred toggle", () => {
     render(FilterBar);
     fireEvent.click(screen.getByTestId("filter-videos"));

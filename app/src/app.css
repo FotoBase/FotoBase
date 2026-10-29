@@ -318,6 +318,12 @@ main {
   font-weight: 600;
 }
 
+.filter-sort {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .filter-date {
   display: flex;
   align-items: center;
