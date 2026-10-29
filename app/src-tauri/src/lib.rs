@@ -306,8 +306,9 @@ fn list_files(
 /// in a single catalog query. `starred` resolves to the rating threshold for
 /// the current rating mode; `taken_since` is the date slider's `YYYY-MM-DD`
 /// cutoff; `sort` is `path` (default) or `capture` (TASK-03-019: chronological,
-/// adjusted capture times included). Ids and metadata only — no image bytes
-/// over IPC.
+/// adjusted capture times included); `stack` (TASK-03-021) expands one stack
+/// instead of showing every stack as its top. Ids and metadata only — no
+/// image bytes over IPC.
 #[tauri::command]
 // Each argument is one named IPC field the frontend sends; bundling them
 // would change the wire shape for no gain.
@@ -320,6 +321,7 @@ fn query_files(
     videos_only: Option<bool>,
     taken_since: Option<String>,
     sort: Option<fotobase_catalog::FileSort>,
+    stack: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<fotobase_catalog::FileInfo>, String> {
     let min_rating = if starred == Some(true) {
@@ -334,6 +336,7 @@ fn query_files(
         min_rating,
         videos_only: videos_only == Some(true),
         taken_since,
+        stack,
         sort: sort.unwrap_or_default(),
     };
     with_catalog(&state, |cat| cat.query_files(&query, usize::MAX))
@@ -408,6 +411,66 @@ fn edit_photo_metadata(
         let _ = app.emit("library-changed", ());
     }
     Ok(result)
+}
+
+/// Stack photos together (TASK-03-021): a new stack (first id on top) or
+/// the existing stack of one of them. Metadata only — each member's sidecar
+/// gets `fb:StackId` / `fb:StackRole`, no file moves. Returns the stack id.
+#[tauri::command]
+fn stack_photos(
+    file_ids: Vec<i64>,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    let stack_id = with_catalog_sync(&state, |cat| cat.stack_photos(&file_ids))?;
+    let _ = app.emit("library-changed", ());
+    Ok(stack_id)
+}
+
+/// Make a stack member the top of its stack (TASK-03-021).
+#[tauri::command]
+fn set_stack_top(
+    file_id: i64,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    with_catalog_sync(&state, |cat| cat.set_stack_top(file_id))?;
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
+/// Dissolve a stack (TASK-03-021); every photo is listed on its own again.
+#[tauri::command]
+fn unstack(
+    stack_id: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    with_catalog_sync(&state, |cat| cat.unstack(&stack_id))?;
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
+/// The photos of one stack for the picker overlay, top first (TASK-03-021).
+#[tauri::command]
+fn list_stack(
+    stack_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::FileInfo>, String> {
+    with_catalog(&state, |cat| cat.stack_members(&stack_id))
+}
+
+/// RAW+JPEG pairs and edited versions the user may want to stack
+/// (TASK-03-021). Nothing is stacked until the user accepts a group.
+#[tauri::command]
+fn stack_suggestions(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::StackSuggestion>, String> {
+    let window = {
+        let guard = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
+        i64::from(guard.stack_window_secs)
+    };
+    with_catalog(&state, |cat| cat.stack_suggestions(window))
 }
 
 /// Albums (TASK-03-008): every album with its photo count and cover.
@@ -1567,6 +1630,11 @@ pub fn run() {
             get_caption,
             set_caption,
             edit_photo_metadata,
+            stack_photos,
+            set_stack_top,
+            unstack,
+            list_stack,
+            stack_suggestions,
             list_albums,
             create_album,
             update_album,

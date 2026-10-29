@@ -16,6 +16,8 @@
   import OptionsDialog from "./lib/OptionsDialog.svelte";
   import PhotoTray from "./lib/PhotoTray.svelte";
   import QuickTags from "./lib/QuickTags.svelte";
+  import StackPicker from "./lib/StackPicker.svelte";
+  import StackSuggestionsDialog from "./lib/StackSuggestionsDialog.svelte";
   import SearchBar from "./lib/SearchBar.svelte";
   import FilterBar from "./lib/FilterBar.svelte";
   import { cutoffDate } from "./lib/filters";
@@ -49,6 +51,7 @@
     type FolderViewOptions,
   } from "./lib/folder-sort";
   import { shortcuts, type ShortcutHandlers } from "./lib/shortcuts";
+  import { canStack, stackPhotos, unstack } from "./lib/stacks";
   import { applyTheme, resolveTheme, systemPrefersDark, watchSystemTheme } from "./lib/theme";
   import { actionIds, tray, type TrayPhoto } from "./lib/tray.svelte.js";
   import { hideFolder, hidePhotos, unhideFolder, unhidePhotos } from "./lib/trash";
@@ -59,6 +62,15 @@
   let folderManagerOpen = $state(false);
   let importOpen = $state(false);
   let trashOpen = $state(false);
+  // Stacking (TASK-03-021): suggested RAW+JPEG pairs / edited versions, and
+  // the picker a stack badge opens.
+  let stackSuggestionsOpen = $state(false);
+  let stackPicker = $state<{ open: boolean; stackId: string; x: number; y: number }>({
+    open: false,
+    stackId: "",
+    x: 0,
+    y: 0,
+  });
   let settings = $state<Settings | null>(null);
   let photos = $state<GridItem[]>([]);
   let folders = $state<FolderInfo[]>([]);
@@ -441,6 +453,19 @@
     { id: "delete-from-disk", label: t("menu.deleteFromDisk") },
     { id: "add-to-album", label: t("menu.addToAlbum"), disabled: albums.length === 0 },
     { id: "adjust-date-time", label: t("menu.adjustDateTime") },
+    {
+      id: "stack-photos",
+      label: t("menu.stackPhotos"),
+      disabled:
+        photoMenu.item === null ||
+        !canStack(photosById(targetIds(photoMenu.item.id, gridState.selection))),
+    },
+    ...(photoMenu.item?.stack_id
+      ? [
+          { id: "show-stack", label: t("menu.showStack") },
+          { id: "unstack", label: t("menu.unstack") },
+        ]
+      : []),
     photoMenu.item !== null && tray.has(photoMenu.item.id)
       ? { id: "remove-from-tray", label: t("menu.removeFromTray") }
       : { id: "add-to-tray", label: t("menu.addToTray") },
@@ -508,6 +533,27 @@
       };
     } else if (id === "adjust-date-time") {
       dateTimeDialog = { open: true, ids: targetIds(item.id, gridState.selection) };
+    } else if (id === "stack-photos") {
+      // Bursts and anything else the detector did not offer: the selection
+      // (or the clicked photo) becomes one stack; the first becomes the top.
+      const ids = targetIds(item.id, gridState.selection);
+      const top = ids.includes(item.id) ? [item.id, ...ids.filter((i) => i !== item.id)] : ids;
+      try {
+        await stackPhotos(top);
+      } catch {
+        // Backend down or a sidecar refused the write: nothing was stacked.
+      }
+      gridState.selection = new Set();
+      await refreshView();
+    } else if (id === "show-stack" && item.stack_id) {
+      stackPicker = { open: true, stackId: item.stack_id, x: photoMenu.x, y: photoMenu.y };
+    } else if (id === "unstack" && item.stack_id) {
+      try {
+        await unstack(item.stack_id);
+      } catch {
+        // Backend down: the stack stays.
+      }
+      await refreshView();
     } else if (id === "add-to-tray") {
       // Same target rule as the other photo actions: the whole selection when
       // the clicked photo is part of it, otherwise just that photo.
@@ -656,6 +702,10 @@
     photoMenu = { open: true, x: e.x, y: e.y, item: e.item };
   }
 
+  function openStackPicker(e: { stackId: string; x: number; y: number }): void {
+    stackPicker = { open: true, ...e };
+  }
+
   function openAlbumMenu(e: { album: Album; x: number; y: number }): void {
     albumMenu = { open: true, x: e.x, y: e.y, album: e.album };
   }
@@ -694,6 +744,13 @@
   <button type="button" onclick={() => (trashOpen = true)} data-testid="open-trash">
     {t("app.trash")}
   </button>
+  <button
+    type="button"
+    onclick={() => (stackSuggestionsOpen = true)}
+    data-testid="open-stack-suggestions"
+  >
+    {t("app.stacks")}
+  </button>
   {#if settings}
     <OptionsDialog
       bind:open={optionsOpen}
@@ -714,6 +771,14 @@
     <ImportDialog bind:open={importOpen} onchanged={refreshLibrary} />
   {/if}
   <TrashDialog bind:open={trashOpen} onchanged={refreshView} />
+  <StackSuggestionsDialog bind:open={stackSuggestionsOpen} onapplied={() => void refreshView()} />
+  <StackPicker
+    bind:open={stackPicker.open}
+    stackId={stackPicker.stackId}
+    x={stackPicker.x}
+    y={stackPicker.y}
+    onchanged={() => void refreshView()}
+  />
   <!-- Folders view + grid (TASK-01-015): the tree's multi-select is the
        grid's filter; both live in one flex row. -->
   <div class="library">
@@ -767,6 +832,7 @@
           onopen={(item) => openViewer(item)}
           singleClickEdit={settings?.single_click_edit ?? false}
           oncontextmenu={openPhotoMenu}
+          onopenstack={openStackPicker}
         />
       {:else}
         <ThumbnailGrid
@@ -775,6 +841,7 @@
           onopen={(item) => openViewer(item)}
           singleClickEdit={settings?.single_click_edit ?? false}
           oncontextmenu={openPhotoMenu}
+          onopenstack={openStackPicker}
         />
       {/if}
     </div>

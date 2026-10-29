@@ -1,6 +1,6 @@
 # task: stacking — RAW+JPEG pairs, bursts, edited versions
 
-**Feature:** [FEAT-03-01-metadata-editing-stacking](FEAT-03-01-metadata-editing-stacking.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-01-metadata-editing-stacking](FEAT-03-01-metadata-editing-stacking.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-29)
 
 ## Description
 Group RAW+JPEG pairs, burst sets, and edited versions under one thumbnail with a stack picker (PLAN §6 P2a). Stacking is metadata-only — no file moves, no original modification. Depends on the sidecar design doc (00-010, hard gate for EPIC-03) since stack membership is user data that must survive rebuild.
@@ -22,6 +22,6 @@ Group RAW+JPEG pairs, burst sets, and edited versions under one thumbnail with a
 - E2e: grid shows one thumbnail with badge; picker expands; unstack restores both thumbnails.
 
 ## Acceptance criteria
-- [ ] 03-021: RAW+JPEG pairs, bursts, and edited versions stack under one thumbnail.
-- [ ] 03-021: stack picker works; top-of-stack switchable.
-- [ ] 03-021: stacking is metadata-only; rebuildable; originals unchanged (checksum).
+- [x] 03-021: RAW+JPEG pairs, bursts, and edited versions stack under one thumbnail.
+- [x] 03-021: stack picker works; top-of-stack switchable.
+- [x] 03-021: stacking is metadata-only; rebuildable; originals unchanged (checksum).

@@ -702,6 +702,39 @@ fn escape_attr(s: &str) -> String {
     out
 }
 
+/// A member's place in its stack: exactly one member of a stack is `Top`
+/// (the thumbnail the grid shows).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StackRole {
+    Top,
+    Member,
+}
+
+impl StackRole {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            StackRole::Top => "top",
+            StackRole::Member => "member",
+        }
+    }
+
+    /// Parse the stored text; anything that is not `top` is a plain member.
+    pub fn from_text(text: &str) -> StackRole {
+        if text.trim().eq_ignore_ascii_case("top") {
+            StackRole::Top
+        } else {
+            StackRole::Member
+        }
+    }
+}
+
+/// `fb:StackId` (a UUID shared by every member) and the member's role.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StackMembership {
+    pub id: String,
+    pub role: StackRole,
+}
+
 /// Typed view over one XMP sidecar.
 #[derive(Debug, Clone)]
 pub struct Sidecar {
@@ -843,6 +876,46 @@ impl Sidecar {
         } else if let Some(d) = self.tree.description_mut() {
             d.remove_prop("fb", "Hidden");
         }
+    }
+
+    /// Stack membership (`fb:StackId` + `fb:StackRole`, ADR-0006). An id is
+    /// the membership; a missing or unknown role reads as a plain member,
+    /// and a role without an id is no membership at all.
+    pub fn stack(&self) -> Option<StackMembership> {
+        let d = self.tree.description()?;
+        let id = d.child_text_or_attr("fb", "StackId")?.trim().to_string();
+        if id.is_empty() {
+            return None;
+        }
+        let role = d
+            .child_text_or_attr("fb", "StackRole")
+            .map_or(StackRole::Member, |t| StackRole::from_text(&t));
+        Some(StackMembership { id, role })
+    }
+
+    pub fn set_stack(&mut self, stack: &StackMembership) {
+        let d = self.tree.ensure_description_ns("fb");
+        d.attributes.retain(|(k, _)| k != "fb:StackId" && k != "fb:StackRole");
+        d.set_or_replace_child("fb", "StackId", &stack.id);
+        d.set_or_replace_child("fb", "StackRole", stack.role.as_str());
+    }
+
+    /// Unstack: drop both fields. A sidecar without a description is left
+    /// untouched.
+    pub fn clear_stack(&mut self) {
+        if let Some(d) = self.tree.description_mut() {
+            d.remove_prop("fb", "StackId");
+            d.remove_prop("fb", "StackRole");
+        }
+    }
+
+    /// Whether the photo carries an edit recipe (`fb:Recipe`): the marker of
+    /// an edited version. Fotobase never interprets the recipe here.
+    pub fn has_recipe(&self) -> bool {
+        self.tree
+            .description()
+            .and_then(|d| d.child_text_or_attr("fb", "Recipe"))
+            .is_some_and(|t| !t.trim().is_empty())
     }
 
     /// Artist (`dc:creator`, an ordered array). Several creators written by

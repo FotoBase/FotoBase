@@ -35,6 +35,7 @@
   } from "./grid";
   import { gridState, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
+  import { badgeText, hasStackBadge, inStackBadge, STACK_BADGE } from "./stacks";
 
   /// What `drawImage` accepts; tests inject stand-ins with the same shape.
   type ImageLike = { src: string; width: number; height: number };
@@ -54,6 +55,9 @@
     /// Single-click-to-edit (TASK-03-017): a plain click opens the photo;
     /// ctrl/cmd/shift-click still toggles selection.
     singleClickEdit?: boolean;
+    /// Called when a stack badge is clicked (TASK-03-021): the shell opens
+    /// the stack picker at the pointer.
+    onopenstack?: (e: { stackId: string; x: number; y: number }) => void;
   }
 
   let {
@@ -64,6 +68,7 @@
     oncontextmenu = () => {},
     onopen = () => {},
     singleClickEdit = false,
+    onopenstack = () => {},
   }: Props = $props();
 
   const REPORT_DEBOUNCE_MS = 100;
@@ -238,6 +243,22 @@
             }
           }
 
+          if (hasStackBadge(item)) {
+            const { width, height, margin } = STACK_BADGE;
+            const bx = x + size - margin - width;
+            ctx.fillStyle = paletteVar("--fb-accent", "#4a9eff");
+            ctx.fillRect(bx, y + margin, width, height);
+            ctx.fillStyle = paletteVar("--fb-on-accent", "#101010");
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = "11px sans-serif";
+            ctx.fillText(badgeText(item), bx + width / 2, y + margin + height / 2);
+            ctx.textAlign = "start";
+            if (strip > 0) {
+              ctx.font = `${Math.round(strip * 0.65)}px sans-serif`;
+            }
+          }
+
           if (strip > 0) {
             const text = ellipsize(
               captionText(item, mode),
@@ -285,6 +306,18 @@
       captionH,
     );
     if (index === null) return;
+    // A click on a stack badge opens the picker instead of selecting.
+    const item = items[index];
+    if (hasStackBadge(item) && item.stack_id) {
+      const step = gridState.thumbSize + GRID_GAP;
+      const rowStep = step + captionH;
+      const localX = e.offsetX - (index % columns) * step;
+      const localY = e.offsetY + scrollEl.scrollTop - Math.floor(index / columns) * rowStep;
+      if (inStackBadge(localX, localY, gridState.thumbSize)) {
+        onopenstack({ stackId: item.stack_id, x: e.clientX, y: e.clientY });
+        return;
+      }
+    }
     if (singleClickEdit && !(e.ctrlKey || e.metaKey || e.shiftKey)) {
       onopen(items[index]);
       return;

@@ -10,10 +10,10 @@
 
 - [x] `03-019` (M) Date/time adjustment: shift capture time, fix timezones, merge multi-camera sets.
 - [x] `03-020` (M) Metadata editing in info pane: date, GPS, artist, copyright.
-- [ ] `03-021` (M) Stacking: RAW+JPEG pairs, burst stacks, edited versions under one thumbnail.
+- [x] `03-021` (M) Stacking: RAW+JPEG pairs, burst stacks, edited versions under one thumbnail.
 
 ## Tasks
 
 - [x] [TASK-03-019-datetime-adjustment.md](TASK-03-019-datetime-adjustment.md) — date/time adjustment: shift, timezone fix, multi-camera merge
 - [x] [TASK-03-020-info-pane-metadata-editing.md](TASK-03-020-info-pane-metadata-editing.md) — info-pane metadata editing: date, GPS, artist, copyright
-- [ ] [TASK-03-021-stacking.md](TASK-03-021-stacking.md) — stacking: RAW+JPEG pairs, bursts, edited versions
+- [x] [TASK-03-021-stacking.md](TASK-03-021-stacking.md) — stacking: RAW+JPEG pairs, bursts, edited versions

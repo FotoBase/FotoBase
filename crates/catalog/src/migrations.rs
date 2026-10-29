@@ -17,6 +17,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V8,
     MIGRATION_V9,
     MIGRATION_V10,
+    MIGRATION_V11,
 ];
 
 const MIGRATION_V1: &str = "
@@ -380,6 +381,19 @@ INSERT INTO files_fts(rowid, filename, folder, caption, tags)
 const MIGRATION_V10: &str = "
 ALTER TABLE metadata ADD COLUMN artist TEXT;
 ALTER TABLE metadata ADD COLUMN copyright TEXT;
+UPDATE files SET sidecar_mtime = NULL, sidecar_size = NULL;
+";
+
+/// TASK-03-021 / ADR-0006: the derived stack index. `files.stack_id` /
+/// `stack_role` mirror the sidecar's `fb:StackId` / `fb:StackRole`;
+/// `has_recipe` mirrors the presence of `fb:Recipe` (an edited version).
+/// All three are rebuildable cache, so sidecars synced before the columns
+/// existed are marked unsynced and the next rebuild reads them.
+const MIGRATION_V11: &str = "
+ALTER TABLE files ADD COLUMN stack_id TEXT;
+ALTER TABLE files ADD COLUMN stack_role TEXT;
+ALTER TABLE files ADD COLUMN has_recipe INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX idx_files_stack ON files(stack_id);
 UPDATE files SET sidecar_mtime = NULL, sidecar_size = NULL;
 ";
 

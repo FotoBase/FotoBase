@@ -215,6 +215,26 @@ describe("OptionsDialog hidden items and undo window (TASK-03-009, TASK-03-012)"
     expect(saveSettings).toHaveBeenCalledWith({ ...base, show_hidden: true });
   });
 
+  it("the RAW+JPEG pair window is configurable in whole seconds, zero allowed", async () => {
+    const base: Settings = { ...DEFAULT_SETTINGS };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+    const input = screen.getByTestId("stack-window") as HTMLInputElement;
+    expect(input.value).toBe("5");
+
+    await fireEvent.change(input, { target: { value: "30" } });
+    await settle();
+    expect(onchange).toHaveBeenLastCalledWith({ ...base, stack_window_secs: 30 });
+
+    await fireEvent.change(input, { target: { value: "0" } });
+    await settle();
+    expect(onchange).toHaveBeenLastCalledWith({ ...base, stack_window_secs: 0 });
+
+    await fireEvent.change(input, { target: { value: "abc" } });
+    await settle();
+    expect(onchange).toHaveBeenLastCalledWith({ ...base, stack_window_secs: 5 });
+  });
+
   it("the undo window is configurable in whole days, at least one", async () => {
     const base: Settings = { ...DEFAULT_SETTINGS };
     const onchange = vi.fn();

@@ -42,6 +42,13 @@ Standard fields stay standard so other apps interoperate: `xmp:Rating`, `dc:subj
 - Artist: `dc:creator`, an ordered array (`rdf:Seq`) holding the one name entered; several creators written by another tool read joined with ", " and are replaced by an edit. Copyright: `dc:rights`, a language alternative whose `x-default` entry is set; other languages stay. A blank value removes the property.
 - The catalog mirrors all four (`files.taken_at`, `metadata.latitude/longitude/artist/copyright`) after the sidecar write succeeds, and re-derives them from sidecars on rebuild.
 
+### Stacking (`fb:StackId`, `fb:StackRole`)
+
+- Each member of a stack carries `fb:StackId` (one UUID shared by the stack) and `fb:StackRole` (`top` or `member`; exactly one `top`) in its own sidecar (03-021, ADR-0006). A stack op writes N sidecars, one merge-on-write (§3) each; a failure part-way puts back the memberships already written, so no half-built stack is left behind. The catalog's `files.stack_id` / `stack_role` are a derived index, filled on write-through and re-derived on rebuild/scan.
+- Reading is lenient: an id without a role is a `member`, an unknown role text is a `member`, a role without an id is no membership. Unstacking removes both properties and nothing else; stacking never touches an original or any other field.
+- A stack shows in the grid as its top. A stack with no `top` left (its file left the library, or another tool edited the sidecars) shows every remaining member rather than vanishing.
+- Pair/edit detection is advisory and catalog-side (nothing is written until the user accepts): RAW+JPEG = same folder, same stem (case-insensitive), a RAW and a non-RAW file captured within N seconds (setting `stack_window_secs`, default 5); an edited version = a file with `fb:Recipe` whose stem extends an unedited file's stem (`beach.jpg` → `beach-edit.jpg`). `files.has_recipe` mirrors the presence of `fb:Recipe`; the recipe itself is never interpreted here.
+
 ### Folder-level `.fotobase` file
 
 - One JSON file per folder: `{ "version": 1, "hidden": false }`. Written with the same merge-on-write discipline (§3). Absent file = not hidden.

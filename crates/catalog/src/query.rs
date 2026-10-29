@@ -7,6 +7,7 @@
 
 use crate::{
     file_info_row, fts_match_expr, Catalog, CatalogError, FileInfo, Result, FILE_INFO_COLS,
+    STACK_COLLAPSED,
 };
 
 /// Date of a file as `YYYY-MM-DD`: `taken_at` when it is date-shaped (EXIF
@@ -20,7 +21,7 @@ const FILE_DATE: &str = "COALESCE(CASE WHEN f.taken_at GLOB \
 /// without offset, or EXIF's colon-date form; a naive reading counts as UTC),
 /// else the `mtime`. Sorting by the instant keeps photos from cameras in
 /// different timezones in true chronological order.
-const CAPTURE_TS: &str = "COALESCE(unixepoch(CASE WHEN f.taken_at GLOB \
+pub(crate) const CAPTURE_TS: &str = "COALESCE(unixepoch(CASE WHEN f.taken_at GLOB \
     '[0-9][0-9][0-9][0-9]:[0-9][0-9]:[0-9][0-9]*' \
     THEN replace(substr(f.taken_at, 1, 10), ':', '-') || substr(f.taken_at, 11) \
     ELSE f.taken_at END), CAST(f.mtime AS INTEGER))";
@@ -55,6 +56,9 @@ pub struct FileQuery {
     pub videos_only: bool,
     /// Date-slider cutoff, `YYYY-MM-DD`, inclusive.
     pub taken_since: Option<String>,
+    /// Expand one stack (TASK-03-021): its members, top first, instead of
+    /// the collapsed grid. Without it every stack shows as its top only.
+    pub stack: Option<String>,
     pub sort: FileSort,
 }
 
@@ -133,6 +137,18 @@ impl Catalog {
             FileSort::Path => order.to_string(),
             FileSort::Capture => format!("{CAPTURE_TS}, {order}"),
         };
+        let order = if query.stack.is_some() {
+            format!("(f.stack_role = 'top') DESC, {order}")
+        } else {
+            order
+        };
+        match &query.stack {
+            Some(id) => {
+                params.push(Box::new(id.clone()));
+                conds.push_str(" AND f.stack_id = ?");
+            }
+            None => conds.push_str(STACK_COLLAPSED),
+        }
         params.push(Box::new(limit as i64));
 
         let sql = format!(
