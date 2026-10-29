@@ -40,7 +40,7 @@
 - [x] `03-015` (M) Thumbnail captions (none/filename/caption/tags/resolution).
 - [x] `03-016` (S) Folder sort (name/date/size, reverse), flat vs tree view.
 - [x] `03-017` (S) Single-click-to-edit option (General options).
-- [ ] `03-018` (S) View-time display modes: sepia, B&W (no edit applied).
+- [x] `03-018` (S) View-time display modes: sepia, B&W (no edit applied).
 
 ## feat: metadata editing & stacking
 

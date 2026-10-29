@@ -18,6 +18,12 @@
   import { isEditableTarget, nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
   import { probeAndCache } from "./codec-probe";
   import { ratingForKey, setRating, toggleStar } from "./rating";
+  import {
+    displayFilter,
+    toggleDisplayMode,
+    type ActiveDisplayMode,
+    type DisplayMode,
+  } from "./display-mode";
 
   interface Props {
     items?: GridItem[];
@@ -56,6 +62,10 @@
   // menu bar itself arrives with the file-menu work (01-021); until then the
   // toggle lives in the viewer's status bar and on the `i` key.
   let infoOpen = $state(false);
+  // Sepia / B&W view modes (TASK-03-018): a CSS filter on the stage only —
+  // transient, never persisted, never an edit.
+  let displayMode = $state<DisplayMode>("normal");
+  const stageFilter = $derived(displayFilter(displayMode));
 
   const current = $derived(items[index] ?? null);
   const mainUri = $derived(previewUri(current?.hash ?? null));
@@ -230,7 +240,11 @@
     <InfoPane photo={current} {onalbumschanged} />
   {/if}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="viewer-stage" data-testid="viewer-stage">
+  <div
+    class="viewer-stage"
+    data-testid="viewer-stage"
+    style:filter={displayMode === "normal" ? null : stageFilter}
+  >
     {#if isVideo && videoInfo}
       <VideoPlayer
         fileId={current!.id}
@@ -281,6 +295,19 @@
     {#if ratingError}
       <span class="viewer-rating-error" data-testid="rating-error" role="alert">{ratingError}</span>
     {/if}
+    <span class="viewer-display-modes">
+      {#each [["sepia", "viewer.sepia"], ["bw", "viewer.bw"]] as [mode, label] (mode)}
+        <button
+          type="button"
+          class="viewer-display-mode{displayMode === mode ? ' on' : ''}"
+          data-testid={`display-${mode}`}
+          aria-pressed={displayMode === mode}
+          onclick={() => (displayMode = toggleDisplayMode(displayMode, mode as ActiveDisplayMode))}
+        >
+          {t(label)}
+        </button>
+      {/each}
+    </span>
     <button
       type="button"
       class="viewer-info-toggle"
