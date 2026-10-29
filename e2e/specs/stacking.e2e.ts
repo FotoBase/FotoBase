@@ -113,9 +113,15 @@ describe("stacking", () => {
           pe: cs.pointerEvents,
           win: [window.innerWidth, window.innerHeight, window.scrollY],
           overlays: document.querySelectorAll(".ss-backdrop,.stack-picker,.context-menu").length,
+          grid: (() => {
+            const g = document.querySelector('[data-testid="grid-scroll"]') as HTMLElement;
+            const gr = g.getBoundingClientRect();
+            return { top: g.scrollTop, h: g.clientHeight, y: gr.y, bottom: gr.bottom };
+          })(),
         });
       }),
     );
+    await badges()[0].scrollIntoView({ block: "center", inline: "center" });
     await badges()[0].click();
     await $('[data-testid="stack-picker"]').waitForDisplayed();
     await browser.waitUntil(async () => (await members().length) === 2);
