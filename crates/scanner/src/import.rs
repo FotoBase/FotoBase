@@ -115,7 +115,7 @@ pub fn import_folder(
     let mut dirs = Vec::new();
     let mut files = Vec::new();
     let mut walk_cancelled = false;
-    walk_dir(source, &mut dirs, &mut files, cancel, &mut walk_cancelled, &|_| {});
+    walk_dir(source, &mut dirs, &mut files, &mut Vec::new(), cancel, &mut walk_cancelled, &|_| {});
     if walk_cancelled {
         return Ok(ImportReport { cancelled: true, ..ImportReport::default() });
     }

@@ -34,6 +34,9 @@ const FORMAT_VERSION: u32 = 1;
 /// definition (`albums.json` lost): membership must not be dropped.
 const RECOVERED_NAME: &str = "Recovered album";
 
+/// Name of an album imported with a member reference but no definition.
+pub(crate) const IMPORTED_PLACEHOLDER_NAME: &str = fotobase_metadata::UNNAMED_ALBUM;
+
 /// One album with its derived list stats (album-list UI row).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AlbumInfo {
@@ -340,6 +343,50 @@ impl Catalog {
         persist_definitions(&tx, &json)?;
         tx.commit()?;
         self.album(id)?.ok_or(SyncError::UnknownAlbum(id))
+    }
+
+    /// Create an album with a caller-chosen id (a Picasa import, whose id is
+    /// derived from the legacy token so a rerun finds the same album). An
+    /// existing album is left as the user shaped it — except a placeholder
+    /// name, which a real `name` replaces. Returns whether it was created.
+    pub(crate) fn ensure_album(
+        &mut self,
+        uuid: &str,
+        name: &str,
+        date: Option<&str>,
+        place: Option<&str>,
+        description: Option<&str>,
+    ) -> SyncResult<bool> {
+        let existing: Option<String> = self
+            .conn()
+            .query_row("SELECT name FROM albums WHERE uuid = ?1", [uuid], |r| r.get(0))
+            .optional()?;
+        let json = self.albums_json_path();
+        let tx = self.conn_mut().transaction()?;
+        match existing {
+            None => {
+                tx.execute(
+                    "INSERT INTO albums (uuid, name, date, place, description)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![uuid, name, date, place, description],
+                )?;
+            }
+            Some(old) if old == IMPORTED_PLACEHOLDER_NAME && name != old => {
+                tx.execute(
+                    "UPDATE albums SET name = ?2, date = COALESCE(date, ?3),
+                            place = COALESCE(place, ?4), description = COALESCE(description, ?5)
+                     WHERE uuid = ?1",
+                    params![uuid, name, date, place, description],
+                )?;
+                persist_definitions(&tx, &json)?;
+                tx.commit()?;
+                return Ok(false);
+            }
+            Some(_) => return Ok(false),
+        }
+        persist_definitions(&tx, &json)?;
+        tx.commit()?;
+        Ok(true)
     }
 
     /// Change an album's name/date/place/description. Membership and the

@@ -9,14 +9,19 @@ pub const CRATE_NAME: &str = "fotobase-metadata";
 mod datetime;
 mod folder_meta;
 mod gps;
+mod picasa;
 mod sidecar;
 
 pub use datetime::CaptureTime;
 pub use folder_meta::{FolderMeta, FolderMetaError, FOLDER_META_FILE};
 pub use gps::{parse_coordinate, GpsAxis, GpsParseError};
+pub use picasa::{
+    is_picasa_ini_name, picasa_ini_files, FaceRect, PicasaAlbum, PicasaFace, PicasaIni,
+    PicasaPhoto, UNNAMED_ALBUM, UNNAMED_CONTACT,
+};
 pub use sidecar::{
-    backup_path, tmp_path, FbNs, QuickXmlBackend, Sidecar, SidecarBackend, SidecarError,
-    StackMembership, StackRole, FB_NS,
+    backup_path, tmp_path, FaceRegion, FbNs, QuickXmlBackend, Sidecar, SidecarBackend,
+    SidecarError, StackMembership, StackRole, FB_NS,
 };
 
 #[cfg(test)]

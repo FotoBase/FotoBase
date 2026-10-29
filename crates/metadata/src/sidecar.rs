@@ -25,6 +25,34 @@ pub const FB_NS: &str = "https://fotobase.github.io/ns/1.0/";
 /// Re-exported for callers constructing `fb:` elements.
 pub type FbNs = &'static str;
 
+const MWG_RS_NS: &str = "http://www.metadataworkinggroup.com/schemas/regions/";
+const ST_AREA_NS: &str = "http://ns.adobe.com/xmp/sType/Area#";
+const ST_DIM_NS: &str = "http://ns.adobe.com/xap/1.0/sType/Dimensions#";
+
+/// A named face in MWG form (`mwg-rs:Regions`): centre point and size,
+/// normalized to the image (0..=1).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FaceRegion {
+    pub name: String,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+impl FaceRegion {
+    /// Same face? Names compare case-insensitively and every coordinate
+    /// within the 6-decimal precision we write, so re-adding is a no-op.
+    pub fn same_face(&self, other: &FaceRegion) -> bool {
+        const TOLERANCE: f64 = 1e-4;
+        self.name.trim().to_lowercase() == other.name.trim().to_lowercase()
+            && (self.x - other.x).abs() < TOLERANCE
+            && (self.y - other.y).abs() < TOLERANCE
+            && (self.w - other.w).abs() < TOLERANCE
+            && (self.h - other.h).abs() < TOLERANCE
+    }
+}
+
 /// Crate-internal seam so the exiv2 backend (rexiv2 fork, PLAN §10) can be
 /// swapped without touching callers. The quick-xml tree implementation is the
 /// current backend; the rexiv2-backed one must satisfy the same M1–M3
@@ -331,6 +359,102 @@ impl Element {
     }
 }
 
+/// The `rdf:Bag` holding the region `rdf:li` items of an `mwg-rs:Regions`
+/// element, wherever the writing tool nested it (directly, or inside an
+/// `rdf:Description`). `None` for any structure we do not recognise.
+fn region_bag(regions: &Element) -> Option<&Element> {
+    let holder = if regions.find_child("mwg-rs", "RegionList").is_some() {
+        regions
+    } else {
+        regions.find_child("rdf", "Description")?
+    };
+    holder.find_child("mwg-rs", "RegionList")?.children.iter().find_map(|c| match c {
+        Child::Element(e) if e.prefix == "rdf" && matches!(e.local.as_str(), "Bag" | "Seq") => {
+            Some(e)
+        }
+        _ => None,
+    })
+}
+
+fn region_bag_mut(regions: &mut Element) -> Option<&mut Element> {
+    let holder = if regions.find_child("mwg-rs", "RegionList").is_some() {
+        regions
+    } else {
+        regions.find_child_mut("rdf", "Description")?
+    };
+    holder.find_child_mut("mwg-rs", "RegionList")?.children.iter_mut().find_map(|c| match c {
+        Child::Element(e) if e.prefix == "rdf" && matches!(e.local.as_str(), "Bag" | "Seq") => {
+            Some(e)
+        }
+        _ => None,
+    })
+}
+
+/// One region item as a face: `Type` must be `Face`; `Name`/`Type` and the
+/// `Area` numbers may be child elements or attributes (digiKam writes
+/// attributes on an `rdf:Description`, exiv2 child elements).
+fn face_from_li(li: &Element) -> Option<FaceRegion> {
+    let node = li.find_child("rdf", "Description").unwrap_or(li);
+    let kind = node.child_text_or_attr("mwg-rs", "Type")?;
+    if !kind.trim().eq_ignore_ascii_case("face") {
+        return None;
+    }
+    let area = node.find_child("mwg-rs", "Area")?;
+    let num = |k: &str| area.child_text_or_attr("stArea", k)?.trim().parse::<f64>().ok();
+    Some(FaceRegion {
+        name: node.child_text_or_attr("mwg-rs", "Name").unwrap_or_default().trim().to_string(),
+        x: num("x")?,
+        y: num("y")?,
+        w: num("w")?,
+        h: num("h")?,
+    })
+}
+
+fn xml_el(
+    prefix: &str,
+    local: &str,
+    attributes: Vec<(&str, String)>,
+    children: Vec<Child>,
+) -> Element {
+    Element {
+        prefix: prefix.to_string(),
+        local: local.to_string(),
+        attributes: attributes.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
+        children,
+    }
+}
+
+/// Up to six decimals, trailing zeros dropped (`0.4`, not `0.400000`).
+fn fmt_unit(v: f64) -> String {
+    let s = format!("{v:.6}");
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+fn region_li(face: &FaceRegion) -> Element {
+    let text = |s: &str| vec![Child::Text(s.to_string())];
+    xml_el(
+        "rdf",
+        "li",
+        vec![("rdf:parseType", "Resource".to_string())],
+        vec![
+            Child::Element(xml_el("mwg-rs", "Name", Vec::new(), text(&face.name))),
+            Child::Element(xml_el("mwg-rs", "Type", Vec::new(), text("Face"))),
+            Child::Element(xml_el(
+                "mwg-rs",
+                "Area",
+                vec![
+                    ("stArea:x", fmt_unit(face.x)),
+                    ("stArea:y", fmt_unit(face.y)),
+                    ("stArea:w", fmt_unit(face.w)),
+                    ("stArea:h", fmt_unit(face.h)),
+                    ("stArea:unit", "normalized".to_string()),
+                ],
+                Vec::new(),
+            )),
+        ],
+    )
+}
+
 fn append_li(child: &Child, out: &mut Vec<String>) {
     if let Child::Element(li_el) = child {
         if li_el.prefix == "rdf" && li_el.local == "li" {
@@ -552,6 +676,9 @@ impl XmpTree {
             "dc" => Some("http://purl.org/dc/elements/1.1/"),
             "lr" => Some("http://ns.adobe.com/lightroom/1.0/"),
             "exif" => Some("http://ns.adobe.com/exif/1.0/"),
+            "mwg-rs" => Some(MWG_RS_NS),
+            "stArea" => Some(ST_AREA_NS),
+            "stDim" => Some(ST_DIM_NS),
             "fb" => Some(FB_NS),
             _ => None,
         };
@@ -1017,6 +1144,95 @@ impl Sidecar {
                 *v = text.clone();
             }
         }
+    }
+
+    /// Named faces from `mwg-rs:Regions` (PLAN §5). Regions of other types
+    /// and items without a usable area are not faces and are skipped.
+    pub fn face_regions(&self) -> Vec<FaceRegion> {
+        let Some(bag) = self
+            .tree
+            .description()
+            .and_then(|d| d.find_child("mwg-rs", "Regions"))
+            .and_then(region_bag)
+        else {
+            return Vec::new();
+        };
+        bag.children
+            .iter()
+            .filter_map(|c| match c {
+                Child::Element(li) if li.prefix == "rdf" && li.local == "li" => face_from_li(li),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Merge faces into `mwg-rs:Regions`: a face already present (same
+    /// name and area) is skipped; existing regions, their dimensions and
+    /// every other node stay verbatim. A new `Regions` records `dims`
+    /// (pixel size) as `AppliedToDimensions` when given. Returns how many
+    /// faces were added, or `None` — nothing changed — when an existing
+    /// `Regions` has a structure we do not recognise, which we never
+    /// rewrite.
+    pub fn add_face_regions(
+        &mut self,
+        faces: &[FaceRegion],
+        dims: Option<(u32, u32)>,
+    ) -> Option<usize> {
+        let existing = self.tree.description().and_then(|d| d.find_child("mwg-rs", "Regions"));
+        if existing.is_some_and(|r| region_bag(r).is_none()) {
+            return None;
+        }
+        let mut known = self.face_regions();
+        let mut fresh: Vec<&FaceRegion> = Vec::new();
+        for face in faces {
+            if !known.iter().any(|k| k.same_face(face)) {
+                known.push(face.clone());
+                fresh.push(face);
+            }
+        }
+        if fresh.is_empty() {
+            return Some(0);
+        }
+
+        self.tree.ensure_description_ns("mwg-rs");
+        self.tree.ensure_description_ns("stArea");
+        if dims.is_some() {
+            self.tree.ensure_description_ns("stDim");
+        }
+        let d = self.tree.ensure_description();
+        let items: Vec<Child> = fresh.iter().map(|f| Child::Element(region_li(f))).collect();
+        match d.find_child_mut("mwg-rs", "Regions") {
+            Some(regions) => {
+                if let Some(bag) = region_bag_mut(regions) {
+                    bag.children.extend(items);
+                }
+            }
+            None => {
+                let mut parts = Vec::new();
+                if let Some((w, h)) = dims {
+                    parts.push(Child::Element(xml_el(
+                        "mwg-rs",
+                        "AppliedToDimensions",
+                        vec![
+                            ("stDim:w", w.to_string()),
+                            ("stDim:h", h.to_string()),
+                            ("stDim:unit", "pixel".to_string()),
+                        ],
+                        Vec::new(),
+                    )));
+                }
+                let bag = xml_el("rdf", "Bag", Vec::new(), items);
+                let list = xml_el("mwg-rs", "RegionList", Vec::new(), vec![Child::Element(bag)]);
+                parts.push(Child::Element(list));
+                d.children.push(Child::Element(xml_el(
+                    "mwg-rs",
+                    "Regions",
+                    vec![("rdf:parseType", "Resource".to_string())],
+                    parts,
+                )));
+            }
+        }
+        Some(fresh.len())
     }
 
     // ---- write path (merge-on-write, 00-010 §3) --------------------------

@@ -11,6 +11,7 @@ pub mod hidden;
 pub mod metadata_edit;
 pub mod migrations;
 pub mod missing;
+pub mod picasa;
 pub mod query;
 pub mod relocate;
 pub mod stacks;
@@ -22,6 +23,7 @@ pub use datetime::{AdjustError, AdjustFailure, AdjustReport, TimeAdjustment, Tim
 pub use metadata_edit::{FieldError, GpsEdit, MetadataEdit, MetadataField};
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
+pub use picasa::{PicasaReport, PicasaStatus};
 pub use query::{FileQuery, FileSort};
 pub use relocate::BatchFile;
 pub use stacks::{StackKind, StackSuggestion, DEFAULT_PAIR_WINDOW_SECS};

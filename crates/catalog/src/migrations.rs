@@ -18,6 +18,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V9,
     MIGRATION_V10,
     MIGRATION_V11,
+    MIGRATION_V12,
 ];
 
 const MIGRATION_V1: &str = "
@@ -395,6 +396,20 @@ ALTER TABLE files ADD COLUMN stack_role TEXT;
 ALTER TABLE files ADD COLUMN has_recipe INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX idx_files_stack ON files(stack_id);
 UPDATE files SET sidecar_mtime = NULL, sidecar_size = NULL;
+";
+
+/// TASK-03-022: per-folder Picasa.ini migration state. A scan that meets a
+/// folder's `Picasa.ini` records it `pending` (the offer); the user's answer
+/// moves it to `declined` (never offered again) or `done` (migrated). Keyed by
+/// folder path, not `folders.id`, so the answer outlives an unlink/re-add.
+/// The migrated data itself lives in the sidecars; this table only remembers
+/// what was asked, so a deleted catalog re-offers (a rerun is harmless).
+const MIGRATION_V12: &str = "
+CREATE TABLE picasa_ingest (
+    folder_path TEXT PRIMARY KEY,
+    status      TEXT NOT NULL CHECK (status IN ('pending', 'declined', 'done')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 ";
 
 /// Apply all pending migrations, in order, each in its own transaction.

@@ -275,6 +275,16 @@ const messages: Record<string, Dict> = {
     "stacks.stack": "Stack",
     "stacks.stackAll": "Stack all",
     "stacks.close": "Close",
+    "picasa.title": "Picasa library found",
+    "picasa.intro":
+      "These folders contain a Picasa.ini. Migrate to bring your stars, albums and named faces into Fotobase. The Picasa files are never changed.",
+    "picasa.migrate": "Migrate",
+    "picasa.decline": "Don't ask again",
+    "picasa.later": "Ask me later",
+    "picasa.done":
+      "{folder}: {written} photos updated — {stars} stars, {albums} albums created, {faces} faces",
+    "picasa.failed": "{n} photos could not be migrated. Try again.",
+    "picasa.error": "Picasa migration failed: {error}",
     "options.stackWindow": "RAW+JPEG pair window (seconds between capture times)",
     "trash.action.album_remove": "Removed from album",
     "trash.action.hide": "Hidden photo",
@@ -561,6 +571,16 @@ const messages: Record<string, Dict> = {
     "stacks.stack": "Stapeln",
     "stacks.stackAll": "Alle stapeln",
     "stacks.close": "Schließen",
+    "picasa.title": "Picasa-Bibliothek gefunden",
+    "picasa.intro":
+      "Diese Ordner enthalten eine Picasa.ini. Mit „Übernehmen“ kommen Sterne, Alben und benannte Gesichter nach Fotobase. Die Picasa-Dateien werden nie verändert.",
+    "picasa.migrate": "Übernehmen",
+    "picasa.decline": "Nicht mehr fragen",
+    "picasa.later": "Später fragen",
+    "picasa.done":
+      "{folder}: {written} Fotos aktualisiert — {stars} Sterne, {albums} Alben angelegt, {faces} Gesichter",
+    "picasa.failed": "{n} Fotos konnten nicht übernommen werden. Bitte erneut versuchen.",
+    "picasa.error": "Picasa-Übernahme fehlgeschlagen: {error}",
     "options.stackWindow": "RAW+JPEG-Paarfenster (Sekunden zwischen Aufnahmezeiten)",
     "trash.action.album_remove": "Aus Album entfernt",
     "trash.action.hide": "Ausgeblendetes Foto",
