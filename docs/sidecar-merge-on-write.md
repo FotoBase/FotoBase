@@ -27,13 +27,20 @@ This is the highest data-loss-risk area of the app. Everything here is normative
 | Hidden (photo) | `fb:Hidden` | boolean | §11 Q6 |
 | Hidden (folder) | `.fotobase` folder metadata file, one JSON flag `hidden` | per folder | §11 Q6 |
 
-Standard fields stay standard so other apps interoperate: `xmp:Rating`, `dc:subject`, `lr:hierarchicalSubject`, `dc:description`, `exif:GPS*`, `exif:DateTimeOriginal`, `mwg-rs:Regions` (§5 table).
+Standard fields stay standard so other apps interoperate: `xmp:Rating`, `dc:subject`, `lr:hierarchicalSubject`, `dc:description`, `dc:creator`, `dc:rights`, `exif:GPS*`, `exif:DateTimeOriginal`, `mwg-rs:Regions` (§5 table).
 
 ### Capture time (`exif:DateTimeOriginal`)
 
 - The date/time adjustment tools (shift, timezone fix, multi-camera merge; 03-019) write the adjusted capture time to `exif:DateTimeOriginal` as ISO-8601 (`2024-06-01T10:00:00+02:00`; no offset suffix when the source had none). `xmp:CreateDate` and `photoshop:DateCreated` are updated only when the packet already carries them, so no app sees two capture dates; they are never invented.
 - Base for an adjustment: the sidecar's value, else the catalog's `files.taken_at`, else the file `mtime` (UTC). `files.taken_at` mirrors the sidecar value on write-through and on rebuild; a sidecar without the field never clears the cached value.
 - One sidecar write per photo per batch (§3 coalescing); a photo that cannot be adjusted (unreadable date, out of range, I/O error) is reported and skipped, never half-written.
+
+### Info-pane metadata editing (GPS, artist, copyright, date)
+
+- The info-pane editor (03-020) writes one photo's edited fields in a single merge-on-write (§3): the fields it did not change are not touched. Capture time follows the rules above; a date typed without a UTC offset keeps the photo's current offset (sidecar, else catalog).
+- GPS: `exif:GPSLatitude` / `exif:GPSLongitude` in the XMP `GPSCoordinate` form `DDD,MM.mmmmmmmH` (`52,31.986N`; seven minute decimals, trailing zeros dropped), the form exiv2, digiKam and darktable read. An attribute-form value another tool wrote is replaced, never duplicated. Clearing removes both properties. Input accepts decimal degrees or degrees/minutes/seconds, with a sign or a hemisphere letter; out-of-range or malformed input is rejected before anything is written.
+- Artist: `dc:creator`, an ordered array (`rdf:Seq`) holding the one name entered; several creators written by another tool read joined with ", " and are replaced by an edit. Copyright: `dc:rights`, a language alternative whose `x-default` entry is set; other languages stay. A blank value removes the property.
+- The catalog mirrors all four (`files.taken_at`, `metadata.latitude/longitude/artist/copyright`) after the sidecar write succeeds, and re-derives them from sidecars on rebuild.
 
 ### Folder-level `.fotobase` file
 

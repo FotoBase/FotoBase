@@ -8,10 +8,12 @@ pub const CRATE_NAME: &str = "fotobase-metadata";
 
 mod datetime;
 mod folder_meta;
+mod gps;
 mod sidecar;
 
 pub use datetime::CaptureTime;
 pub use folder_meta::{FolderMeta, FolderMetaError, FOLDER_META_FILE};
+pub use gps::{parse_coordinate, GpsAxis, GpsParseError};
 pub use sidecar::{
     backup_path, tmp_path, FbNs, QuickXmlBackend, Sidecar, SidecarBackend, SidecarError, FB_NS,
 };

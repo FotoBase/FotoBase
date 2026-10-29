@@ -13,6 +13,7 @@
   import CaptionEditor from "./CaptionEditor.svelte";
   import DateTimeDialog from "./DateTimeDialog.svelte";
   import { formatCaptureTime } from "./datetime";
+  import MetadataEditor from "./MetadataEditor.svelte";
   import TagEditor from "./TagEditor.svelte";
   import { previewUri } from "./viewer";
   import {
@@ -145,6 +146,12 @@
     >
       {t("info.adjustTime")}
     </button>
+  </section>
+  <!-- Date, GPS, artist, copyright (TASK-03-020, PLAN §6 P2): edited for the
+       visible photo only; written to the sidecar by the backend. -->
+  <section>
+    <h3>{t("meta.title")}</h3>
+    <MetadataEditor {info} onsaved={(saved) => (info = saved)} />
   </section>
   <section>
     <h3>{t("info.histogram")}</h3>

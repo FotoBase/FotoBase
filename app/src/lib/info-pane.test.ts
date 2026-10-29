@@ -102,6 +102,10 @@ const PHOTO_A = {
   iso: 100,
   focal_length: 24,
   taken_at: null,
+  latitude: null,
+  longitude: null,
+  artist: null,
+  copyright: null,
 };
 
 const PHOTO_B = { ...PHOTO_A, id: 2, path: "/photos/b.jpg", filename: "b.jpg", camera: "Nikon Z8" };
@@ -238,6 +242,52 @@ describe("InfoPane", () => {
   it("disables Adjust without a photo", () => {
     renderPane(null);
     expect((screen.getByTestId("info-adjust-time") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  // TASK-03-020: the metadata editor lives in the pane and its save refreshes
+  // the captured time shown above it.
+  it("edits the photo's metadata and shows the stored values (TASK-03-020)", async () => {
+    const stored = {
+      ...PHOTO_A,
+      taken_at: "2024-06-02T08:00:00+02:00",
+      latitude: 48.8584,
+      longitude: 2.2945,
+      artist: "Ada",
+    };
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "photo_info") return { ...PHOTO_A, taken_at: "2024-06-01T12:00:00+02:00" };
+      if (cmd === "edit_photo_metadata") return { errors: [], info: stored };
+      return null;
+    });
+    renderPane({ id: 1, filename: "a.jpg", hash: "a".repeat(32) });
+    await waitFor(() => expect(screen.getByTestId("info-camera").textContent).toBe("Canon EOS R5"));
+
+    await fireEvent.click(screen.getByTestId("meta-edit"));
+    await fireEvent.input(screen.getByTestId("meta-input-date"), {
+      target: { value: "2024-06-02 08:00:00" },
+    });
+    await fireEvent.input(screen.getByTestId("meta-input-lat"), { target: { value: "48.8584" } });
+    await fireEvent.input(screen.getByTestId("meta-input-lon"), { target: { value: "2.2945" } });
+    await fireEvent.input(screen.getByTestId("meta-input-artist"), { target: { value: "Ada" } });
+    await fireEvent.click(screen.getByTestId("meta-save"));
+
+    await waitFor(() =>
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("edit_photo_metadata", {
+        fileId: 1,
+        edit: {
+          taken_at: "2024-06-02 08:00:00",
+          gps: { kind: "set", latitude: "48.8584", longitude: "2.2945" },
+          artist: "Ada",
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("info-captured").textContent?.trim()).toBe(
+        "2024-06-02 08:00:00 +02:00",
+      ),
+    );
+    expect(screen.getByTestId("meta-gps").textContent?.trim()).toBe("48.8584, 2.2945");
+    expect(screen.getByTestId("meta-artist").textContent?.trim()).toBe("Ada");
   });
 });
 
