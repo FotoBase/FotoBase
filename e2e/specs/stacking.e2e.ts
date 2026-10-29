@@ -95,6 +95,25 @@ describe("stacking", () => {
   });
 
   it("opens the picker from the badge and switches the top of the stack", async () => {
+    // TEMP debug
+    console.log(
+      "DEBUG badge:",
+      await browser.execute(() => {
+        const b = document.querySelector('[data-testid="stack-badge"]') as HTMLElement;
+        const r = b.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        const cs = getComputedStyle(b);
+        return JSON.stringify({
+          rect: r,
+          hit: hit?.outerHTML.slice(0, 200),
+          display: cs.display,
+          vis: cs.visibility,
+          pe: cs.pointerEvents,
+          win: [window.innerWidth, window.innerHeight, window.scrollY],
+          overlays: [...document.querySelectorAll(".ss-backdrop,.stack-picker,.context-menu")].length,
+        });
+      }),
+    );
     await badges()[0].click();
     await $('[data-testid="stack-picker"]').waitForDisplayed();
     await browser.waitUntil(async () => (await members().length) === 2);
