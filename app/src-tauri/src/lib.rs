@@ -381,6 +381,35 @@ fn set_caption(
     })
 }
 
+/// Outcome of an info-pane metadata edit (TASK-03-020): the per-field
+/// rejections (nothing written when any), else the photo's refreshed info.
+#[derive(serde::Serialize)]
+struct MetadataEditResult {
+    errors: Vec<fotobase_catalog::FieldError>,
+    info: Option<fotobase_catalog::PhotoInfo>,
+}
+
+/// Edit one photo's capture date, GPS, artist and copyright (TASK-03-020):
+/// validated first, then one sidecar write, catalog mirror second.
+#[tauri::command]
+fn edit_photo_metadata(
+    file_id: i64,
+    edit: fotobase_catalog::MetadataEdit,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<MetadataEditResult, String> {
+    let result = with_catalog_sync(&state, |cat| {
+        let errors = cat.edit_metadata(file_id, &edit)?;
+        let info = cat.photo_info(file_id).map_err(SyncError::from)?;
+        Ok(MetadataEditResult { errors, info })
+    })?;
+    if result.errors.is_empty() && edit.taken_at.is_some() {
+        // A new capture time can reorder the grid.
+        let _ = app.emit("library-changed", ());
+    }
+    Ok(result)
+}
+
 /// Albums (TASK-03-008): every album with its photo count and cover.
 #[tauri::command]
 fn list_albums(
@@ -1537,6 +1566,7 @@ pub fn run() {
             set_rating,
             get_caption,
             set_caption,
+            edit_photo_metadata,
             list_albums,
             create_album,
             update_album,

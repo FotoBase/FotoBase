@@ -8,6 +8,7 @@
 pub mod albums;
 pub mod datetime;
 pub mod hidden;
+pub mod metadata_edit;
 pub mod migrations;
 pub mod missing;
 pub mod query;
@@ -17,6 +18,7 @@ pub mod trash;
 
 pub use albums::AlbumInfo;
 pub use datetime::{AdjustError, AdjustFailure, AdjustReport, TimeAdjustment, TimePreview};
+pub use metadata_edit::{FieldError, GpsEdit, MetadataEdit, MetadataField};
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
 pub use query::{FileQuery, FileSort};
@@ -199,6 +201,11 @@ pub struct PhotoInfo {
     pub iso: Option<i64>,
     pub focal_length: Option<f64>,
     pub taken_at: Option<String>,
+    /// Sidecar-mirrored user data the info pane edits (TASK-03-020).
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub artist: Option<String>,
+    pub copyright: Option<String>,
 }
 
 /// One Folders-view entry (TASK-01-015, PLAN §2B): a real on-disk folder
@@ -798,7 +805,8 @@ impl Catalog {
     pub fn photo_info(&self, file_id: i64) -> Result<Option<PhotoInfo>> {
         let row = self.conn.query_row(
             "SELECT f.id, f.path, f.filename, f.size, f.mtime, f.width, f.height, f.media_type, \
-                    m.camera, m.lens, m.exposure, m.f_number, m.iso, m.focal_length, f.taken_at \
+                    m.camera, m.lens, m.exposure, m.f_number, m.iso, m.focal_length, f.taken_at, \
+                    m.latitude, m.longitude, m.artist, m.copyright \
              FROM files f LEFT JOIN metadata m ON m.file_id = f.id \
              WHERE f.id = ?1",
             [file_id],
@@ -819,6 +827,10 @@ impl Catalog {
                     iso: r.get(12)?,
                     focal_length: r.get(13)?,
                     taken_at: r.get(14)?,
+                    latitude: r.get(15)?,
+                    longitude: r.get(16)?,
+                    artist: r.get(17)?,
+                    copyright: r.get(18)?,
                 })
             },
         );

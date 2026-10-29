@@ -16,6 +16,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V7,
     MIGRATION_V8,
     MIGRATION_V9,
+    MIGRATION_V10,
 ];
 
 const MIGRATION_V1: &str = "
@@ -370,6 +371,16 @@ INSERT INTO files_fts(rowid, filename, folder, caption, tags)
             JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id)
     FROM files f JOIN folders d ON d.id = f.folder_id
     LEFT JOIN metadata m ON m.file_id = f.id;
+";
+
+/// TASK-03-020: artist (`dc:creator`) and copyright (`dc:rights`) mirror
+/// the sidecar like the other user-data columns (rebuildable cache). Sidecars
+/// synced before the columns existed are marked unsynced so the next rebuild
+/// reads the two fields from them.
+const MIGRATION_V10: &str = "
+ALTER TABLE metadata ADD COLUMN artist TEXT;
+ALTER TABLE metadata ADD COLUMN copyright TEXT;
+UPDATE files SET sidecar_mtime = NULL, sidecar_size = NULL;
 ";
 
 /// Apply all pending migrations, in order, each in its own transaction.

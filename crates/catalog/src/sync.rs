@@ -72,6 +72,9 @@ struct UserData {
     caption: Option<String>,
     tags: Vec<String>,
     gps: Option<(f64, f64)>,
+    /// `dc:creator` / `dc:rights` (TASK-03-020).
+    artist: Option<String>,
+    copyright: Option<String>,
     /// `fb:Albums` ids (TASK-03-008).
     albums: Vec<String>,
     /// `fb:Hidden` (TASK-03-009).
@@ -90,6 +93,8 @@ impl UserData {
             caption: sc.caption(),
             tags: sc.tags(),
             gps: sc.gps(),
+            artist: sc.artist(),
+            copyright: sc.copyright(),
             albums: sc.albums(),
             hidden: sc.hidden(),
             taken_at: sc.capture_time().map(|t| t.to_xmp()),
@@ -467,13 +472,16 @@ fn sidecar_unchanged(md: &std::fs::Metadata, stored_size: i64, stored_mtime_nano
 fn apply_user_data(tx: &rusqlite::Transaction<'_>, file_id: i64, data: &UserData) -> Result<bool> {
     tx.execute("INSERT OR IGNORE INTO metadata (file_id) VALUES (?1)", [file_id])?;
     tx.execute(
-        "UPDATE metadata SET rating = ?1, caption = ?2, latitude = ?3, longitude = ?4
-         WHERE file_id = ?5",
+        "UPDATE metadata SET rating = ?1, caption = ?2, latitude = ?3, longitude = ?4,
+                artist = ?5, copyright = ?6
+         WHERE file_id = ?7",
         rusqlite::params![
             data.rating,
             data.caption,
             data.gps.map(|(lat, _)| lat),
             data.gps.map(|(_, lon)| lon),
+            data.artist,
+            data.copyright,
             file_id
         ],
     )?;

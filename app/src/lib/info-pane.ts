@@ -21,6 +21,11 @@ export interface PhotoInfo {
   iso: number | null;
   focal_length: number | null;
   taken_at: string | null;
+  /// Sidecar-mirrored user data edited in the info pane (TASK-03-020).
+  latitude: number | null;
+  longitude: number | null;
+  artist: string | null;
+  copyright: string | null;
 }
 
 /** Fetch one photo's info via IPC. Properties + cached EXIF only — no image

@@ -272,11 +272,16 @@ impl Element {
     }
 
     fn set_or_replace_bag(&mut self, prefix: &str, local: &str, items: &[String]) {
-        // Rebuild as an explicit rdf:Bag — the form every mainstream tool
-        // (exiv2/digiKam, darktable) reads without parseType tricks.
+        self.set_or_replace_array(prefix, local, "Bag", items);
+    }
+
+    /// Rebuild an array property as an explicit `rdf:Bag` / `rdf:Seq` — the
+    /// form every mainstream tool (exiv2/digiKam, darktable) reads without
+    /// parseType tricks.
+    fn set_or_replace_array(&mut self, prefix: &str, local: &str, kind: &str, items: &[String]) {
         let mut bag = Element {
             prefix: "rdf".to_string(),
-            local: "Bag".to_string(),
+            local: kind.to_string(),
             attributes: Vec::new(),
             children: Vec::new(),
         };
@@ -290,6 +295,7 @@ impl Element {
         }
         if let Some(existing) = self.find_child_mut(prefix, local) {
             // Replace in place to keep tree order stable.
+            existing.attributes.retain(|(k, _)| k != "rdf:parseType");
             existing.children.clear();
             existing.children.push(Child::Element(bag));
             return;
@@ -839,6 +845,54 @@ impl Sidecar {
         }
     }
 
+    /// Artist (`dc:creator`, an ordered array). Several creators written by
+    /// another tool read joined with ", ".
+    pub fn artist(&self) -> Option<String> {
+        let names: Vec<String> = self
+            .tree
+            .description()
+            .map(|d| d.bag_items("dc", "creator"))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .collect();
+        (!names.is_empty()).then(|| names.join(", "))
+    }
+
+    /// Replace `dc:creator` with a single-entry `rdf:Seq` (TASK-03-020).
+    pub fn set_artist(&mut self, artist: &str) {
+        self.tree.ensure_description_ns("dc").set_or_replace_array(
+            "dc",
+            "creator",
+            "Seq",
+            &[artist.to_string()],
+        );
+    }
+
+    pub fn clear_artist(&mut self) {
+        if let Some(d) = self.tree.description_mut() {
+            d.remove_prop("dc", "creator");
+        }
+    }
+
+    /// Copyright notice (`dc:rights`, a language alternative).
+    pub fn copyright(&self) -> Option<String> {
+        self.tree.description().and_then(|d| d.child_alt_text("dc", "rights"))
+    }
+
+    /// Write the notice as the `x-default` entry of `dc:rights`; other
+    /// languages already in the alternative stay.
+    pub fn set_copyright(&mut self, notice: &str) {
+        self.tree.ensure_description_ns("dc").set_alt_default("dc", "rights", notice);
+    }
+
+    pub fn clear_copyright(&mut self) {
+        if let Some(d) = self.tree.description_mut() {
+            d.remove_prop("dc", "rights");
+        }
+    }
+
     /// GPS as (latitude, longitude) decimal degrees.
     pub fn gps(&self) -> Option<(f64, f64)> {
         let d = self.tree.description()?;
@@ -847,10 +901,21 @@ impl Sidecar {
         Some((parse_gps(&lat), parse_gps(&lon)))
     }
 
+    /// Write both coordinates in the XMP `GPSCoordinate` form
+    /// (`52,31.986N`) that exiv2, digiKam and darktable read.
     pub fn set_gps(&mut self, lat: f64, lon: f64) {
         let d = self.tree.ensure_description_ns("exif");
+        d.attributes.retain(|(k, _)| k != "exif:GPSLatitude" && k != "exif:GPSLongitude");
         d.set_or_replace_child("exif", "GPSLatitude", &format_gps(lat, 'N', 'S'));
         d.set_or_replace_child("exif", "GPSLongitude", &format_gps(lon, 'E', 'W'));
+    }
+
+    /// Remove both coordinates (TASK-03-020). Other `exif:` fields stay.
+    pub fn clear_gps(&mut self) {
+        if let Some(d) = self.tree.description_mut() {
+            d.remove_prop("exif", "GPSLatitude");
+            d.remove_prop("exif", "GPSLongitude");
+        }
     }
 
     /// Capture time from `exif:DateTimeOriginal` (TASK-03-019). Absent or
@@ -973,15 +1038,20 @@ fn parse_gps(text: &str) -> f64 {
     deg
 }
 
-/// Format decimal degrees as XMP DMS text with hemisphere.
+/// Format decimal degrees as an XMP `GPSCoordinate`: whole degrees, decimal
+/// minutes and the hemisphere (`52,31.986N`). Minutes carry seven decimals
+/// (about 2 cm), trailing zeros dropped, so a value round-trips unchanged.
 fn format_gps(value: f64, pos: char, neg: char) -> String {
-    let hemi = if value >= 0.0 { pos } else { neg };
-    let v = value.abs();
-    let deg = v.floor();
-    let min_full = (v - deg) * 60.0;
-    let min = min_full.floor();
-    let sec = (min_full - min) * 60.0;
-    format!("{deg}\u{b0}{min}'{sec:.1}\"{hemi}")
+    const SCALE: u64 = 10_000_000;
+    let hemi = if value.is_sign_negative() && value != 0.0 { neg } else { pos };
+    let units = (value.abs() * 60.0 * SCALE as f64).round() as u64;
+    let (deg, rem) = (units / (60 * SCALE), units % (60 * SCALE));
+    let (min, frac) = (rem / SCALE, rem % SCALE);
+    if frac == 0 {
+        return format!("{deg},{min}{hemi}");
+    }
+    let frac = format!("{frac:07}");
+    format!("{deg},{min}.{}{hemi}", frac.trim_end_matches('0'))
 }
 
 #[cfg(test)]

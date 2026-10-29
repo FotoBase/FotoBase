@@ -45,7 +45,7 @@
 ## feat: metadata editing & stacking
 
 - [x] `03-019` (M) Date/time adjustment: shift capture time, fix timezones, merge multi-camera sets.
-- [ ] `03-020` (M) Metadata editing in info pane: date, GPS, artist, copyright.
+- [x] `03-020` (M) Metadata editing in info pane: date, GPS, artist, copyright.
 - [ ] `03-021` (M) Stacking: RAW+JPEG pairs, burst stacks, edited versions under one thumbnail.
 
 ## feat: Picasa migration & portability
