@@ -260,6 +260,13 @@ pub fn spawn_status_updater(app: AppHandle) {
 /// setting on, the close button hides the window instead of quitting so
 /// watching continues from the tray; off, the app exits as before.
 pub fn handle_close_request(app: &AppHandle) -> bool {
+    // e2e seam (tray spec): WebKitWebDriver cannot execute against an
+    // unmapped (hidden) view — every post-close command times out — so
+    // under this env the close request is still intercepted (the app does
+    // NOT exit) but the window stays mapped and drivable. The hide itself
+    // is a single `win.hide()`; the interception + background-watching
+    // behavior is what the e2e proves.
+    let keep_window = std::env::var_os("FOTOBASE_E2E_KEEP_WINDOW").is_some();
     let close_to_tray = app
         .try_state::<crate::AppState>()
         .and_then(|state| state.settings.lock().ok().map(|s| s.close_to_tray))
@@ -267,8 +274,10 @@ pub fn handle_close_request(app: &AppHandle) -> bool {
     if !close_to_tray {
         return false;
     }
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.hide();
+    if !keep_window {
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.hide();
+        }
     }
     true
 }

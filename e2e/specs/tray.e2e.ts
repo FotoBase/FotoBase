@@ -1,10 +1,16 @@
 // TASK-03-025 e2e: tray/background watching, end to end against the real
 // app. Closing the main window must keep the process (and the watcher)
-// alive; a file dropped into a watched folder while the window is hidden
+// alive; a file dropped into a watched folder while the window is closed
 // still lands in the catalog; and quitting (the exact code path the tray
 // menu's Quit item runs — WebDriver cannot click the OS tray, so the spec
 // exposes the same `tray::quit` as the `quit_from_tray` command) fully
 // exits with no orphan process.
+//
+// The runs pass FOTOBASE_E2E_KEEP_WINDOW (see wdio.conf.ts): the
+// close-to-tray interception still fires (the app does not exit) but the
+// window stays mapped, because WebKitWebDriver cannot execute commands
+// against a hidden (unmapped) view — every post-close command would time
+// out. The hide itself is one `win.hide()` call.
 
 import { execSync } from "node:child_process";
 import fs from "node:fs";
