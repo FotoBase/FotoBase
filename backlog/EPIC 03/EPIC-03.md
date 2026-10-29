@@ -56,5 +56,5 @@
 
 ## feat: OS integration
 
-- [ ] `03-025` (S) Tray icon for background watching.
+- [x] `03-025` (S) Tray icon for background watching.
 - [ ] `03-026` (M) Rebuild acceptance harness: delete catalog → rebuild → diff user data vs snapshot (§9).

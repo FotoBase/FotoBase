@@ -1,8 +1,10 @@
 # e2e (WebdriverIO + tauri-driver)
 
-Drives the real Tauri app through WebKitWebDriver (PLAN §4). One spec so far:
+Drives the real Tauri app through WebKitWebDriver (PLAN §4). Specs:
 `specs/stacking.e2e.ts` (TASK-03-021) — suggest and stack a RAW+JPEG pair, badge
-and picker, switch the top, unstack, originals byte-identical.
+and picker, switch the top, unstack, originals byte-identical;
+`specs/tray.e2e.ts` (TASK-03-025) — close the window and watching continues,
+a file dropped while hidden still lands in the catalog, quit fully exits.
 
 ## Platforms
 

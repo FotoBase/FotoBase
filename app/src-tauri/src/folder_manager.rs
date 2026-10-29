@@ -159,6 +159,34 @@ impl FolderManager {
     pub fn stop(self) {
         self.watcher.stop();
     }
+
+    /// Tray "Pause Watching" (TASK-03-025): queued events stop producing
+    /// scans until [`resume_watching`]; nothing is dropped.
+    pub fn pause_watching(&self) {
+        self.watcher.pause();
+    }
+
+    /// Tray "Resume Watching": the queued events flush into scans.
+    pub fn resume_watching(&self) {
+        self.watcher.resume();
+    }
+
+    /// Whether watching is paused (tray menu label).
+    pub fn is_paused(&self) -> bool {
+        self.watcher.is_paused()
+    }
+
+    /// Whether a watched-folder scan is running right now (tray status).
+    pub fn is_scanning(&self) -> bool {
+        self.watcher.is_scanning()
+    }
+
+    /// Whether any folder is watched (`scan_mode = 'always'`): tray status
+    /// "watching" vs "idle".
+    pub fn has_watched_folders(&self) -> bool {
+        let cat = self.catalog.lock().map_err(|_| ()).expect("catalog mutex poisoned");
+        !top_level_roots(&cat).is_empty()
+    }
 }
 
 /// Top-level `scan_mode = 'always'` folders: nested rows fold into their

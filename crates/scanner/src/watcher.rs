@@ -106,6 +106,13 @@ fn make_root_watcher(
 pub struct Watcher {
     scan_count: Arc<AtomicUsize>,
     cancel: Arc<AtomicBool>,
+    /// Tray pause/resume (TASK-03-025): while set, the scan worker parks on
+    /// this gate instead of scanning. Events keep queuing, so a resume
+    /// flushes everything observed while paused — nothing is lost.
+    paused: Arc<AtomicBool>,
+    /// Set by the scan worker for the duration of a scan, so the tray can
+    /// show idle / watching / scanning.
+    scanning: Arc<AtomicBool>,
     cmd_tx: Option<Sender<Cmd>>,
     event_tx: Option<Sender<PathBuf>>,
     work_tx: Option<Sender<PathBuf>>,
@@ -136,6 +143,8 @@ impl Watcher {
         let (work_tx, work_rx) = mpsc::channel::<PathBuf>();
         let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
         let cancel = Arc::new(AtomicBool::new(false));
+        let paused = Arc::new(AtomicBool::new(false));
+        let scanning = Arc::new(AtomicBool::new(false));
         let scan_count = Arc::new(AtomicUsize::new(0));
 
         let mut threads = Vec::new();
@@ -296,10 +305,21 @@ impl Watcher {
         // concurrently, and events landing mid-scan produce a follow-up scan.
         {
             let cancel = cancel.clone();
+            let paused = paused.clone();
+            let scanning = scanning.clone();
             let scan_count = scan_count.clone();
             let on_change = on_change;
             threads.push(thread::Builder::new().name("fb-scan".into()).spawn(move || {
+                // Park while paused (TASK-03-025): queued events stay in the
+                // work channel and are scanned once the gate lifts, so a
+                // pause drops nothing — it only delays.
+                let wait_gate = |paused: &AtomicBool, cancel: &AtomicBool| {
+                    while paused.load(Ordering::Relaxed) && !cancel.load(Ordering::Relaxed) {
+                        thread::sleep(Duration::from_millis(50));
+                    }
+                };
                 while let Ok(first) = work_rx.recv() {
+                    wait_gate(&paused, &cancel);
                     if cancel.load(Ordering::Relaxed) {
                         break;
                     }
@@ -309,13 +329,16 @@ impl Watcher {
                         batch.insert(more);
                     }
                     for root in batch {
+                        wait_gate(&paused, &cancel);
                         if cancel.load(Ordering::Relaxed) {
                             break;
                         }
+                        scanning.store(true, Ordering::Relaxed);
                         let report = {
                             let mut cat = catalog.lock().unwrap();
                             scan_folder(&mut cat, &root, &cancel)
                         };
+                        scanning.store(false, Ordering::Relaxed);
                         scan_count.fetch_add(1, Ordering::Relaxed);
                         match report {
                             Ok(r) => {
@@ -341,6 +364,8 @@ impl Watcher {
         Ok(Self {
             scan_count,
             cancel,
+            paused,
+            scanning,
             cmd_tx: Some(cmd_tx),
             event_tx: Some(event_tx),
             work_tx: Some(work_tx),
@@ -351,6 +376,29 @@ impl Watcher {
     /// Number of incremental scans started since spawn.
     pub fn scan_count(&self) -> usize {
         self.scan_count.load(Ordering::Relaxed)
+    }
+
+    /// Pause watching (tray "Pause", TASK-03-025): queued and incoming
+    /// events stop producing scans until [`resume`]. Events are not
+    /// dropped — the work channel holds them, and resuming flushes them.
+    pub fn pause(&self) {
+        self.paused.store(true, Ordering::Relaxed);
+    }
+
+    /// Resume watching: the parked worker drains everything queued while
+    /// paused.
+    pub fn resume(&self) {
+        self.paused.store(false, Ordering::Relaxed);
+    }
+
+    /// Whether the watcher is paused (tray menu label / status).
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::Relaxed)
+    }
+
+    /// Whether a scan is currently running (tray status: scanning).
+    pub fn is_scanning(&self) -> bool {
+        self.scanning.load(Ordering::Relaxed)
     }
 
     /// Start watching another folder (Folder Manager "Scan Always").
