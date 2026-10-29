@@ -104,7 +104,14 @@ export const config: WebdriverIO.Config = {
   afterSession() {
     driver?.kill();
     driver = undefined;
-    if (home) fs.rmSync(home, { recursive: true, force: true });
+    // The app may still be flushing its cache as it exits: retry, never fail the run.
+    if (home) {
+      try {
+        fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch {
+        // a leftover temp dir is harmless
+      }
+    }
     home = undefined;
   },
 };
