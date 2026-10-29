@@ -51,7 +51,7 @@
 ## feat: Picasa migration & portability
 
 - [x] `03-022` (M) Picasa.ini ingest on first scan: legacy stars, albums, faces → XMP ("your old library, restored").
-- [ ] `03-023` (M) Portable export: albums + tags + recipes to JSON/CSV (§5 anti-lock-in).
+- [x] `03-023` (M) Portable export: albums + tags + recipes to JSON/CSV (§5 anti-lock-in).
 - [ ] `03-024` (M) Optional multiple catalogs (work/personal); catalog switcher UI.
 
 ## feat: OS integration

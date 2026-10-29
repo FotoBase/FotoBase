@@ -51,6 +51,13 @@ const IMPORT_QUEUE_CAPACITY: usize = 2;
 /// the single worker serializes them (one sidecar writer at a time).
 const DATETIME_QUEUE_CAPACITY: usize = 4;
 
+/// Capacity of the portable-export queue (TASK-03-023): bounded, per PLAN
+/// §3 rule 4; exports are cheap reads, the single worker serializes them.
+const EXPORT_QUEUE_CAPACITY: usize = 2;
+
+/// Sequence number for unique portable-export job keys.
+static EXPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Sequence number for unique date/time job keys.
 static DATETIME_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -85,6 +92,8 @@ struct AppState {
     imports: fotobase_jobs::Queue<import::ImportReport>,
     /// Bounded queue for date/time adjustment batches (TASK-03-019).
     datetime_jobs: fotobase_jobs::Queue<fotobase_catalog::AdjustReport>,
+    /// Bounded queue for portable user-data exports (TASK-03-023).
+    exports: fotobase_jobs::Queue<fotobase_catalog::ExportReport>,
     /// Cancel token of the most recently started import (TASK-01-017):
     /// `cancel_import` trips it, the running job observes the flag.
     import_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
@@ -789,6 +798,50 @@ async fn adjust_datetime(
     match outcome.as_ref() {
         fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
         fotobase_jobs::Outcome::Cancelled => Err("date/time adjustment cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Portable export (TASK-03-023, PLAN §5 anti-lock-in): the picked user data
+/// (albums / tags / recipes) as JSON or CSV into an existing folder. Read-only
+/// for sidecars and catalog; runs in the bounded job queue (§3 rule 4) on a
+/// blocking thread with its own catalog connection, so it works at any time,
+/// even mid-scan.
+#[tauri::command]
+async fn export_user_data(
+    dir: String,
+    sections: fotobase_catalog::ExportSections,
+    format: fotobase_catalog::ExportFormat,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_catalog::ExportReport, String> {
+    let queue = state.exports.clone();
+    let catalog_path = state.catalog_path.clone();
+    let seq = EXPORT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let handle = queue
+        .try_enqueue(
+            format!("export-{seq}"),
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |_ctx| {
+                let (dir, catalog_path) = (dir.clone(), catalog_path.clone());
+                async move {
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        let cat = Catalog::open(&catalog_path).map_err(|e| e.to_string())?;
+                        cat.export_user_data(std::path::Path::new(&dir), sections, format)
+                            .map_err(|e| e.to_string())
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(report)) => fotobase_jobs::Outcome::Done(report),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("export task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue export: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("export cancelled".into()),
         fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
     }
 }
@@ -1559,6 +1612,9 @@ pub fn run() {
             let datetime_jobs = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(DATETIME_QUEUE_CAPACITY)
             });
+            let exports = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(EXPORT_QUEUE_CAPACITY)
+            });
             let persisted = settings::Settings::load(&data_dir);
             // OS-opened files (TASK-01-025): whatever the OS passed on the
             // command line that is an existing supported image is parked
@@ -1575,6 +1631,7 @@ pub fn run() {
                 rebuilds,
                 imports,
                 datetime_jobs,
+                exports,
                 import_cancel: Mutex::new(None),
                 settings: Mutex::new(persisted),
                 pending_update: Mutex::new(None),
@@ -1693,6 +1750,7 @@ pub fn run() {
             list_tags,
             preview_datetime_adjustment,
             adjust_datetime,
+            export_user_data,
             preview_batch_rename,
             batch_rename,
             preview_batch_move,

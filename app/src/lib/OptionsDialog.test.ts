@@ -296,3 +296,14 @@ describe("OptionsDialog single-click-to-edit (TASK-03-017)", () => {
     expect(saveSettings).toHaveBeenCalledWith({ ...base, single_click_edit: true });
   });
 });
+
+describe("OptionsDialog portable export (TASK-03-023)", () => {
+  it("opens the export dialog", async () => {
+    render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });
+    expect(screen.queryByRole("dialog", { name: t("export.title") })).toBeNull();
+
+    await fireEvent.click(screen.getByTestId("export-data"));
+
+    expect(screen.getByRole("dialog", { name: t("export.title") })).toBeTruthy();
+  });
+});

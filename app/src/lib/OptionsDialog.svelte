@@ -15,6 +15,7 @@
     UPDATE_MODES,
     type Settings,
   } from "./settings";
+  import PortableExportDialog from "./PortableExportDialog.svelte";
 
   let {
     open = $bindable(false),
@@ -30,6 +31,7 @@
   } = $props();
 
   let clearResult = $state<string | null>(null);
+  let exportOpen = $state(false);
 
   function apply(next: Settings): void {
     const revealChanged = next.show_hidden !== settings.show_hidden;
@@ -258,6 +260,13 @@
           {/if}
         </div>
 
+        <!-- Portable export (TASK-03-023, PLAN §5 anti-lock-in). -->
+        <div class="options-row">
+          <button type="button" onclick={() => (exportOpen = true)} data-testid="export-data">
+            {t("options.exportData")}
+          </button>
+        </div>
+
         <!-- File associations (TASK-01-025, PLAN §2M): which image types
              the OS opens with Fotobase. -->
         <fieldset class="options-row options-associations">
@@ -373,6 +382,8 @@
     </div>
   </div>
 {/if}
+
+<PortableExportDialog bind:open={exportOpen} />
 
 <style>
   .options-backdrop {

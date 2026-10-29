@@ -1,0 +1,46 @@
+{
+  "spec": "fotobase.export",
+  "version": 1,
+  "exported_at": "2026-10-29T16:05:23Z",
+  "generator": "Fotobase 0.3.0",
+  "albums": [
+    {
+      "id": "0b9f6f0e-3c1a-4f7e-9a39-5d2c8e1b7a40",
+      "name": "Summer 2024",
+      "date": "2024-07-14",
+      "place": "Lisbon",
+      "members": ["/home/ana/Pictures/2024/beach.jpg", "/home/ana/Pictures/2024/tram.jpg"]
+    },
+    {
+      "id": "5e1d2c3b-8a7f-4e6d-9c0b-1a2b3c4d5e6f",
+      "name": "Best of",
+      "date": "2023-12-31",
+      "description": "Favourites of the year",
+      "members": []
+    }
+  ],
+  "tags": [
+    { "name": "family", "files": ["/home/ana/Pictures/2024/beach.jpg"] },
+    {
+      "name": "sea",
+      "files": ["/home/ana/Pictures/2024/beach.jpg", "/home/ana/Pictures/2024/harbour.jpg"]
+    }
+  ],
+  "recipes": [
+    {
+      "file": "/home/ana/Pictures/2024/beach.jpg",
+      "recipe": {
+        "spec": "fotobase.recipe",
+        "version": 1,
+        "ops": [
+          {
+            "type": "crop",
+            "params": { "x": 0.1, "y": 0.05, "w": 0.8, "h": 0.9 }
+          },
+          { "type": "fill_light", "params": { "amount": 0.25 } },
+          { "type": "sepia" }
+        ]
+      }
+    }
+  ]
+}

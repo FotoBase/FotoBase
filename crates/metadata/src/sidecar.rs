@@ -1039,10 +1039,17 @@ impl Sidecar {
     /// Whether the photo carries an edit recipe (`fb:Recipe`): the marker of
     /// an edited version. Fotobase never interprets the recipe here.
     pub fn has_recipe(&self) -> bool {
+        self.recipe().is_some()
+    }
+
+    /// The raw `fb:Recipe` JSON text, trimmed, uninterpreted (portable
+    /// export, TASK-03-023). `None` when absent or blank.
+    pub fn recipe(&self) -> Option<String> {
         self.tree
             .description()
             .and_then(|d| d.child_text_or_attr("fb", "Recipe"))
-            .is_some_and(|t| !t.trim().is_empty())
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
     }
 
     /// Artist (`dc:creator`, an ordered array). Several creators written by

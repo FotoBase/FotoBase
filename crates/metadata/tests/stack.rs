@@ -153,3 +153,21 @@ fn the_recipe_marker_is_readable_for_edited_version_detection() {
     );
     assert!(Sidecar::read(&edited).unwrap().has_recipe());
 }
+
+#[test]
+fn the_recipe_json_text_is_readable_verbatim_for_portable_export() {
+    let dir = tempfile::tempdir().unwrap();
+    let plain = sidecar_with(dir.path(), "");
+    assert_eq!(Sidecar::read(&plain).unwrap().recipe(), None);
+
+    let edited = sidecar_with(
+        dir.path(),
+        &format!(
+            r#"    <fb:Recipe xmlns:fb="{FB_NS}">{{"spec":"fotobase.recipe","version":1,"ops":[{{"type":"sepia"}}]}}</fb:Recipe>"#
+        ),
+    );
+    assert_eq!(
+        Sidecar::read(&edited).unwrap().recipe().as_deref(),
+        Some(r#"{"spec":"fotobase.recipe","version":1,"ops":[{"type":"sepia"}]}"#)
+    );
+}
