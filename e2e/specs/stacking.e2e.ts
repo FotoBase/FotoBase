@@ -62,6 +62,34 @@ describe("stacking", () => {
   it("lists every photo of the library before anything is stacked", async () => {
     await waitForCellCount(3);
     expect(await badges().length).toBe(0);
+    // TEMP debug
+    fs.mkdirSync("screenshots", { recursive: true });
+    await browser.saveScreenshot("screenshots/initial-grid.png");
+    console.log(
+      "DEBUG grid:",
+      await browser.execute(() => {
+        const r = (el: Element | null) => {
+          const b = el?.getBoundingClientRect();
+          return b && [b.x, b.y, b.width, b.height].map(Math.round);
+        };
+        const g = document.querySelector('[data-testid="grid-scroll"]');
+        const inner = document.querySelector(".grid-inner") as HTMLElement;
+        return JSON.stringify({
+          scroll: r(g),
+          inner: r(inner),
+          innerH: inner.style.height,
+          rows: Array.from(document.querySelectorAll(".grid-row")).map((e) => [
+            (e as HTMLElement).style.cssText,
+            r(e),
+          ]),
+          cells: Array.from(document.querySelectorAll('[data-testid="grid-cell"]')).map((e) => r(e)),
+          imgs: Array.from(document.querySelectorAll('[data-testid="grid-cell"] > *')).map((e) => [
+            e.tagName,
+            r(e),
+          ]),
+        });
+      }),
+    );
   });
 
   it("offers the RAW+JPEG pair and stacks it into one thumbnail with a badge", async () => {
