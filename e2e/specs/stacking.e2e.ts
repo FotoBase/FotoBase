@@ -110,7 +110,7 @@ describe("stacking", () => {
           vis: cs.visibility,
           pe: cs.pointerEvents,
           win: [window.innerWidth, window.innerHeight, window.scrollY],
-          overlays: [...document.querySelectorAll(".ss-backdrop,.stack-picker,.context-menu")].length,
+          overlays: document.querySelectorAll(".ss-backdrop,.stack-picker,.context-menu").length,
         });
       }),
     );
