@@ -144,8 +144,8 @@
   .stack-picker {
     position: fixed;
     z-index: 60;
-    width: 22rem;
-    max-width: 90vw;
+    min-width: 16rem;
+    max-width: 24rem;
     max-height: 70vh;
     overflow-y: auto;
     padding: 0.6rem 0.75rem;

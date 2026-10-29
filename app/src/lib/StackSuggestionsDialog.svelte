@@ -122,9 +122,7 @@
     background: var(--fb-surface, #fff);
     color: var(--fb-text, #111);
     border-radius: 8px;
-    /* A definite width: the 1fr filename column has overflow hidden, so in a
-       shrink-to-fit dialog it would collapse to nothing. */
-    width: 36rem;
+    min-width: 26rem;
     max-width: 90vw;
     max-height: 90vh;
     overflow-y: auto;

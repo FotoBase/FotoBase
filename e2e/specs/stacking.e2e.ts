@@ -13,6 +13,12 @@ const cells = () => $$('[data-testid="grid-cell"]');
 const badges = () => $$('[data-testid="stack-badge"]');
 const members = () => $$('[data-testid="stack-member"]');
 
+// `textContent`, not getText(): WebDriver's visible-text rule drops text a
+// stylesheet clips with overflow hidden + ellipsis (the filename columns).
+const textOf = async (el: {
+  getProperty(name: string): Promise<unknown>;
+}): Promise<string> => String(await el.getProperty("textContent"));
+
 let lib: Library;
 
 const sidecar = (name: string): string => path.join(lib.dir, `${name}.xmp`);
@@ -64,24 +70,9 @@ describe("stacking", () => {
     const suggestion = $('[data-testid="stack-suggestion"]');
     await suggestion.waitForDisplayed();
     expect(await $$('[data-testid="stack-suggestion"]').length).toBe(1);
-    // TEMP debug
-    console.log(
-      "DEBUG row:",
-      await browser.execute(() => {
-        const row = document.querySelector('[data-testid="stack-suggestion"]') as HTMLElement;
-        const files = row.querySelector(".ss-files") as HTMLElement;
-        const dlg = document.querySelector(".ss-dialog") as HTMLElement;
-        return JSON.stringify({
-          html: row.outerHTML,
-          filesRect: files?.getBoundingClientRect(),
-          dialogRect: dlg?.getBoundingClientRect(),
-          cols: getComputedStyle(row).gridTemplateColumns,
-          win: [window.innerWidth, window.innerHeight],
-        });
-      }),
-    );
-    await expect(suggestion).toHaveText(expect.stringContaining(PAIR_JPEG));
-    await expect(suggestion).toHaveText(expect.stringContaining(PAIR_RAW));
+    const row = await textOf(suggestion);
+    expect(row).toContain(PAIR_JPEG);
+    expect(row).toContain(PAIR_RAW);
 
     await $('[data-testid="stack-suggestion-accept"]').click();
     await $('[data-testid="stack-suggestions-empty"]').waitForDisplayed();
@@ -107,12 +98,12 @@ describe("stacking", () => {
     await badges()[0].click();
     await $('[data-testid="stack-picker"]').waitForDisplayed();
     await browser.waitUntil(async () => (await members().length) === 2);
-    await expect(members()[0]).toHaveText(expect.stringContaining(PAIR_JPEG));
+    expect(await textOf(members()[0])).toContain(PAIR_JPEG);
     await expect(members()[0]).toHaveAttribute("data-top", "true");
 
     await $('[data-testid^="stack-make-top-"]').click();
 
-    await browser.waitUntil(async () => (await members()[0].getText()).includes(PAIR_RAW), {
+    await browser.waitUntil(async () => (await textOf(members()[0])).includes(PAIR_RAW), {
       timeoutMsg: "the RAW did not become the top",
     });
     expect(sidecarText(PAIR_RAW)).toContain("<fb:StackRole>top</fb:StackRole>");
