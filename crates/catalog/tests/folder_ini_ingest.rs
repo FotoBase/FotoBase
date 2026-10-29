@@ -1,13 +1,13 @@
-//! TASK-03-022: Picasa.ini ingest. Legacy stars, albums and faces become XMP
+//! TASK-03-022: folder ini ingest. Stars, albums and faces become XMP
 //! sidecar data through the normal merge-on-write path; the ini files are
 //! never touched and a rerun changes nothing (PLAN §1 onboarding, §5).
 
 use std::path::{Path, PathBuf};
 
-use fotobase_catalog::{sidecar_path, Catalog, PicasaStatus};
-use fotobase_metadata::Sidecar;
+use fotobase_catalog::{sidecar_path, Catalog, FolderIniStatus};
+use fotobase_metadata::{Sidecar, FOLDER_INI_FILE, FOLDER_INI_HIDDEN_FILE};
 
-const INI: &str = "[Picasa]
+const INI: &str = "[Folder]
 name=Holiday
 [IMG_0001.JPG]
 star=yes
@@ -59,7 +59,7 @@ fn sidecar_bytes(original: &Path) -> Option<Vec<u8>> {
     std::fs::read(sidecar_path(original.to_str().unwrap())).ok()
 }
 
-/// A library folder with Picasa.ini, two catalogued photos and the catalog.
+/// A library folder with an ini, two catalogued photos and the catalog.
 fn library() -> (tempfile::TempDir, tempfile::TempDir, Catalog, (i64, PathBuf), (i64, PathBuf)) {
     let lib = tempfile::tempdir().unwrap();
     let data = tempfile::tempdir().unwrap();
@@ -67,7 +67,7 @@ fn library() -> (tempfile::TempDir, tempfile::TempDir, Catalog, (i64, PathBuf), 
     let a = add_photo(&mut cat, lib.path(), "IMG_0001.JPG");
     // Catalogued under a different case than the ini's section name.
     let b = add_photo(&mut cat, lib.path(), "IMG_0002.jpg");
-    std::fs::write(lib.path().join("Picasa.ini"), INI).unwrap();
+    std::fs::write(lib.path().join(FOLDER_INI_FILE), INI).unwrap();
     (lib, data, cat, a, b)
 }
 
@@ -75,7 +75,7 @@ fn library() -> (tempfile::TempDir, tempfile::TempDir, Catalog, (i64, PathBuf), 
 fn converts_stars_tags_caption_albums_and_faces_into_the_sidecar() {
     let (lib, _data, mut cat, (a_id, a), (_b_id, b)) = library();
 
-    let report = cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    let report = cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
 
     let sc = sidecar_of(&a);
     assert_eq!(sc.rating(), Some(5), "star → xmp:Rating = 5 (ADR-0002)");
@@ -119,13 +119,13 @@ fn converts_stars_tags_caption_albums_and_faces_into_the_sidecar() {
 fn rerunning_is_idempotent_and_writes_nothing() {
     let (lib, _data, mut cat, (_, a), (_, b)) = library();
     let dir = lib.path().to_str().unwrap();
-    cat.ingest_picasa_folder(dir).unwrap();
+    cat.ingest_folder_ini(dir).unwrap();
 
     let (a_bytes, b_bytes) = (sidecar_bytes(&a).unwrap(), sidecar_bytes(&b).unwrap());
     let a_mtime = std::fs::metadata(sidecar_path(a.to_str().unwrap())).unwrap().modified().unwrap();
     let albums_before = cat.list_albums().unwrap();
 
-    let again = cat.ingest_picasa_folder(dir).unwrap();
+    let again = cat.ingest_folder_ini(dir).unwrap();
 
     assert_eq!(again.written, 0, "{again:?}");
     assert_eq!(again.unchanged, 2);
@@ -142,12 +142,12 @@ fn rerunning_is_idempotent_and_writes_nothing() {
 #[test]
 fn the_ini_files_are_never_modified_or_deleted() {
     let (lib, _data, mut cat, _a, _b) = library();
-    let ini = lib.path().join("Picasa.ini");
+    let ini = lib.path().join(FOLDER_INI_FILE);
     let before = std::fs::read(&ini).unwrap();
     let mtime = std::fs::metadata(&ini).unwrap().modified().unwrap();
 
-    cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
-    cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
+    cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
 
     assert_eq!(std::fs::read(&ini).unwrap(), before);
     assert_eq!(std::fs::metadata(&ini).unwrap().modified().unwrap(), mtime);
@@ -156,14 +156,14 @@ fn the_ini_files_are_never_modified_or_deleted() {
         .flatten()
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .collect();
-    assert!(!names.iter().any(|n| n.starts_with("Picasa.ini.")), "{names:?}");
+    assert!(!names.iter().any(|n| n.starts_with(&format!("{FOLDER_INI_FILE}."))), "{names:?}");
 }
 
 #[test]
 fn originals_are_untouched() {
     let (lib, _data, mut cat, (_, a), _b) = library();
     let before = std::fs::read(&a).unwrap();
-    cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
     assert_eq!(std::fs::read(&a).unwrap(), before);
 }
 
@@ -187,7 +187,7 @@ fn existing_user_data_wins_and_unknown_xmp_survives() {
 "#;
     std::fs::write(sidecar_path(a.to_str().unwrap()), existing).unwrap();
 
-    cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
 
     let sc = sidecar_of(&a);
     assert_eq!(sc.rating(), Some(3), "an existing rating is never overwritten");
@@ -202,7 +202,7 @@ fn existing_user_data_wins_and_unknown_xmp_survives() {
 #[test]
 fn matching_a_section_to_a_photo_ignores_case() {
     let (lib, _data, mut cat, (_, a), (_, b)) = library();
-    cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
     assert_eq!(sidecar_of(&a).rating(), Some(5), "IMG_0001.JPG");
     assert_eq!(sidecar_of(&b).albums().len(), 2, "img_0002.jpg ↔ IMG_0002.jpg");
 }
@@ -211,7 +211,7 @@ fn matching_a_section_to_a_photo_ignores_case() {
 fn a_photo_the_ini_does_not_mention_gets_no_sidecar() {
     let (lib, _data, mut cat, _a, _b) = library();
     let (_, c) = add_photo(&mut cat, lib.path(), "other.jpg");
-    cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
     assert!(sidecar_bytes(&c).is_none());
 }
 
@@ -222,8 +222,8 @@ fn migrated_data_survives_deleting_the_catalog() {
     let mut cat = open(data.path());
     let (_, a) = add_photo(&mut cat, lib.path(), "IMG_0001.JPG");
     add_photo(&mut cat, lib.path(), "IMG_0002.jpg");
-    std::fs::write(lib.path().join("Picasa.ini"), INI).unwrap();
-    cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    std::fs::write(lib.path().join(FOLDER_INI_FILE), INI).unwrap();
+    cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
     let a_bytes = sidecar_bytes(&a).unwrap();
     drop(cat);
 
@@ -240,7 +240,7 @@ fn migrated_data_survives_deleting_the_catalog() {
     assert_eq!(fresh.list_albums().unwrap().iter().filter(|x| x.name == "Italy 2009").count(), 1);
 
     // Running the migration again is still a no-op (albums keep their ids).
-    let again = fresh.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    let again = fresh.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
     assert_eq!(again.written, 0, "{again:?}");
     assert_eq!(sidecar_bytes(&a).unwrap(), a_bytes);
 }
@@ -251,16 +251,16 @@ fn a_later_definition_names_a_placeholder_album() {
     let data = tempfile::tempdir().unwrap();
     let mut cat = open(data.path());
     add_photo(&mut cat, lib.path(), "a.jpg");
-    std::fs::write(lib.path().join("Picasa.ini"), "[a.jpg]\nalbums=tok\n").unwrap();
-    cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
-    assert_eq!(cat.list_albums().unwrap()[0].name, "Picasa album");
+    std::fs::write(lib.path().join(FOLDER_INI_FILE), "[a.jpg]\nalbums=tok\n").unwrap();
+    cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
+    assert_eq!(cat.list_albums().unwrap()[0].name, "Imported album");
 
     std::fs::write(
-        lib.path().join("Picasa.ini"),
+        lib.path().join(FOLDER_INI_FILE),
         "[a.jpg]\nalbums=tok\n[.album:tok]\nname=Real name\n",
     )
     .unwrap();
-    cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
     let albums = cat.list_albums().unwrap();
     assert_eq!(albums.len(), 1);
     assert_eq!(albums[0].name, "Real name");
@@ -273,9 +273,9 @@ fn both_ini_spellings_are_read() {
     let mut cat = open(data.path());
     let (_, a) = add_photo(&mut cat, lib.path(), "a.jpg");
     let (_, b) = add_photo(&mut cat, lib.path(), "b.jpg");
-    std::fs::write(lib.path().join("Picasa.ini"), "[a.jpg]\nstar=yes\n").unwrap();
-    std::fs::write(lib.path().join(".picasa.ini"), "[b.jpg]\nstar=yes\n").unwrap();
-    let report = cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    std::fs::write(lib.path().join(FOLDER_INI_FILE), "[a.jpg]\nstar=yes\n").unwrap();
+    std::fs::write(lib.path().join(FOLDER_INI_HIDDEN_FILE), "[b.jpg]\nstar=yes\n").unwrap();
+    let report = cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
     assert_eq!(report.ini_files, 2);
     assert_eq!(sidecar_of(&a).rating(), Some(5));
     assert_eq!(sidecar_of(&b).rating(), Some(5));
@@ -296,11 +296,11 @@ fn face_regions_record_the_image_size_when_it_can_be_read() {
     let mut cat = open(data.path());
     let (_, a) = add_photo_bytes(&mut cat, lib.path(), "a.png", &png_header(40, 30));
     std::fs::write(
-        lib.path().join("Picasa.ini"),
+        lib.path().join(FOLDER_INI_FILE),
         "[a.png]\nfaces=rect64(2000400060008000),01\n[Contacts2]\n01=Anna;\n",
     )
     .unwrap();
-    cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
     let raw = std::fs::read_to_string(sidecar_path(a.to_str().unwrap())).unwrap();
     assert!(raw.contains(r#"stDim:w="40""#) && raw.contains(r#"stDim:h="30""#), "{raw}");
 }
@@ -309,7 +309,7 @@ fn face_regions_record_the_image_size_when_it_can_be_read() {
 fn one_unreadable_sidecar_is_reported_and_the_rest_still_migrate() {
     let (lib, _data, mut cat, (_, a), (_, b)) = library();
     std::fs::write(sidecar_path(a.to_str().unwrap()), "<not-xmp").unwrap();
-    let report = cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    let report = cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
     assert_eq!(report.failed, vec!["IMG_0001.JPG"]);
     assert_eq!(sidecar_of(&b).albums().len(), 2);
     assert_eq!(
@@ -318,7 +318,7 @@ fn one_unreadable_sidecar_is_reported_and_the_rest_still_migrate() {
         "a malformed sidecar is never overwritten"
     );
     assert_eq!(
-        cat.picasa_status(lib.path().to_str().unwrap()).unwrap(),
+        cat.folder_ini_status(lib.path().to_str().unwrap()).unwrap(),
         None,
         "a run with failures stays open for a retry"
     );
@@ -330,39 +330,39 @@ fn one_unreadable_sidecar_is_reported_and_the_rest_still_migrate() {
 fn offering_marks_a_folder_pending_once() {
     let (lib, _data, mut cat, _a, _b) = library();
     let dir = lib.path().to_str().unwrap();
-    assert!(cat.picasa_pending_folders().unwrap().is_empty());
-    assert!(cat.offer_picasa_ingest(dir).unwrap(), "first sighting");
-    assert!(!cat.offer_picasa_ingest(dir).unwrap(), "already offered");
-    assert_eq!(cat.picasa_pending_folders().unwrap(), vec![dir.to_string()]);
-    assert_eq!(cat.picasa_status(dir).unwrap(), Some(PicasaStatus::Pending));
+    assert!(cat.folder_ini_pending_folders().unwrap().is_empty());
+    assert!(cat.offer_folder_ini_ingest(dir).unwrap(), "first sighting");
+    assert!(!cat.offer_folder_ini_ingest(dir).unwrap(), "already offered");
+    assert_eq!(cat.folder_ini_pending_folders().unwrap(), vec![dir.to_string()]);
+    assert_eq!(cat.folder_ini_status(dir).unwrap(), Some(FolderIniStatus::Pending));
 }
 
 #[test]
 fn declining_is_per_folder_and_sticky() {
     let (lib, _data, mut cat, _a, _b) = library();
     let dir = lib.path().to_str().unwrap();
-    cat.offer_picasa_ingest(dir).unwrap();
-    cat.decline_picasa_ingest(dir).unwrap();
-    assert_eq!(cat.picasa_status(dir).unwrap(), Some(PicasaStatus::Declined));
-    assert!(cat.picasa_pending_folders().unwrap().is_empty());
-    assert!(!cat.offer_picasa_ingest(dir).unwrap(), "a scan never re-offers a declined folder");
-    assert_eq!(cat.picasa_status(dir).unwrap(), Some(PicasaStatus::Declined));
+    cat.offer_folder_ini_ingest(dir).unwrap();
+    cat.decline_folder_ini_ingest(dir).unwrap();
+    assert_eq!(cat.folder_ini_status(dir).unwrap(), Some(FolderIniStatus::Declined));
+    assert!(cat.folder_ini_pending_folders().unwrap().is_empty());
+    assert!(!cat.offer_folder_ini_ingest(dir).unwrap(), "a scan never re-offers a declined folder");
+    assert_eq!(cat.folder_ini_status(dir).unwrap(), Some(FolderIniStatus::Declined));
 }
 
 #[test]
 fn ingesting_marks_the_folder_done_and_leaves_no_pending_offer() {
     let (lib, _data, mut cat, _a, _b) = library();
     let dir = lib.path().to_str().unwrap();
-    cat.offer_picasa_ingest(dir).unwrap();
-    cat.ingest_picasa_folder(dir).unwrap();
-    assert_eq!(cat.picasa_status(dir).unwrap(), Some(PicasaStatus::Done));
-    assert!(cat.picasa_pending_folders().unwrap().is_empty());
-    assert!(!cat.offer_picasa_ingest(dir).unwrap());
+    cat.offer_folder_ini_ingest(dir).unwrap();
+    cat.ingest_folder_ini(dir).unwrap();
+    assert_eq!(cat.folder_ini_status(dir).unwrap(), Some(FolderIniStatus::Done));
+    assert!(cat.folder_ini_pending_folders().unwrap().is_empty());
+    assert!(!cat.offer_folder_ini_ingest(dir).unwrap());
 }
 
 #[test]
 fn ingesting_an_uncatalogued_folder_is_an_error() {
     let dir = tempfile::tempdir().unwrap();
     let mut cat = open(dir.path());
-    assert!(cat.ingest_picasa_folder("/nowhere").is_err());
+    assert!(cat.ingest_folder_ini("/nowhere").is_err());
 }

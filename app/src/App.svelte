@@ -15,8 +15,8 @@
   import ImportDialog from "./lib/ImportDialog.svelte";
   import OptionsDialog from "./lib/OptionsDialog.svelte";
   import PhotoTray from "./lib/PhotoTray.svelte";
-  import PicasaMigrationDialog from "./lib/PicasaMigrationDialog.svelte";
-  import { onPicasaOffered, picasaPendingFolders } from "./lib/picasa";
+  import FolderIniDialog from "./lib/FolderIniDialog.svelte";
+  import { onFolderIniOffered, folderIniPendingFolders } from "./lib/folder-ini";
   import QuickTags from "./lib/QuickTags.svelte";
   import StackPicker from "./lib/StackPicker.svelte";
   import StackSuggestionsDialog from "./lib/StackSuggestionsDialog.svelte";
@@ -64,10 +64,10 @@
   let folderManagerOpen = $state(false);
   let importOpen = $state(false);
   let trashOpen = $state(false);
-  // Picasa.ini migration offer (TASK-03-022): folders a scan found a legacy
-  // Picasa.ini in; the dialog opens whenever one is waiting for an answer.
-  let picasaOpen = $state(false);
-  let picasaFolders = $state<string[]>([]);
+  // Folder ini migration offer (TASK-03-022): folders a scan found an ini
+  // in; the dialog opens whenever one is waiting for an answer.
+  let folderIniOpen = $state(false);
+  let folderIniFolders = $state<string[]>([]);
   // Stacking (TASK-03-021): suggested RAW+JPEG pairs / edited versions, and
   // the picker a stack badge opens.
   let stackSuggestionsOpen = $state(false);
@@ -422,22 +422,22 @@
     return () => unlisten?.();
   });
 
-  // Picasa.ini offers (TASK-03-022): a scan that meets a folder's legacy
-  // Picasa.ini announces it on `picasa-offered`; offers recorded earlier
+  // Folder ini offers (TASK-03-022): a scan that meets a folder's ini
+  // announces it on `folder-ini-offered`; offers recorded earlier
   // (a previous session never answered) are read once at startup. Either
   // way the user decides — nothing migrates by itself.
   $effect(() => {
     let unlisten: (() => void) | null = null;
     const offer = (found: string[]): void => {
-      const fresh = found.filter((f) => !picasaFolders.includes(f));
+      const fresh = found.filter((f) => !folderIniFolders.includes(f));
       if (fresh.length === 0) return;
-      picasaFolders = [...picasaFolders, ...fresh];
-      picasaOpen = true;
+      folderIniFolders = [...folderIniFolders, ...fresh];
+      folderIniOpen = true;
     };
     void (async () => {
       try {
-        offer(await picasaPendingFolders());
-        unlisten = await onPicasaOffered(offer);
+        offer(await folderIniPendingFolders());
+        unlisten = await onFolderIniOffered(offer);
       } catch {
         // Browser dev: no backend, no offers.
       }
@@ -800,9 +800,9 @@
     <ImportDialog bind:open={importOpen} onchanged={refreshLibrary} />
   {/if}
   <TrashDialog bind:open={trashOpen} onchanged={refreshView} />
-  <PicasaMigrationDialog
-    bind:open={picasaOpen}
-    bind:folders={picasaFolders}
+  <FolderIniDialog
+    bind:open={folderIniOpen}
+    bind:folders={folderIniFolders}
     onmigrated={() => void refreshLibrary()}
   />
   <StackSuggestionsDialog bind:open={stackSuggestionsOpen} onapplied={() => void refreshView()} />

@@ -219,7 +219,7 @@ impl Element {
 
     /// Set the `x-default` entry of a language-alternative property, the
     /// form darktable/digiKam/exiv2 read for `dc:description`. Other
-    /// languages in an existing `rdf:Alt` are kept; the legacy plain-text and
+    /// languages in an existing `rdf:Alt` are kept; the older plain-text and
     /// attribute forms are upgraded in place (no duplicate value).
     fn set_alt_default(&mut self, prefix: &str, local: &str, text: &str) {
         self.attributes.retain(|(k, _)| *k != format!("{prefix}:{local}"));

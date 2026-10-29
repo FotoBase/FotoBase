@@ -1,9 +1,11 @@
-//! TASK-03-022: Picasa.ini parser (stars, albums, faces) and the percent →
+//! TASK-03-022: folder ini parser (stars, albums, faces) and the percent →
 //! MWG region conversion (PLAN §5 mapping).
 
-use fotobase_metadata::{picasa_ini_files, FaceRect, PicasaIni, UNNAMED_CONTACT};
+use fotobase_metadata::{
+    folder_ini_files, FaceRect, FolderIni, FOLDER_INI_FILE, FOLDER_INI_HIDDEN_FILE, UNNAMED_CONTACT,
+};
 
-const INI: &str = "\u{feff}[Picasa]\r
+const INI: &str = "\u{feff}[Folder]\r
 name=Vacation\r
 P2category=Folders on Disk\r
 \r
@@ -42,7 +44,7 @@ c0ffee0000000002=Bob;\r
 
 #[test]
 fn parses_stars_captions_keywords_and_album_tokens() {
-    let ini = PicasaIni::parse(INI);
+    let ini = FolderIni::parse(INI);
     let p = ini.photo("IMG_0001.JPG").expect("IMG_0001 present");
     assert!(p.star);
     assert_eq!(p.caption.as_deref(), Some("At the beach"));
@@ -52,28 +54,28 @@ fn parses_stars_captions_keywords_and_album_tokens() {
 
 #[test]
 fn photo_sections_without_migratable_data_are_dropped() {
-    let ini = PicasaIni::parse(INI);
+    let ini = FolderIni::parse(INI);
     assert!(ini.photo("img_0002.jpg").is_none());
     assert!(ini.photo("IMG_0003.JPG").is_some(), "a star alone is data");
 }
 
 #[test]
 fn photo_lookup_is_case_insensitive() {
-    let ini = PicasaIni::parse(INI);
+    let ini = FolderIni::parse(INI);
     assert!(ini.photo("img_0001.jpg").is_some());
     assert!(ini.photo("IMG_0001.jpg").is_some());
 }
 
 #[test]
 fn star_only_counts_when_yes() {
-    let ini = PicasaIni::parse("[a.jpg]\nstar=no\ncaption=x\n[b.jpg]\nstar=YES\n");
+    let ini = FolderIni::parse("[a.jpg]\nstar=no\ncaption=x\n[b.jpg]\nstar=YES\n");
     assert!(!ini.photo("a.jpg").unwrap().star);
     assert!(ini.photo("b.jpg").unwrap().star);
 }
 
 #[test]
 fn faces_resolve_names_through_contacts_and_pad_short_hex() {
-    let ini = PicasaIni::parse(INI);
+    let ini = FolderIni::parse(INI);
     let faces = &ini.photo("IMG_0001.JPG").unwrap().faces;
     assert_eq!(faces.len(), 3);
 
@@ -84,26 +86,26 @@ fn faces_resolve_names_through_contacts_and_pad_short_hex() {
     assert!((r.right - 0x6000 as f64 / 65535.0).abs() < 1e-9);
     assert!((r.bottom - 0x8000 as f64 / 65535.0).abs() < 1e-9);
 
-    // Leading zeros are stripped by Picasa: 12 hex digits = 0x0000 1234 5678 9abc.
+    // Leading zeros are stripped by the writer: 12 hex digits = 0x0000 1234 5678 9abc.
     assert_eq!(faces[1].name.as_deref(), Some("Bob"));
     assert_eq!(faces[1].rect.left, 0.0);
     assert!((faces[1].rect.top - 0x1234 as f64 / 65535.0).abs() < 1e-9);
     assert!((faces[1].rect.bottom - 0x9abc as f64 / 65535.0).abs() < 1e-9);
 
-    // The all-ones contact is Picasa's "not named" marker.
+    // The all-ones contact is the "not named" marker.
     assert_eq!(faces[2].name, None);
     assert_eq!(UNNAMED_CONTACT, "ffffffffffffffff");
 }
 
 #[test]
 fn a_contact_missing_from_the_contact_tables_has_no_name() {
-    let ini = PicasaIni::parse("[a.jpg]\nfaces=rect64(2000400060008000),deadbeef00000000\n");
+    let ini = FolderIni::parse("[a.jpg]\nfaces=rect64(2000400060008000),deadbeef00000000\n");
     assert_eq!(ini.photo("a.jpg").unwrap().faces[0].name, None);
 }
 
 #[test]
-fn legacy_contacts_section_is_read_too() {
-    let ini = PicasaIni::parse(
+fn old_contacts_section_is_read_too() {
+    let ini = FolderIni::parse(
         "[a.jpg]\nfaces=rect64(2000400060008000),01\n[Contacts]\n01=Old Name\n[Contacts2]\n",
     );
     assert_eq!(ini.photo("a.jpg").unwrap().faces[0].name.as_deref(), Some("Old Name"));
@@ -111,7 +113,7 @@ fn legacy_contacts_section_is_read_too() {
 
 #[test]
 fn malformed_faces_are_skipped_not_fatal() {
-    let ini = PicasaIni::parse(
+    let ini = FolderIni::parse(
         "[a.jpg]\nstar=yes\nfaces=garbage;rect64(zz),01;rect64(2000400060008000),01;rect64()\n[Contacts2]\n01=Z;\n",
     );
     let faces = &ini.photo("a.jpg").unwrap().faces;
@@ -121,7 +123,7 @@ fn malformed_faces_are_skipped_not_fatal() {
 
 #[test]
 fn album_definitions_read_name_date_place_description() {
-    let ini = PicasaIni::parse(INI);
+    let ini = FolderIni::parse(INI);
     assert_eq!(ini.albums.len(), 2);
     let a = ini.albums.iter().find(|a| a.token == "aaa111").unwrap();
     assert_eq!(a.name, "Italy 2009");
@@ -132,21 +134,21 @@ fn album_definitions_read_name_date_place_description() {
 
 #[test]
 fn album_serial_dates_convert_to_calendar_dates() {
-    // Days since 1899-12-30 (the spreadsheet epoch Picasa used for old dates).
-    let ini = PicasaIni::parse(INI);
+    // Days since 1899-12-30 (the spreadsheet epoch used for old dates).
+    let ini = FolderIni::parse(INI);
     let b = ini.albums.iter().find(|a| a.token == "bbb222").unwrap();
     assert_eq!(b.date.as_deref(), Some("2009-04-14"));
 }
 
 #[test]
 fn album_without_a_token_line_uses_the_section_name() {
-    let ini = PicasaIni::parse("[.album:zzz]\nname=No token key\n");
+    let ini = FolderIni::parse("[.album:zzz]\nname=No token key\n");
     assert_eq!(ini.albums[0].token, "zzz");
 }
 
 #[test]
 fn unknown_keys_sections_and_junk_lines_are_ignored() {
-    let ini = PicasaIni::parse(
+    let ini = FolderIni::parse(
         "garbage before any section\n[a.jpg]\nP2WS=whatever\nrotate=rotate(1)\nfilters=enhance=1\nstar=yes\n=novalue\n",
     );
     assert!(ini.photo("a.jpg").unwrap().star);
@@ -154,7 +156,7 @@ fn unknown_keys_sections_and_junk_lines_are_ignored() {
 
 #[test]
 fn empty_input_parses_to_nothing() {
-    let ini = PicasaIni::parse("");
+    let ini = FolderIni::parse("");
     assert!(ini.photos.is_empty() && ini.albums.is_empty());
 }
 
@@ -178,13 +180,13 @@ fn degenerate_or_reversed_rects_are_rejected() {
 }
 
 #[test]
-fn picasa_ini_files_finds_both_spellings_case_insensitively() {
+fn folder_ini_files_finds_both_spellings_case_insensitively() {
     let dir = tempfile::tempdir().unwrap();
-    assert!(picasa_ini_files(dir.path()).is_empty());
-    std::fs::write(dir.path().join("Picasa.ini"), "[Picasa]\n").unwrap();
-    std::fs::write(dir.path().join(".picasa.ini"), "[Picasa]\n").unwrap();
-    std::fs::write(dir.path().join("picasa.ini.bak"), "x").unwrap();
+    assert!(folder_ini_files(dir.path()).is_empty());
+    std::fs::write(dir.path().join(FOLDER_INI_FILE), "[Folder]\n").unwrap();
+    std::fs::write(dir.path().join(FOLDER_INI_HIDDEN_FILE), "[Folder]\n").unwrap();
+    std::fs::write(dir.path().join("folderIni.ini.bak"), "x").unwrap();
     std::fs::write(dir.path().join("photo.jpg"), "x").unwrap();
-    let found = picasa_ini_files(dir.path());
+    let found = folder_ini_files(dir.path());
     assert_eq!(found.len(), 2, "{found:?}");
 }

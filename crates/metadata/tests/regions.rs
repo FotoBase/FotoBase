@@ -1,5 +1,5 @@
-//! TASK-03-022: MWG face regions (`mwg-rs:Regions`) in the sidecar — legacy
-//! Picasa faces land here, merged without touching anything we don't own
+//! TASK-03-022: MWG face regions (`mwg-rs:Regions`) in the sidecar — faces
+//! from a folder ini land here, merged without touching anything we don't own
 //! (docs/sidecar-merge-on-write.md §3).
 
 use fotobase_metadata::{FaceRegion, Sidecar};

@@ -1,12 +1,12 @@
 <!--
-  Picasa.ini migration offer (TASK-03-022): folders whose legacy Picasa.ini a
+  Folder ini migration offer (TASK-03-022): folders whose ini a
   scan found. "Migrate" converts that folder's stars, albums and faces into
   XMP sidecars (the ini is never changed); "Don't ask again" declines for
   good; closing the dialog just asks again later.
 -->
 <script lang="ts">
   import { t } from "./i18n.svelte.js";
-  import { declinePicasaFolder, ingestPicasaFolder, type PicasaReport } from "./picasa";
+  import { declineFolderIni, ingestFolderIni, type FolderIniReport } from "./folder-ini";
 
   let {
     open = $bindable(false),
@@ -22,20 +22,20 @@
 
   let busy = $state(false);
   let error = $state<string | null>(null);
-  let reports = $state<Record<string, PicasaReport>>({});
+  let reports = $state<Record<string, FolderIniReport>>({});
 
   async function migrate(path: string): Promise<void> {
     if (busy) return;
     busy = true;
     error = null;
     try {
-      const report = await ingestPicasaFolder(path);
+      const report = await ingestFolderIni(path);
       reports[path] = report;
       if (report.failed.length === 0) folders = folders.filter((f) => f !== path);
-      else error = t("picasa.failed", { n: report.failed.length });
+      else error = t("folderIni.failed", { n: report.failed.length });
       onmigrated();
     } catch (e) {
-      error = t("picasa.error", { error: String(e) });
+      error = t("folderIni.error", { error: String(e) });
     } finally {
       busy = false;
     }
@@ -46,10 +46,10 @@
     busy = true;
     error = null;
     try {
-      await declinePicasaFolder(path);
+      await declineFolderIni(path);
       folders = folders.filter((f) => f !== path);
     } catch (e) {
-      error = t("picasa.error", { error: String(e) });
+      error = t("folderIni.error", { error: String(e) });
     } finally {
       busy = false;
     }
@@ -62,36 +62,36 @@
 </script>
 
 {#if open}
-  <div class="pm-backdrop" data-testid="picasa-backdrop">
-    <div class="pm-dialog" role="dialog" aria-label={t("picasa.title")}>
-      <h2>{t("picasa.title")}</h2>
-      <p>{t("picasa.intro")}</p>
+  <div class="pm-backdrop" data-testid="folder-ini-backdrop">
+    <div class="pm-dialog" role="dialog" aria-label={t("folderIni.title")}>
+      <h2>{t("folderIni.title")}</h2>
+      <p>{t("folderIni.intro")}</p>
       <ul>
         {#each folders as folder (folder)}
-          <li data-testid="picasa-folder">
+          <li data-testid="folder-ini-folder">
             <span class="pm-path" title={folder}>{folder}</span>
             <button
               type="button"
-              data-testid="picasa-migrate"
+              data-testid="folder-ini-migrate"
               disabled={busy}
               onclick={() => migrate(folder)}
             >
-              {t("picasa.migrate")}
+              {t("folderIni.migrate")}
             </button>
             <button
               type="button"
-              data-testid="picasa-decline"
+              data-testid="folder-ini-decline"
               disabled={busy}
               onclick={() => decline(folder)}
             >
-              {t("picasa.decline")}
+              {t("folderIni.decline")}
             </button>
           </li>
         {/each}
       </ul>
       {#each Object.entries(reports) as [path, r] (path)}
-        <p class="pm-done" data-testid="picasa-report">
-          {t("picasa.done", {
+        <p class="pm-done" data-testid="folder-ini-report">
+          {t("folderIni.done", {
             folder: path,
             written: r.written,
             stars: r.stars,
@@ -104,8 +104,8 @@
         <p class="pm-error" role="alert">{error}</p>
       {/if}
       <div class="pm-actions">
-        <button type="button" data-testid="picasa-close" onclick={() => (open = false)}>
-          {t("picasa.later")}
+        <button type="button" data-testid="folder-ini-close" onclick={() => (open = false)}>
+          {t("folderIni.later")}
         </button>
       </div>
     </div>

@@ -345,8 +345,8 @@ impl Catalog {
         self.album(id)?.ok_or(SyncError::UnknownAlbum(id))
     }
 
-    /// Create an album with a caller-chosen id (a Picasa import, whose id is
-    /// derived from the legacy token so a rerun finds the same album). An
+    /// Create an album with a caller-chosen id (an ini import, whose id is
+    /// derived from the ini token so a rerun finds the same album). An
     /// existing album is left as the user shaped it — except a placeholder
     /// name, which a real `name` replaces. Returns whether it was created.
     pub(crate) fn ensure_album(

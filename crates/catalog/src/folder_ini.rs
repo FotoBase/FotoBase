@@ -1,7 +1,7 @@
-//! Picasa.ini ingest (TASK-03-022, PLAN §1 onboarding, §5 mapping).
+//! Folder ini ingest (TASK-03-022, PLAN §1 onboarding, §5 mapping).
 //!
-//! A folder's `Picasa.ini` holds the user's legacy stars, albums, keywords
-//! and named faces. Ingest turns them into standard XMP through the normal
+//! A folder's ini holds the user's stars, albums, keywords
+//! and named faces from an earlier organizer. Ingest turns them into standard XMP through the normal
 //! write-through path (sidecar first, catalog mirror second, 00-010 §3):
 //!
 //! - `star=yes` → `xmp:Rating` 5 (ADR-0002), only where the photo has no
@@ -11,14 +11,14 @@
 //! - album tokens → `fb:Albums`, with the album itself created under an id
 //!   derived from the token, so a rerun (or a rebuilt catalog) finds the
 //!   same album instead of a duplicate;
-//! - named faces → MWG `mwg-rs:Regions`; faces Picasa never named are
+//! - named faces → MWG `mwg-rs:Regions`; faces never named are
 //!   unconfirmed detections, not user data, and are skipped.
 //!
 //! Existing user data always wins and nothing is rewritten when nothing
 //! would change. The ini is only ever read.
 //!
 //! Which folders are *offered* the migration is catalog state
-//! (`picasa_ingest`): the scanner records a folder `pending` when it first
+//! (`folder_ini_ingest`): the scanner records a folder `pending` when it first
 //! sees the ini, and the user answers by ingesting (`done`) or declining.
 
 use std::collections::HashMap;
@@ -29,19 +29,19 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use fotobase_metadata::{
-    picasa_ini_files, FaceRegion, PicasaAlbum, PicasaIni, PicasaPhoto, Sidecar, UNNAMED_ALBUM,
+    folder_ini_files, FaceRegion, FolderIni, FolderIniAlbum, FolderIniPhoto, Sidecar, UNNAMED_ALBUM,
 };
 
 use crate::sync::{sidecar_path, SyncError, SyncResult};
 use crate::{Catalog, Result};
 
-/// Fixed namespace for deriving album ids from Picasa tokens.
+/// Fixed namespace for deriving album ids from ini tokens.
 const TOKEN_NAMESPACE: Uuid = Uuid::from_u128(0x3b8f_7c1e_5a42_4d6b_9e0f_a1c2_d3e4_f506);
 
 /// Where a folder stands with the migration offer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum PicasaStatus {
+pub enum FolderIniStatus {
     /// Ini seen by a scan; the user has not answered.
     Pending,
     /// The user said no; scans never offer it again.
@@ -50,20 +50,20 @@ pub enum PicasaStatus {
     Done,
 }
 
-impl PicasaStatus {
+impl FolderIniStatus {
     fn as_str(self) -> &'static str {
         match self {
-            PicasaStatus::Pending => "pending",
-            PicasaStatus::Declined => "declined",
-            PicasaStatus::Done => "done",
+            FolderIniStatus::Pending => "pending",
+            FolderIniStatus::Declined => "declined",
+            FolderIniStatus::Done => "done",
         }
     }
 
     fn from_text(text: &str) -> Option<Self> {
         match text {
-            "pending" => Some(PicasaStatus::Pending),
-            "declined" => Some(PicasaStatus::Declined),
-            "done" => Some(PicasaStatus::Done),
+            "pending" => Some(FolderIniStatus::Pending),
+            "declined" => Some(FolderIniStatus::Declined),
+            "done" => Some(FolderIniStatus::Done),
             _ => None,
         }
     }
@@ -71,7 +71,7 @@ impl PicasaStatus {
 
 /// What one ingest run did, for the post-migration summary.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize)]
-pub struct PicasaReport {
+pub struct FolderIniReport {
     /// Ini files read in the folder.
     pub ini_files: usize,
     /// Photo sections that matched a catalogued photo.
@@ -82,11 +82,11 @@ pub struct PicasaReport {
     pub unchanged: usize,
     /// Photo sections with no catalogued photo (not scanned, or gone).
     pub unmatched: usize,
-    /// Ratings set from a legacy star.
+    /// Ratings set from a star.
     pub stars: usize,
     /// Face regions added.
     pub faces: usize,
-    /// Faces left out: never named in Picasa, or an existing `Regions`
+    /// Faces left out: never named, or an existing `Regions`
     /// structure we will not rewrite.
     pub faces_skipped: usize,
     /// Albums created (including placeholders for undefined tokens).
@@ -96,7 +96,7 @@ pub struct PicasaReport {
     pub failed: Vec<String>,
 }
 
-/// The album id a Picasa token migrates to.
+/// The album id an ini token migrates to.
 fn token_uuid(token: &str) -> String {
     Uuid::new_v5(&TOKEN_NAMESPACE, token.trim().to_lowercase().as_bytes()).to_string()
 }
@@ -112,7 +112,7 @@ struct Applied {
 /// dry run on a copy tells whether a write is needed at all.
 fn apply_photo(
     sc: &mut Sidecar,
-    photo: &PicasaPhoto,
+    photo: &FolderIniPhoto,
     album_uuids: &[String],
     faces: &[FaceRegion],
     dims: &dyn Fn() -> Option<(u32, u32)>,
@@ -174,44 +174,44 @@ fn apply_photo(
 
 impl Catalog {
     /// Where a folder stands with the migration offer, if it has been seen.
-    pub fn picasa_status(&self, dir: &str) -> Result<Option<PicasaStatus>> {
+    pub fn folder_ini_status(&self, dir: &str) -> Result<Option<FolderIniStatus>> {
         let status: Option<String> = self
             .conn()
-            .query_row("SELECT status FROM picasa_ingest WHERE folder_path = ?1", [dir], |r| {
+            .query_row("SELECT status FROM folder_ini_ingest WHERE folder_path = ?1", [dir], |r| {
                 r.get(0)
             })
             .optional()?;
-        Ok(status.as_deref().and_then(PicasaStatus::from_text))
+        Ok(status.as_deref().and_then(FolderIniStatus::from_text))
     }
 
     /// Record that a scan met this folder's ini. Only a folder never seen
     /// before becomes `pending`; a declined or migrated folder is never
     /// re-offered. Returns whether the offer is new.
-    pub fn offer_picasa_ingest(&mut self, dir: &str) -> Result<bool> {
+    pub fn offer_folder_ini_ingest(&mut self, dir: &str) -> Result<bool> {
         let n = self.conn().execute(
-            "INSERT OR IGNORE INTO picasa_ingest (folder_path, status) VALUES (?1, 'pending')",
+            "INSERT OR IGNORE INTO folder_ini_ingest (folder_path, status) VALUES (?1, 'pending')",
             [dir],
         )?;
         Ok(n == 1)
     }
 
     /// The user declined migrating this folder; scans stop offering it.
-    pub fn decline_picasa_ingest(&mut self, dir: &str) -> Result<()> {
-        self.set_picasa_status(dir, PicasaStatus::Declined)
+    pub fn decline_folder_ini_ingest(&mut self, dir: &str) -> Result<()> {
+        self.set_folder_ini_status(dir, FolderIniStatus::Declined)
     }
 
     /// Folders with an ini whose offer is still unanswered, path-ordered.
-    pub fn picasa_pending_folders(&self) -> Result<Vec<String>> {
+    pub fn folder_ini_pending_folders(&self) -> Result<Vec<String>> {
         let mut stmt = self.conn().prepare_cached(
-            "SELECT folder_path FROM picasa_ingest WHERE status = 'pending' ORDER BY folder_path",
+            "SELECT folder_path FROM folder_ini_ingest WHERE status = 'pending' ORDER BY folder_path",
         )?;
         let rows = stmt.query_map([], |r| r.get(0))?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
-    fn set_picasa_status(&mut self, dir: &str, status: PicasaStatus) -> Result<()> {
+    fn set_folder_ini_status(&mut self, dir: &str, status: FolderIniStatus) -> Result<()> {
         self.conn().execute(
-            "INSERT INTO picasa_ingest (folder_path, status) VALUES (?1, ?2)
+            "INSERT INTO folder_ini_ingest (folder_path, status) VALUES (?1, ?2)
              ON CONFLICT(folder_path) DO UPDATE
                 SET status = excluded.status, updated_at = datetime('now')",
             params![dir, status.as_str()],
@@ -219,29 +219,29 @@ impl Catalog {
         Ok(())
     }
 
-    /// Migrate one folder's `Picasa.ini` / `.picasa.ini` into sidecars (see
+    /// Migrate one folder's ini file(s) into sidecars (see
     /// the module docs). The folder's photos must already be catalogued
     /// (scanned); sections for photos that are not are counted, not
     /// created. Safe to rerun: nothing changes when nothing is new. A
     /// photo that fails (unreadable sidecar) is reported and skipped; the
     /// folder is marked `done` only when every photo went through.
-    pub fn ingest_picasa_folder(&mut self, dir: &str) -> SyncResult<PicasaReport> {
+    pub fn ingest_folder_ini(&mut self, dir: &str) -> SyncResult<FolderIniReport> {
         let folder_id: i64 = self
             .conn()
             .query_row("SELECT id FROM folders WHERE path = ?1", [dir], |r| r.get(0))
             .optional()?
             .ok_or_else(|| SyncError::UnknownFolder(dir.to_string()))?;
 
-        let mut report = PicasaReport::default();
-        let mut inis: Vec<PicasaIni> = Vec::new();
-        for path in picasa_ini_files(Path::new(dir)) {
+        let mut report = FolderIniReport::default();
+        let mut inis: Vec<FolderIni> = Vec::new();
+        for path in folder_ini_files(Path::new(dir)) {
             report.ini_files += 1;
             match std::fs::read(&path) {
-                Ok(bytes) => inis.push(PicasaIni::parse(&String::from_utf8_lossy(&bytes))),
+                Ok(bytes) => inis.push(FolderIni::parse(&String::from_utf8_lossy(&bytes))),
                 Err(err) => {
-                    tracing::warn!(path = %path.display(), error = %err, "cannot read Picasa ini");
+                    tracing::warn!(path = %path.display(), error = %err, "cannot read folder ini");
                     report.failed.push(path.file_name().map_or_else(
-                        || "Picasa.ini".to_string(),
+                        || "folder.ini".to_string(),
                         |n| n.to_string_lossy().into_owned(),
                     ));
                 }
@@ -252,7 +252,7 @@ impl Catalog {
         }
 
         // Album definitions first, so memberships mirror into real albums.
-        let mut defined: HashMap<&str, &PicasaAlbum> = HashMap::new();
+        let mut defined: HashMap<&str, &FolderIniAlbum> = HashMap::new();
         for album in inis.iter().flat_map(|i| &i.albums) {
             defined.insert(album.token.as_str(), album);
         }
@@ -310,7 +310,7 @@ impl Catalog {
             let mut probe = match Sidecar::read(&sc_path) {
                 Ok(sc) => sc,
                 Err(err) => {
-                    tracing::warn!(photo = %file.path, error = %err, "Picasa ingest: unreadable sidecar");
+                    tracing::warn!(photo = %file.path, error = %err, "folder ini ingest: unreadable sidecar");
                     report.failed.push(photo.filename.clone());
                     continue;
                 }
@@ -331,14 +331,14 @@ impl Catalog {
                     report.faces += planned.faces_added;
                 }
                 Err(err) => {
-                    tracing::warn!(photo = %file.path, error = %err, "Picasa ingest: write failed");
+                    tracing::warn!(photo = %file.path, error = %err, "folder ini ingest: write failed");
                     report.failed.push(photo.filename.clone());
                 }
             }
         }
 
         if report.failed.is_empty() {
-            self.set_picasa_status(dir, PicasaStatus::Done)?;
+            self.set_folder_ini_status(dir, FolderIniStatus::Done)?;
         }
         Ok(report)
     }

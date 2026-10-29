@@ -7,11 +7,11 @@
 
 pub mod albums;
 pub mod datetime;
+pub mod folder_ini;
 pub mod hidden;
 pub mod metadata_edit;
 pub mod migrations;
 pub mod missing;
-pub mod picasa;
 pub mod query;
 pub mod relocate;
 pub mod stacks;
@@ -20,10 +20,10 @@ pub mod trash;
 
 pub use albums::AlbumInfo;
 pub use datetime::{AdjustError, AdjustFailure, AdjustReport, TimeAdjustment, TimePreview};
+pub use folder_ini::{FolderIniReport, FolderIniStatus};
 pub use metadata_edit::{FieldError, GpsEdit, MetadataEdit, MetadataField};
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
-pub use picasa::{PicasaReport, PicasaStatus};
 pub use query::{FileQuery, FileSort};
 pub use relocate::BatchFile;
 pub use stacks::{StackKind, StackSuggestion, DEFAULT_PAIR_WINDOW_SECS};

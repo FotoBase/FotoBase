@@ -398,14 +398,14 @@ CREATE INDEX idx_files_stack ON files(stack_id);
 UPDATE files SET sidecar_mtime = NULL, sidecar_size = NULL;
 ";
 
-/// TASK-03-022: per-folder Picasa.ini migration state. A scan that meets a
-/// folder's `Picasa.ini` records it `pending` (the offer); the user's answer
+/// TASK-03-022: per-folder ini migration state. A scan that meets a
+/// folder's ini records it `pending` (the offer); the user's answer
 /// moves it to `declined` (never offered again) or `done` (migrated). Keyed by
 /// folder path, not `folders.id`, so the answer outlives an unlink/re-add.
 /// The migrated data itself lives in the sidecars; this table only remembers
 /// what was asked, so a deleted catalog re-offers (a rerun is harmless).
 const MIGRATION_V12: &str = "
-CREATE TABLE picasa_ingest (
+CREATE TABLE folder_ini_ingest (
     folder_path TEXT PRIMARY KEY,
     status      TEXT NOT NULL CHECK (status IN ('pending', 'declined', 'done')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))

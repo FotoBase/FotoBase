@@ -275,16 +275,16 @@ const messages: Record<string, Dict> = {
     "stacks.stack": "Stack",
     "stacks.stackAll": "Stack all",
     "stacks.close": "Close",
-    "picasa.title": "Picasa library found",
-    "picasa.intro":
-      "These folders contain a Picasa.ini. Migrate to bring your stars, albums and named faces into Fotobase. The Picasa files are never changed.",
-    "picasa.migrate": "Migrate",
-    "picasa.decline": "Don't ask again",
-    "picasa.later": "Ask me later",
-    "picasa.done":
+    "folderIni.title": "Library data found",
+    "folderIni.intro":
+      "These folders contain an ini file with stars, albums and named faces from an earlier photo organizer. Migrate to bring them into Fotobase. The ini files are never changed.",
+    "folderIni.migrate": "Migrate",
+    "folderIni.decline": "Don't ask again",
+    "folderIni.later": "Ask me later",
+    "folderIni.done":
       "{folder}: {written} photos updated — {stars} stars, {albums} albums created, {faces} faces",
-    "picasa.failed": "{n} photos could not be migrated. Try again.",
-    "picasa.error": "Picasa migration failed: {error}",
+    "folderIni.failed": "{n} photos could not be migrated. Try again.",
+    "folderIni.error": "Migration failed: {error}",
     "options.stackWindow": "RAW+JPEG pair window (seconds between capture times)",
     "trash.action.album_remove": "Removed from album",
     "trash.action.hide": "Hidden photo",
@@ -571,16 +571,16 @@ const messages: Record<string, Dict> = {
     "stacks.stack": "Stapeln",
     "stacks.stackAll": "Alle stapeln",
     "stacks.close": "Schließen",
-    "picasa.title": "Picasa-Bibliothek gefunden",
-    "picasa.intro":
-      "Diese Ordner enthalten eine Picasa.ini. Mit „Übernehmen“ kommen Sterne, Alben und benannte Gesichter nach Fotobase. Die Picasa-Dateien werden nie verändert.",
-    "picasa.migrate": "Übernehmen",
-    "picasa.decline": "Nicht mehr fragen",
-    "picasa.later": "Später fragen",
-    "picasa.done":
+    "folderIni.title": "Bibliotheksdaten gefunden",
+    "folderIni.intro":
+      "Diese Ordner enthalten eine Ini-Datei mit Sternen, Alben und benannten Gesichtern aus einem früheren Foto-Organizer. Mit „Übernehmen“ kommen sie nach Fotobase. Die Ini-Dateien werden nie verändert.",
+    "folderIni.migrate": "Übernehmen",
+    "folderIni.decline": "Nicht mehr fragen",
+    "folderIni.later": "Später fragen",
+    "folderIni.done":
       "{folder}: {written} Fotos aktualisiert — {stars} Sterne, {albums} Alben angelegt, {faces} Gesichter",
-    "picasa.failed": "{n} Fotos konnten nicht übernommen werden. Bitte erneut versuchen.",
-    "picasa.error": "Picasa-Übernahme fehlgeschlagen: {error}",
+    "folderIni.failed": "{n} Fotos konnten nicht übernommen werden. Bitte erneut versuchen.",
+    "folderIni.error": "Übernahme fehlgeschlagen: {error}",
     "options.stackWindow": "RAW+JPEG-Paarfenster (Sekunden zwischen Aufnahmezeiten)",
     "trash.action.album_remove": "Aus Album entfernt",
     "trash.action.hide": "Ausgeblendetes Foto",

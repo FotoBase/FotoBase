@@ -1,5 +1,5 @@
-//! TASK-03-022: Picasa.ini ingest at scan time. A scan only *offers* the
-//! migration (never writes without consent); accepting converts the legacy
+//! TASK-03-022: folder ini ingest at scan time. A scan only *offers* the
+//! migration (never writes without consent); accepting converts the
 //! stars, albums and faces to XMP with zero loss; a second scan changes
 //! nothing (PLAN §1 onboarding, §6 P2a).
 
@@ -7,11 +7,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
-use fotobase_catalog::{sidecar_path, Catalog, PicasaStatus};
-use fotobase_metadata::Sidecar;
+use fotobase_catalog::{sidecar_path, Catalog, FolderIniStatus};
+use fotobase_metadata::{Sidecar, FOLDER_INI_FILE, FOLDER_INI_HIDDEN_FILE};
 use fotobase_scanner::{scan_folder, ScanReport};
 
-const FIXTURE_INI: &str = include_str!("fixtures/picasa/Picasa.ini");
+const FIXTURE_INI: &str = include_str!("fixtures/folder-ini/sample.ini");
 
 /// Photos of the fixture library. `img_0003.JPG` is on disk under a
 /// different case than its `[IMG_0003.jpg]` section; `IMG_0004.JPG` has a
@@ -74,7 +74,7 @@ fn make_library(root: &Path) {
     for name in PHOTOS {
         fs::write(root.join(name), format!("fake image bytes of {name}")).unwrap();
     }
-    fs::write(root.join("Picasa.ini"), FIXTURE_INI).unwrap();
+    fs::write(root.join(FOLDER_INI_FILE), FIXTURE_INI).unwrap();
 }
 
 fn scan(cat: &mut Catalog, root: &Path) -> ScanReport {
@@ -140,14 +140,14 @@ fn a_scan_offers_the_migration_once_and_writes_nothing() {
     let mut cat = Catalog::open(data.path().join("catalog.db")).unwrap();
 
     let first = scan(&mut cat, lib.path());
-    assert_eq!(first.picasa_offered, vec![lib.path().to_str().unwrap().to_string()]);
-    assert_eq!(cat.picasa_pending_folders().unwrap(), first.picasa_offered);
+    assert_eq!(first.folder_ini_offered, vec![lib.path().to_str().unwrap().to_string()]);
+    assert_eq!(cat.folder_ini_pending_folders().unwrap(), first.folder_ini_offered);
     assert!(snapshot(lib.path()).iter().all(|(_, s)| s.is_none()), "no sidecar without consent");
     assert!(cat.list_albums().unwrap().is_empty());
 
     let second = scan(&mut cat, lib.path());
-    assert!(second.picasa_offered.is_empty(), "already offered");
-    assert_eq!(cat.picasa_pending_folders().unwrap().len(), 1, "still waiting for an answer");
+    assert!(second.folder_ini_offered.is_empty(), "already offered");
+    assert_eq!(cat.folder_ini_pending_folders().unwrap().len(), 1, "still waiting for an answer");
 }
 
 #[test]
@@ -156,8 +156,8 @@ fn a_folder_without_an_ini_is_never_offered() {
     let data = tempfile::tempdir().unwrap();
     fs::write(lib.path().join("a.jpg"), b"x").unwrap();
     let mut cat = Catalog::open(data.path().join("catalog.db")).unwrap();
-    assert!(scan(&mut cat, lib.path()).picasa_offered.is_empty());
-    assert!(cat.picasa_pending_folders().unwrap().is_empty());
+    assert!(scan(&mut cat, lib.path()).folder_ini_offered.is_empty());
+    assert!(cat.folder_ini_pending_folders().unwrap().is_empty());
 }
 
 #[test]
@@ -166,13 +166,13 @@ fn nested_folders_are_offered_individually_under_their_own_path() {
     let data = tempfile::tempdir().unwrap();
     let sub = lib.path().join("2009").join("Rome");
     fs::create_dir_all(&sub).unwrap();
-    fs::write(sub.join(".picasa.ini"), "[a.jpg]\nstar=yes\n").unwrap();
+    fs::write(sub.join(FOLDER_INI_HIDDEN_FILE), "[a.jpg]\nstar=yes\n").unwrap();
     fs::write(sub.join("a.jpg"), b"x").unwrap();
     fs::write(lib.path().join("top.jpg"), b"x").unwrap();
     let mut cat = Catalog::open(data.path().join("catalog.db")).unwrap();
 
     let report = scan(&mut cat, lib.path());
-    assert_eq!(report.picasa_offered, vec![sub.to_str().unwrap().to_string()]);
+    assert_eq!(report.folder_ini_offered, vec![sub.to_str().unwrap().to_string()]);
 }
 
 #[test]
@@ -180,31 +180,31 @@ fn accepting_migrates_with_no_loss_and_a_second_scan_changes_nothing() {
     let lib = tempfile::tempdir().unwrap();
     let data = tempfile::tempdir().unwrap();
     make_library(lib.path());
-    let ini_before = fs::read(lib.path().join("Picasa.ini")).unwrap();
+    let ini_before = fs::read(lib.path().join(FOLDER_INI_FILE)).unwrap();
     let originals: Vec<Vec<u8>> =
         PHOTOS.iter().map(|p| fs::read(lib.path().join(p)).unwrap()).collect();
     let mut cat = Catalog::open(data.path().join("catalog.db")).unwrap();
     scan(&mut cat, lib.path());
 
     let dir = lib.path().to_str().unwrap();
-    let report = cat.ingest_picasa_folder(dir).unwrap();
+    let report = cat.ingest_folder_ini(dir).unwrap();
     assert!(report.failed.is_empty(), "{report:?}");
     assert_eq!(report.written, 3);
     check_against_expected(&cat, lib.path());
-    assert_eq!(cat.picasa_status(dir).unwrap(), Some(PicasaStatus::Done));
+    assert_eq!(cat.folder_ini_status(dir).unwrap(), Some(FolderIniStatus::Done));
 
     // Idempotent: another scan and another ingest change nothing.
     let sidecars = snapshot(lib.path());
     let rescan = scan(&mut cat, lib.path());
     assert!(!rescan.changed(), "{rescan:?}");
-    assert!(rescan.picasa_offered.is_empty());
-    let again = cat.ingest_picasa_folder(dir).unwrap();
+    assert!(rescan.folder_ini_offered.is_empty());
+    let again = cat.ingest_folder_ini(dir).unwrap();
     assert_eq!(again.written, 0, "{again:?}");
     assert_eq!(snapshot(lib.path()), sidecars);
     check_against_expected(&cat, lib.path());
 
-    // The legacy data is untouched.
-    assert_eq!(fs::read(lib.path().join("Picasa.ini")).unwrap(), ini_before);
+    // The original data is untouched.
+    assert_eq!(fs::read(lib.path().join(FOLDER_INI_FILE)).unwrap(), ini_before);
     for (p, bytes) in PHOTOS.iter().zip(&originals) {
         assert_eq!(&fs::read(lib.path().join(p)).unwrap(), bytes, "original {p}");
     }
@@ -219,17 +219,17 @@ fn declining_keeps_the_folder_untouched_and_is_never_offered_again() {
     scan(&mut cat, lib.path());
 
     let dir = lib.path().to_str().unwrap();
-    cat.decline_picasa_ingest(dir).unwrap();
+    cat.decline_folder_ini_ingest(dir).unwrap();
     // A different folder is unaffected: the answer is per folder.
     let other = lib.path().join("other");
     fs::create_dir(&other).unwrap();
-    fs::write(other.join("Picasa.ini"), "[x.jpg]\nstar=yes\n").unwrap();
+    fs::write(other.join(FOLDER_INI_FILE), "[x.jpg]\nstar=yes\n").unwrap();
     fs::write(other.join("x.jpg"), b"x").unwrap();
 
     let report = scan(&mut cat, lib.path());
-    assert_eq!(report.picasa_offered, vec![other.to_str().unwrap().to_string()]);
+    assert_eq!(report.folder_ini_offered, vec![other.to_str().unwrap().to_string()]);
     assert!(snapshot(lib.path()).iter().all(|(_, s)| s.is_none()));
-    assert_eq!(cat.picasa_status(dir).unwrap(), Some(PicasaStatus::Declined));
+    assert_eq!(cat.folder_ini_status(dir).unwrap(), Some(FolderIniStatus::Declined));
 }
 
 #[test]
@@ -240,7 +240,7 @@ fn migrated_data_comes_back_after_the_catalog_is_deleted() {
     let db = data.path().join("catalog.db");
     let mut cat = Catalog::open(&db).unwrap();
     scan(&mut cat, lib.path());
-    cat.ingest_picasa_folder(lib.path().to_str().unwrap()).unwrap();
+    cat.ingest_folder_ini(lib.path().to_str().unwrap()).unwrap();
     drop(cat);
 
     for ext in ["", "-wal", "-shm"] {

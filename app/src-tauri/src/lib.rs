@@ -188,8 +188,8 @@ fn with_folder_manager<T>(
         let catalog_path = state.catalog_path.clone();
         let hook = std::sync::Arc::new(move |report: &fotobase_scanner::ScanReport| {
             let _ = app_handle.emit("library-changed", ());
-            if !report.picasa_offered.is_empty() {
-                let _ = app_handle.emit("picasa-offered", &report.picasa_offered);
+            if !report.folder_ini_offered.is_empty() {
+                let _ = app_handle.emit("folder-ini-offered", &report.folder_ini_offered);
             }
             spawn_hash_backfill(catalog_path.clone(), app_handle.clone());
         });
@@ -476,23 +476,23 @@ fn stack_suggestions(
     with_catalog(&state, |cat| cat.stack_suggestions(window))
 }
 
-/// Folders whose Picasa.ini migration offer is still unanswered
+/// Folders whose folder-ini migration offer is still unanswered
 /// (TASK-03-022). A scan records the offer; nothing is migrated until the
 /// user accepts.
 #[tauri::command]
-fn picasa_pending_folders(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
-    with_catalog(&state, |cat| cat.picasa_pending_folders())
+fn folder_ini_pending_folders(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+    with_catalog(&state, |cat| cat.folder_ini_pending_folders())
 }
 
-/// Accept the migration for one folder: legacy stars, albums and faces
+/// Accept the migration for one folder: its stars, albums and faces
 /// become XMP sidecar data. The ini itself is never modified.
 #[tauri::command]
-fn picasa_ingest_folder(
+fn ingest_folder_ini(
     path: String,
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
-) -> Result<fotobase_catalog::PicasaReport, String> {
-    let report = with_catalog_sync(&state, |cat| cat.ingest_picasa_folder(&path))?;
+) -> Result<fotobase_catalog::FolderIniReport, String> {
+    let report = with_catalog_sync(&state, |cat| cat.ingest_folder_ini(&path))?;
     if report.written > 0 || report.albums_created > 0 {
         let _ = app.emit("library-changed", ());
     }
@@ -501,8 +501,8 @@ fn picasa_ingest_folder(
 
 /// Decline the migration for one folder; scans never offer it again.
 #[tauri::command]
-fn picasa_decline_folder(path: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    with_catalog_mut(&state, |cat| cat.decline_picasa_ingest(&path))
+fn decline_folder_ini(path: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    with_catalog_mut(&state, |cat| cat.decline_folder_ini_ingest(&path))
 }
 
 /// Albums (TASK-03-008): every album with its photo count and cover.
@@ -1667,9 +1667,9 @@ pub fn run() {
             unstack,
             list_stack,
             stack_suggestions,
-            picasa_pending_folders,
-            picasa_ingest_folder,
-            picasa_decline_folder,
+            folder_ini_pending_folders,
+            ingest_folder_ini,
+            decline_folder_ini,
             list_albums,
             create_album,
             update_album,

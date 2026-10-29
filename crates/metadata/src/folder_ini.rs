@@ -1,13 +1,14 @@
-//! Picasa.ini reader (TASK-03-022, PLAN §1 onboarding, §5 mapping).
+//! Folder ini reader (TASK-03-022, PLAN §1 onboarding, §5 mapping).
 //!
-//! Picasa kept a folder's user data in a hidden `Picasa.ini` / `.picasa.ini`:
-//! one `[<photo file name>]` section per photo (`star=yes`, `caption=`,
-//! `keywords=a,b`, `albums=<token>,<token>`, `faces=rect64(<hex>),<contact>;…`),
-//! `[.album:<token>]` album definitions and `[Contacts2]` (`<id>=<name>;<mail>`)
-//! / legacy `[Contacts]` (`<id>=<name>`) tables that name the faces.
+//! A photo organizer from before Fotobase kept a folder's user data in a
+//! hidden per-folder ini: one `[<photo file name>]` section per photo
+//! (`star=yes`, `caption=`, `keywords=a,b`, `albums=<token>,<token>`,
+//! `faces=rect64(<hex>),<contact>;…`), `[.album:<token>]` album definitions
+//! and `[Contacts2]` (`<id>=<name>;<mail>`) / `[Contacts]` (`<id>=<name>`)
+//! tables that name the faces.
 //!
 //! This module only *reads*: the ini is never modified or deleted. The
-//! parser is lenient by design — Picasa wrote a lot of keys we do not use
+//! parser is lenient by design — the file carries many keys we do not use
 //! (`backuphash`, `rotate`, `filters`, `P2…`), and a damaged line must never
 //! fail a migration — so unknown keys, sections and junk lines are ignored.
 
@@ -16,28 +17,30 @@ use std::path::{Path, PathBuf};
 
 use crate::sidecar::FaceRegion;
 
-/// Picasa's "face without a contact" marker (an all-ones 64-bit id).
+/// The "face without a contact" marker (an all-ones 64-bit id).
 pub const UNNAMED_CONTACT: &str = "ffffffffffffffff";
 
 /// Name given to an album whose definition is missing from the ini.
-pub const UNNAMED_ALBUM: &str = "Picasa album";
+pub const UNNAMED_ALBUM: &str = "Imported album";
 
-/// File names Picasa used for the per-folder ini (case-insensitive: the
-/// Windows variant is `Picasa.ini`, the Mac/newer one `.picasa.ini`).
-const INI_NAMES: [&str; 2] = ["picasa.ini", ".picasa.ini"];
+/// The on-disk names of the per-folder ini (matched case-insensitively);
+/// the hidden one is the Mac/newer spelling.
+pub const FOLDER_INI_FILE: &str = "Picasa.ini";
+pub const FOLDER_INI_HIDDEN_FILE: &str = ".picasa.ini";
+const INI_NAMES: [&str; 2] = [FOLDER_INI_FILE, FOLDER_INI_HIDDEN_FILE];
 
-/// Whether a directory entry name is a Picasa ini.
-pub fn is_picasa_ini_name(name: &str) -> bool {
+/// Whether a directory entry name is a folder ini.
+pub fn is_folder_ini_name(name: &str) -> bool {
     INI_NAMES.iter().any(|n| name.eq_ignore_ascii_case(n))
 }
 
-/// Every Picasa ini in `dir` (sorted, so reruns see the same order).
-pub fn picasa_ini_files(dir: &Path) -> Vec<PathBuf> {
+/// Every folder ini in `dir` (sorted, so reruns see the same order).
+pub fn folder_ini_files(dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
     let mut found: Vec<PathBuf> = entries
         .flatten()
         .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
-        .filter(|e| e.file_name().to_str().is_some_and(is_picasa_ini_name))
+        .filter(|e| e.file_name().to_str().is_some_and(is_folder_ini_name))
         .map(|e| e.path())
         .collect();
     found.sort();
@@ -56,7 +59,7 @@ pub struct FaceRect {
 impl FaceRect {
     /// Decode a `rect64(<hex>)` payload: a 64-bit number holding four
     /// 16-bit edges (left, top, right, bottom), each `fraction * 65535`.
-    /// Picasa strips leading zeros, so short hex is left-padded. Rejects
+    /// The writer strips leading zeros, so short hex is left-padded. Rejects
     /// non-hex, more than 16 digits and empty or reversed rectangles.
     pub fn from_rect64(hex: &str) -> Option<Self> {
         let hex = hex.trim();
@@ -81,29 +84,29 @@ impl FaceRect {
     }
 }
 
-/// One `faces=` entry. `name` is `None` for faces Picasa never named (the
+/// One `faces=` entry. `name` is `None` for faces never named (the
 /// all-ones contact) and for contact ids missing from the contact tables.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PicasaFace {
+pub struct FolderIniFace {
     pub rect: FaceRect,
     pub name: Option<String>,
 }
 
 /// One photo section. `albums` holds album tokens, resolved against
-/// [`PicasaIni::albums`].
+/// [`FolderIni::albums`].
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct PicasaPhoto {
+pub struct FolderIniPhoto {
     pub filename: String,
     pub star: bool,
     pub caption: Option<String>,
     pub keywords: Vec<String>,
     pub albums: Vec<String>,
-    pub faces: Vec<PicasaFace>,
+    pub faces: Vec<FolderIniFace>,
 }
 
 /// A `[.album:<token>]` definition. `date` is `YYYY-MM-DD`.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PicasaAlbum {
+pub struct FolderIniAlbum {
     pub token: String,
     pub name: String,
     pub date: Option<String>,
@@ -111,18 +114,18 @@ pub struct PicasaAlbum {
     pub description: Option<String>,
 }
 
-/// A parsed `Picasa.ini`: photo sections with something to migrate, plus
+/// A parsed folder ini: photo sections with something to migrate, plus
 /// the album definitions.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct PicasaIni {
-    pub photos: Vec<PicasaPhoto>,
-    pub albums: Vec<PicasaAlbum>,
+pub struct FolderIni {
+    pub photos: Vec<FolderIniPhoto>,
+    pub albums: Vec<FolderIniAlbum>,
 }
 
 type Keys = HashMap<String, String>;
 
-impl PicasaIni {
-    /// Parse ini text (callers decode bytes lossily: Picasa wrote UTF-8 or
+impl FolderIni {
+    /// Parse ini text (callers decode bytes lossily: the file is UTF-8 or
     /// the system code page, and a stray byte must not fail the migration).
     pub fn parse(text: &str) -> Self {
         let sections = read_sections(text);
@@ -157,25 +160,24 @@ impl PicasaIni {
                 }
             }
         }
-        PicasaIni { photos, albums }
+        FolderIni { photos, albums }
     }
 
     /// A photo's section by file name (case-insensitive, like the Windows
-    /// file system Picasa came from).
-    pub fn photo(&self, filename: &str) -> Option<&PicasaPhoto> {
+    /// file system the ini came from).
+    pub fn photo(&self, filename: &str) -> Option<&FolderIniPhoto> {
         let wanted = filename.to_lowercase();
         self.photos.iter().find(|p| p.filename.to_lowercase() == wanted)
     }
 
     /// The definition of an album token, if the ini has one.
-    pub fn album(&self, token: &str) -> Option<&PicasaAlbum> {
+    pub fn album(&self, token: &str) -> Option<&FolderIniAlbum> {
         self.albums.iter().find(|a| a.token == token)
     }
 }
 
 fn is_photo_section(name: &str) -> bool {
     !(name.starts_with('.')
-        || name.eq_ignore_ascii_case("picasa")
         || name.eq_ignore_ascii_case("contacts")
         || name.eq_ignore_ascii_case("contacts2"))
 }
@@ -224,12 +226,12 @@ fn non_empty(value: Option<&String>) -> Option<String> {
     value.map(|v| v.trim()).filter(|v| !v.is_empty()).map(str::to_string)
 }
 
-fn photo(filename: &str, keys: &Keys, contacts: &HashMap<String, String>) -> PicasaPhoto {
+fn photo(filename: &str, keys: &Keys, contacts: &HashMap<String, String>) -> FolderIniPhoto {
     let faces = keys
         .get("faces")
         .map(|v| v.split(';').filter_map(|f| face(f, contacts)).collect())
         .unwrap_or_default();
-    PicasaPhoto {
+    FolderIniPhoto {
         filename: filename.to_string(),
         star: keys.get("star").is_some_and(|v| v.eq_ignore_ascii_case("yes")),
         caption: non_empty(keys.get("caption")),
@@ -241,20 +243,20 @@ fn photo(filename: &str, keys: &Keys, contacts: &HashMap<String, String>) -> Pic
 
 /// `rect64(<hex>),<contact id>`; an entry without a decodable rectangle is
 /// dropped.
-fn face(entry: &str, contacts: &HashMap<String, String>) -> Option<PicasaFace> {
+fn face(entry: &str, contacts: &HashMap<String, String>) -> Option<FolderIniFace> {
     let entry = entry.trim().strip_prefix("rect64(")?;
     let (hex, rest) = entry.split_once(')')?;
     let rect = FaceRect::from_rect64(hex)?;
     let id = rest.trim().trim_start_matches(',').trim().to_lowercase();
     let name = (!id.is_empty() && id != UNNAMED_CONTACT).then(|| contacts.get(&id).cloned());
-    Some(PicasaFace { rect, name: name.flatten() })
+    Some(FolderIniFace { rect, name: name.flatten() })
 }
 
-fn album(section_token: &str, keys: &Keys) -> PicasaAlbum {
-    PicasaAlbum {
+fn album(section_token: &str, keys: &Keys) -> FolderIniAlbum {
+    FolderIniAlbum {
         token: non_empty(keys.get("token")).unwrap_or_else(|| section_token.to_string()),
         name: non_empty(keys.get("name")).unwrap_or_else(|| UNNAMED_ALBUM.to_string()),
-        date: keys.get("date").and_then(|d| picasa_date(d)),
+        date: keys.get("date").and_then(|d| ini_date(d)),
         place: non_empty(keys.get("location")),
         description: non_empty(keys.get("description")),
     }
@@ -262,7 +264,7 @@ fn album(section_token: &str, keys: &Keys) -> PicasaAlbum {
 
 /// `2009-04-14T21:05:42+00:00` (take the calendar day as written) or an old
 /// spreadsheet serial such as `39917.8789` (days since 1899-12-30).
-fn picasa_date(value: &str) -> Option<String> {
+fn ini_date(value: &str) -> Option<String> {
     let value = value.trim();
     let b = value.as_bytes();
     let iso = b.len() >= 10

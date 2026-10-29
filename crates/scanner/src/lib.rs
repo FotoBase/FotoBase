@@ -66,11 +66,11 @@ pub struct ScanReport {
     pub ambiguous: usize,
     /// True if the cancel flag stopped the walk early.
     pub cancelled: bool,
-    /// Folders whose `Picasa.ini` this scan met for the first time: the
+    /// Folders whose ini this scan met for the first time: the
     /// migration is *offered* (TASK-03-022), never applied without the
     /// user's answer. Not part of [`ScanReport::changed`]: nothing in the
     /// library changed.
-    pub picasa_offered: Vec<String>,
+    pub folder_ini_offered: Vec<String>,
 }
 
 impl ScanReport {
@@ -202,8 +202,8 @@ pub fn scan_folder_with_probes(
     let mut dirs = Vec::new();
     let mut files = Vec::new();
     let mut cancelled = false;
-    let mut picasa_dirs = Vec::new();
-    walk_dir(root, &mut dirs, &mut files, &mut picasa_dirs, cancel, &mut cancelled, progress);
+    let mut folder_ini_dirs = Vec::new();
+    walk_dir(root, &mut dirs, &mut files, &mut folder_ini_dirs, cancel, &mut cancelled, progress);
     // Per-directory callbacks fire on entry, before that directory's files
     // are pushed; close with the final walk totals so the last report is
     // complete.
@@ -221,8 +221,8 @@ pub fn scan_folder_with_probes(
             // Sidecars are the source of truth for user data (PLAN §5): a
             // fresh or rebuilt catalog picks stars/tags back up from them.
             catalog.sync_paths(touched.iter().map(String::as_str));
-            let picasa_offered = offer_picasa_ingest(catalog, &picasa_dirs);
-            Ok(ScanReport { cancelled, picasa_offered, ..report })
+            let folder_ini_offered = offer_folder_ini_ingest(catalog, &folder_ini_dirs);
+            Ok(ScanReport { cancelled, folder_ini_offered, ..report })
         }
         Err(e) => {
             let _ = catalog.conn().execute_batch("ROLLBACK");
@@ -318,30 +318,30 @@ fn scan_inner(
     Ok(report)
 }
 
-/// Record the folders whose Picasa.ini this scan met (TASK-03-022). Only
+/// Record the folders whose ini this scan met (TASK-03-022). Only
 /// a folder never seen before is newly offered; a declined or migrated one
 /// stays quiet. A failure to record never fails the scan.
-fn offer_picasa_ingest(catalog: &mut Catalog, dirs: &[PathBuf]) -> Vec<String> {
+fn offer_folder_ini_ingest(catalog: &mut Catalog, dirs: &[PathBuf]) -> Vec<String> {
     let mut offered = Vec::new();
     for dir in dirs {
         let dir = dir.to_string_lossy();
-        match catalog.offer_picasa_ingest(&dir) {
+        match catalog.offer_folder_ini_ingest(&dir) {
             Ok(true) => offered.push(dir.into_owned()),
             Ok(false) => {}
             Err(err) => {
-                tracing::warn!(dir = %dir, error = %err, "recording Picasa.ini offer failed")
+                tracing::warn!(dir = %dir, error = %err, "recording folder ini offer failed")
             }
         }
     }
     offered
 }
 
-/// `picasa_dirs` collects the directories holding a Picasa.ini.
+/// `folder_ini_dirs` collects the directories holding a folder ini.
 fn walk_dir(
     dir: &Path,
     dirs: &mut Vec<PathBuf>,
     files: &mut Vec<WalkedFile>,
-    picasa_dirs: &mut Vec<PathBuf>,
+    folder_ini_dirs: &mut Vec<PathBuf>,
     cancel: &AtomicBool,
     cancelled: &mut bool,
     progress: &dyn Fn(ScanProgress),
@@ -363,7 +363,7 @@ fn walk_dir(
     };
 
     let mut subdirs = Vec::new();
-    let mut has_picasa_ini = false;
+    let mut has_folder_ini = false;
     for entry in entries.flatten() {
         let path = entry.path();
         let Ok(ft) = entry.file_type() else { continue };
@@ -375,8 +375,8 @@ fn walk_dir(
             continue;
         }
         let Some(name) = path.file_name() else { continue };
-        if name.to_str().is_some_and(fotobase_metadata::is_picasa_ini_name) {
-            has_picasa_ini = true;
+        if name.to_str().is_some_and(fotobase_metadata::is_folder_ini_name) {
+            has_folder_ini = true;
             continue;
         }
         let Some(media) = media_type(&path) else { continue };
@@ -396,12 +396,12 @@ fn walk_dir(
         });
     }
 
-    if has_picasa_ini {
-        picasa_dirs.push(dir.to_path_buf());
+    if has_folder_ini {
+        folder_ini_dirs.push(dir.to_path_buf());
     }
 
     for sub in subdirs {
-        walk_dir(&sub, dirs, files, picasa_dirs, cancel, cancelled, progress);
+        walk_dir(&sub, dirs, files, folder_ini_dirs, cancel, cancelled, progress);
     }
 }
 
