@@ -161,6 +161,18 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("Viewer stack badge (TASK-03-021)", () => {
+  it("shows the stack size for a stacked photo and nothing for a plain one", () => {
+    const items = makeItems(2);
+    items[0] = { ...items[0], stack_id: "s1", stack_count: 3 };
+    renderViewer(items, { startIndex: 0 });
+    expect(screen.getByTestId("viewer-stack-badge").textContent).toContain("3");
+
+    pressKey("ArrowRight");
+    expect(screen.queryByTestId("viewer-stack-badge")).toBeNull();
+  });
+});
+
 describe("Viewer", () => {
   it("shows the current photo full-size via preview:// and a filmstrip of the selection", () => {
     renderViewer(makeItems(3), { startIndex: 1 });

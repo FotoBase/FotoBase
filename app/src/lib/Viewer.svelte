@@ -13,6 +13,7 @@
   import { thumbUri, type GridItem } from "./grid";
   import { gridState } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
+  import { hasStackBadge } from "./stacks";
   import InfoPane from "./InfoPane.svelte";
   import VideoPlayer from "./VideoPlayer.svelte";
   import { isEditableTarget, nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
@@ -262,6 +263,11 @@
   </div>
   <div class="viewer-status">
     <span data-testid="viewer-count">{index + 1}/{items.length}</span>
+    {#if current && hasStackBadge(current)}
+      <span class="viewer-stack" data-testid="viewer-stack-badge">
+        {t("stack.badge", { n: current.stack_count ?? 0 })}
+      </span>
+    {/if}
     {#if slideshowRunning}
       <span data-testid="slideshow-running">{t("viewer.slideshowRunning")}</span>
     {/if}

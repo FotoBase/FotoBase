@@ -152,6 +152,15 @@ pub struct Settings {
     /// PLAN §6 P2a). Off by default.
     #[serde(default)]
     pub single_click_edit: bool,
+    /// Pair-detector calibration (TASK-03-021): how many seconds apart a
+    /// RAW and a JPEG of the same name may be captured and still count as
+    /// one shot (camera clocks drift).
+    #[serde(default = "default_stack_window_secs")]
+    pub stack_window_secs: u32,
+}
+
+fn default_stack_window_secs() -> u32 {
+    fotobase_catalog::DEFAULT_PAIR_WINDOW_SECS as u32
 }
 
 fn default_trash_window_days() -> u32 {
@@ -176,6 +185,7 @@ impl Default for Settings {
             folder_sort_reverse: false,
             folder_view: FolderView::default(),
             single_click_edit: false,
+            stack_window_secs: default_stack_window_secs(),
         }
     }
 }
@@ -296,5 +306,16 @@ mod tests {
         let s: Settings = serde_json::from_str(old).unwrap();
         assert_eq!(s.language, "de");
         assert!(s.file_associations.is_empty());
+    }
+
+    #[test]
+    fn the_pair_window_defaults_and_survives_old_files() {
+        // TASK-03-021: the calibration knob has a default; a settings.json
+        // from before the field existed keeps the user's other settings.
+        assert_eq!(Settings::default().stack_window_secs, 5);
+        let old = r#"{"language":"de","update_mode":"off","show_tooltips":false}"#;
+        let s: Settings = serde_json::from_str(old).unwrap();
+        assert_eq!(s.language, "de");
+        assert_eq!(s.stack_window_secs, 5);
     }
 }

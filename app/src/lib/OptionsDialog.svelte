@@ -85,6 +85,15 @@
     });
   }
 
+  // Whole seconds, zero or more; anything unparsable falls back to the default.
+  function setStackWindow(raw: string): void {
+    const secs = Math.trunc(Number(raw));
+    apply({
+      ...settings,
+      stack_window_secs: Number.isFinite(secs) && raw.trim() !== "" ? Math.max(0, secs) : 5,
+    });
+  }
+
   function setQuickTags(tags: string[]): void {
     apply({ ...settings, quick_tags: tags });
   }
@@ -314,6 +323,18 @@
             data-testid="trash-window"
             value={settings.trash_window_days}
             onchange={(e) => setTrashWindow(e.currentTarget.value)}
+          />
+        </label>
+
+        <label>
+          {t("options.stackWindow")}
+          <input
+            type="number"
+            min="0"
+            step="1"
+            data-testid="stack-window"
+            value={settings.stack_window_secs}
+            onchange={(e) => setStackWindow(e.currentTarget.value)}
           />
         </label>
 

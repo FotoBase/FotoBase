@@ -13,6 +13,7 @@ pub mod migrations;
 pub mod missing;
 pub mod query;
 pub mod relocate;
+pub mod stacks;
 pub mod sync;
 pub mod trash;
 
@@ -23,6 +24,7 @@ pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
 pub use query::{FileQuery, FileSort};
 pub use relocate::BatchFile;
+pub use stacks::{StackKind, StackSuggestion, DEFAULT_PAIR_WINDOW_SECS};
 pub use sync::{sidecar_path, SyncError, SyncStats};
 pub use trash::{TrashAction, TrashEntry, UndoReport, DEFAULT_TRASH_WINDOW_DAYS};
 
@@ -81,6 +83,11 @@ pub struct FileInfo {
     /// resolution caption mode).
     pub width: Option<i64>,
     pub height: Option<i64>,
+    /// Stack this photo belongs to (TASK-03-021); `None` when unstacked.
+    pub stack_id: Option<String>,
+    /// Members in the photo's stack, 0 when unstacked. The grid draws a
+    /// badge for 2 or more.
+    pub stack_count: i64,
 }
 
 /// Separates tag names inside the one `group_concat` column; tag names can
@@ -96,7 +103,17 @@ const FILE_INFO_COLS: &str = "f.id, f.filename, f.hash, f.media_type,
      (SELECT group_concat(name, char(31)) FROM
          (SELECT t.name FROM file_tags ft JOIN tags t ON t.id = ft.tag_id
           WHERE ft.file_id = f.id ORDER BY t.name)),
-     f.width, f.height";
+     f.width, f.height, f.stack_id,
+     CASE WHEN f.stack_id IS NULL THEN 0
+          ELSE (SELECT COUNT(*) FROM files s WHERE s.stack_id = f.stack_id) END";
+
+/// Appended to a `WHERE` on `files f`: a stack shows as its top only
+/// (TASK-03-021). A stack with no top left (the top's file left the
+/// library, or another tool edited the sidecars) shows every remaining
+/// member rather than vanishing.
+pub(crate) const STACK_COLLAPSED: &str = " AND (f.stack_id IS NULL OR f.stack_role = 'top' \
+     OR NOT EXISTS (SELECT 1 FROM files st WHERE st.stack_id = f.stack_id \
+     AND st.stack_role = 'top'))";
 
 /// Appended to a `WHERE` on `files f`: drops hidden photos and photos in
 /// hidden folders (TASK-03-009). Skipped while "show hidden" is on.
@@ -118,6 +135,8 @@ fn file_info_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FileInfo> {
             .unwrap_or_default(),
         width: r.get(8)?,
         height: r.get(9)?,
+        stack_id: r.get(10)?,
+        stack_count: r.get(11)?,
     })
 }
 

@@ -262,12 +262,18 @@ fn migrating_an_older_catalog_makes_the_next_rebuild_reread_sidecars() {
     sc.write(&path).unwrap();
     drop(cat);
     let conn = rusqlite::Connection::open(&db).unwrap();
-    let previous = (fotobase_catalog::MIGRATIONS.len() - 1) as i64;
+    // Schema v9 is the one before the artist column (migration 10); the
+    // later stack columns (migration 11) go with it.
     conn.execute_batch(
-        "ALTER TABLE metadata DROP COLUMN artist; ALTER TABLE metadata DROP COLUMN copyright;",
+        "DROP INDEX idx_files_stack;
+         ALTER TABLE files DROP COLUMN stack_id;
+         ALTER TABLE files DROP COLUMN stack_role;
+         ALTER TABLE files DROP COLUMN has_recipe;
+         ALTER TABLE metadata DROP COLUMN artist;
+         ALTER TABLE metadata DROP COLUMN copyright;",
     )
     .unwrap();
-    conn.pragma_update(None, "user_version", previous).unwrap();
+    conn.pragma_update(None, "user_version", 9).unwrap();
     drop(conn);
 
     let mut cat = Catalog::open(&db).unwrap();

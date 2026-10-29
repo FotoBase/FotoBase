@@ -22,6 +22,10 @@ export interface GridItem {
   tags?: string[];
   width?: number | null;
   height?: number | null;
+  /// Stack the photo belongs to and its size (TASK-03-021); `stack_count` 0
+  /// = unstacked. Absent in older payloads.
+  stack_id?: string | null;
+  stack_count?: number;
 }
 
 /// Grid gap in px, both between cells and between rows.

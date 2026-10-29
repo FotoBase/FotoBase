@@ -106,6 +106,7 @@ main {
 }
 
 .grid-cell {
+  position: relative;
   width: var(--thumb-size);
   height: calc(var(--thumb-size) + var(--caption-h, 0px));
   overflow: hidden;
@@ -118,6 +119,25 @@ main {
   height: var(--thumb-size);
   object-fit: cover;
   display: block;
+}
+
+/* Stack badge (TASK-03-021): top-right corner, same geometry as the canvas
+   renderer's (STACK_BADGE in stacks.ts). */
+.stack-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: var(--fb-accent);
+  color: var(--fb-on-accent);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  cursor: pointer;
 }
 
 /* Revealed hidden photos/folders (TASK-03-009): same cell, grayed out. */

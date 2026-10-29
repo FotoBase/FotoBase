@@ -368,3 +368,33 @@ describe("ThumbnailGrid single-click-to-edit (TASK-03-017)", () => {
     expect(onopen).not.toHaveBeenCalled();
   });
 });
+
+describe("ThumbnailGrid stack badge (TASK-03-021)", () => {
+  const stacked = (): GridItem[] => [
+    { id: 1, filename: "a.jpg", hash: HASH(1), stack_id: "s1", stack_count: 3 },
+    { id: 2, filename: "b.jpg", hash: HASH(2) },
+  ];
+
+  it("draws one badge with the stack size on a stacked photo only", () => {
+    render(ThumbnailGrid, { items: stacked() });
+    const badges = screen.getAllByTestId("stack-badge");
+    expect(badges).toHaveLength(1);
+    expect(badges[0].textContent).toBe("3");
+  });
+
+  it("clicking the badge opens the picker for that stack without selecting or opening", () => {
+    const onopenstack = vi.fn();
+    const onopen = vi.fn();
+    render(ThumbnailGrid, { items: stacked(), onopenstack, onopen });
+
+    const badge = screen.getByTestId("stack-badge");
+    badge.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 40, clientY: 50 }));
+    flushSync();
+
+    expect(onopenstack).toHaveBeenCalledWith(
+      expect.objectContaining({ stackId: "s1", x: expect.any(Number), y: expect.any(Number) }),
+    );
+    expect(onopen).not.toHaveBeenCalled();
+    expect(gridState.selection.size).toBe(0);
+  });
+});

@@ -22,6 +22,7 @@
   import { columnCount, debounce, GRID_GAP, nextCell, revealScrollTop, rowItems, thumbSrcset, thumbUri, visibleHashes, type GridItem } from "./grid";
   import { gridState, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
+  import { badgeText, hasStackBadge } from "./stacks";
 
   interface Props {
     items?: GridItem[];
@@ -37,6 +38,9 @@
     /// Single-click-to-edit (TASK-03-017): a plain click opens the photo;
     /// ctrl/cmd/shift-click still toggles selection.
     singleClickEdit?: boolean;
+    /// Called when a stack badge is clicked (TASK-03-021): the shell opens
+    /// the stack picker at the pointer.
+    onopenstack?: (e: { stackId: string; x: number; y: number }) => void;
   }
 
   let {
@@ -46,6 +50,7 @@
     onopen = () => {},
     oncontextmenu = () => {},
     singleClickEdit = false,
+    onopenstack = () => {},
   }: Props = $props();
 
   const REPORT_DEBOUNCE_MS = 100;
@@ -219,6 +224,22 @@
                 />
               {:else}
                 <div class="grid-cell-placeholder" data-testid="grid-placeholder"></div>
+              {/if}
+              {#if hasStackBadge(item) && item.stack_id}
+                <button
+                  type="button"
+                  class="stack-badge"
+                  data-testid="stack-badge"
+                  title={t("stack.badge", { n: item.stack_count ?? 0 })}
+                  aria-label={t("stack.badge", { n: item.stack_count ?? 0 })}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    onopenstack({ stackId: item.stack_id ?? "", x: e.clientX, y: e.clientY });
+                  }}
+                  ondblclick={(e) => e.stopPropagation()}
+                >
+                  {badgeText(item)}
+                </button>
               {/if}
               {#if captionH > 0}
                 {@const text = captionText(item, gridState.captionMode)}

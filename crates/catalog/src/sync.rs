@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use rusqlite::OptionalExtension;
 
-use fotobase_metadata::{FolderMetaError, Sidecar, SidecarError};
+use fotobase_metadata::{FolderMetaError, Sidecar, SidecarError, StackMembership};
 
 use crate::{Catalog, CatalogError, Result};
 
@@ -31,6 +31,12 @@ pub enum SyncError {
     UnknownAlbum(i64),
     #[error("file {file_id} is not in album {album_id}")]
     NotInAlbum { album_id: i64, file_id: i64 },
+    #[error("no stack with id {0}")]
+    UnknownStack(String),
+    #[error("a stack needs at least two different photos")]
+    StackTooSmall,
+    #[error("the photos already belong to different stacks; unstack one first")]
+    StackConflict,
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -82,6 +88,10 @@ struct UserData {
     /// `exif:DateTimeOriginal` as ISO text (TASK-03-019); `None` leaves the
     /// catalog's scan-time value alone.
     taken_at: Option<String>,
+    /// `fb:StackId` + `fb:StackRole` (TASK-03-021).
+    stack: Option<StackMembership>,
+    /// `fb:Recipe` present: an edited version (TASK-03-021).
+    has_recipe: bool,
 }
 
 impl UserData {
@@ -98,6 +108,8 @@ impl UserData {
             albums: sc.albums(),
             hidden: sc.hidden(),
             taken_at: sc.capture_time().map(|t| t.to_xmp()),
+            stack: sc.stack(),
+            has_recipe: sc.has_recipe(),
         }
     }
 }
@@ -487,8 +499,17 @@ fn apply_user_data(tx: &rusqlite::Transaction<'_>, file_id: i64, data: &UserData
     )?;
 
     tx.execute(
-        "UPDATE files SET hidden = ?1, taken_at = COALESCE(?2, taken_at) WHERE id = ?3",
-        rusqlite::params![data.hidden, data.taken_at, file_id],
+        "UPDATE files SET hidden = ?1, taken_at = COALESCE(?2, taken_at),
+                stack_id = ?3, stack_role = ?4, has_recipe = ?5
+         WHERE id = ?6",
+        rusqlite::params![
+            data.hidden,
+            data.taken_at,
+            data.stack.as_ref().map(|s| s.id.as_str()),
+            data.stack.as_ref().map(|s| s.role.as_str()),
+            data.has_recipe,
+            file_id
+        ],
     )?;
 
     tx.execute("DELETE FROM file_tags WHERE file_id = ?1", [file_id])?;

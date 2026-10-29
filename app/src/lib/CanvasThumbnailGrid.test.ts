@@ -344,3 +344,55 @@ describe("CanvasThumbnailGrid single-click-to-edit (TASK-03-017)", () => {
     expect(onopen).not.toHaveBeenCalled();
   });
 });
+
+describe("CanvasThumbnailGrid stack badge (TASK-03-021)", () => {
+  const stackedItems = (): GridItem[] =>
+    makeItems(100).map((it, i) =>
+      i === 0 ? { ...it, stack_id: "s1", stack_count: 2 } : it,
+    );
+
+  const clickAt = (x: number, y: number): void => {
+    const canvas = screen.getByTestId("grid-canvas");
+    const ev = new MouseEvent("click", { bubbles: true, clientX: x, clientY: y });
+    Object.defineProperty(ev, "offsetX", { value: x });
+    Object.defineProperty(ev, "offsetY", { value: y });
+    canvas.dispatchEvent(ev);
+    flushSync();
+  };
+
+  it("draws the stack size on a stacked photo", async () => {
+    render(CanvasThumbnailGrid, { items: stackedItems(), loadImage: fakeLoadImage });
+    await settle();
+    const texts = calls.filter((c) => c.method === "fillText").map((c) => c.args[0]);
+    expect(texts).toContain("2");
+  });
+
+  it("a click on the badge opens the picker instead of selecting", async () => {
+    const onopenstack = vi.fn();
+    render(CanvasThumbnailGrid, {
+      items: stackedItems(),
+      loadImage: fakeLoadImage,
+      onopenstack,
+    });
+    await settle();
+
+    // 160px cell: the badge is in the top-right corner.
+    clickAt(160 - 4 - 10, 4 + 6);
+
+    expect(onopenstack).toHaveBeenCalledWith(expect.objectContaining({ stackId: "s1" }));
+    expect(gridState.selection.size).toBe(0);
+  });
+
+  it("a click elsewhere on the stacked photo still selects it", async () => {
+    const onopenstack = vi.fn();
+    render(CanvasThumbnailGrid, {
+      items: stackedItems(),
+      loadImage: fakeLoadImage,
+      onopenstack,
+    });
+    await settle();
+    clickAt(10, 100);
+    expect(onopenstack).not.toHaveBeenCalled();
+    expect(gridState.selection.has(0)).toBe(true);
+  });
+});

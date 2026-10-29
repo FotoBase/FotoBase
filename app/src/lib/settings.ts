@@ -39,6 +39,8 @@ export interface Settings {
   folder_view: FolderViewMode;
   /// Single click opens the edit view instead of selecting (TASK-03-017).
   single_click_edit: boolean;
+  /// RAW+JPEG pair detector window in seconds (TASK-03-021).
+  stack_window_secs: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -57,6 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   folder_sort_reverse: false,
   folder_view: "tree",
   single_click_edit: false,
+  stack_window_secs: 5,
 };
 
 // Image types the file-association option (TASK-01-025, PLAN §2M) can
