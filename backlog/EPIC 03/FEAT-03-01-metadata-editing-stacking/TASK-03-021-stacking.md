@@ -1,6 +1,6 @@
 # task: stacking — RAW+JPEG pairs, bursts, edited versions
 
-**Feature:** [FEAT-03-01-metadata-editing-stacking](FEAT-03-01-metadata-editing-stacking.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-29)
+**Feature:** [FEAT-03-01-metadata-editing-stacking](FEAT-03-01-metadata-editing-stacking.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-29)
 
 ## Description
 Group RAW+JPEG pairs, burst sets, and edited versions under one thumbnail with a stack picker (PLAN §6 P2a). Stacking is metadata-only — no file moves, no original modification. Depends on the sidecar design doc (00-010, hard gate for EPIC-03) since stack membership is user data that must survive rebuild.
