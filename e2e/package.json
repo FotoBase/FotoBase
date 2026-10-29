@@ -1,0 +1,21 @@
+{
+  "name": "fotobase-e2e",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end tests: WebdriverIO + tauri-driver driving the real Tauri app (PLAN §4).",
+  "scripts": {
+    "test": "wdio run wdio.conf.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@wdio/cli": "^9",
+    "@wdio/globals": "^9",
+    "@wdio/local-runner": "^9",
+    "@wdio/mocha-framework": "^9",
+    "@wdio/spec-reporter": "^9",
+    "tsx": "^4",
+    "typescript": "^5",
+    "webdriverio": "^9"
+  }
+}

@@ -97,7 +97,13 @@
             {t("stacks.stackAll")}
           </button>
         {/if}
-        <button type="button" onclick={() => (open = false)}>{t("stacks.close")}</button>
+        <button
+          type="button"
+          data-testid="stack-suggestions-close"
+          onclick={() => (open = false)}
+        >
+          {t("stacks.close")}
+        </button>
       </div>
     </div>
   </div>
