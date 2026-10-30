@@ -1,6 +1,6 @@
 # task: implement tuning tab sliders and neutral picker
 
-**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in progress (2026-10-30)
+**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 Tuning tab with Fill Light, Highlights, Shadows, and Color Temperature sliders plus a neutral-color (white balance) eyedropper picker (PLAN §2E Tuning tab), all as recipe ops with live preview.
