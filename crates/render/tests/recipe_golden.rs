@@ -220,6 +220,13 @@ fn cases() -> Vec<GoldenCase> {
             recipe: op("red_eye", json!({ "regions": [{ "x": 0.75, "y": 0.30, "r": 0.03 }] })),
             tol: by_op("red_eye"),
         },
+        // Auto mode must detect the fixture's red pupil at (0.75, 0.30) and
+        // fix it without touching the surrounding skin (TASK-04-006).
+        GoldenCase {
+            name: "red_eye_auto",
+            recipe: op("red_eye", json!({ "auto": true })),
+            tol: by_op("red_eye"),
+        },
         // Retouch targets the gradient background (no uniform patch — the
         // op must visibly blend the stroked area against surrounding
         // content, otherwise the golden is vacuous).

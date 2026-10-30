@@ -308,8 +308,163 @@ fn straighten(img: &LinearImage, op: &Op) -> LinearImage {
     out
 }
 
+/// Red-eye fix for one normalized circular region: pixels whose red channel
+/// strongly dominates (the red-eye signature) are pulled down to their own
+/// luminance, blended by distance from the region center so the fix fades
+/// out at the rim. Pixels that don't trip the dominance test (skin, irises)
+/// are left alone.
+fn fix_red_region(img: &LinearImage, out: &mut LinearImage, cx: f64, cy: f64, cr: f64) {
+    let rx = (cr * img.width as f64).round().max(1.0) as i64;
+    let ry = (cr * img.height as f64).round().max(1.0) as i64;
+    let cx_px = (cx * img.width as f64).round() as i64;
+    let cy_px = (cy * img.height as f64).round() as i64;
+    for dy in -ry..=ry {
+        for dx in -rx..=rx {
+            let x = cx_px + dx;
+            let y = cy_px + dy;
+            if x < 0 || y < 0 || x >= img.width as i64 || y >= img.height as i64 {
+                continue;
+            }
+            let norm = (dx * dx) as f64 / (rx * rx) as f64 + (dy * dy) as f64 / (ry * ry) as f64;
+            if norm > 1.0 {
+                continue;
+            }
+            let px = img.get(x as u32, y as u32);
+            // Red-eye signature: red strongly dominant.
+            if px[0] > px[1] * 1.3 && px[0] > px[2] * 1.3 {
+                let l = luminance(px);
+                let fixed = [l * 0.9, l, l];
+                let w = (1.0 - norm) as f32;
+                let mix = |a: f32, b: f32| a * (1.0 - w) + b * w;
+                out.set(
+                    x as u32,
+                    y as u32,
+                    [mix(px[0], fixed[0]), mix(px[1], fixed[1]), mix(px[2], fixed[2])],
+                );
+            }
+        }
+    }
+}
+
+/// Auto red-eye detection heuristic (TASK-04-006): scan a coarse cell grid
+/// for cells containing red-dominant pixels (`r > 1.3·g` and `r > 1.3·b`),
+/// group them into 4-connected components, and keep small compact blobs —
+/// pupils. Large red areas (clothing, backgrounds, saturated swatches) and
+/// skin (never dominance-tripping) are not eyes. Deterministic: fixed grid,
+/// fixed scan order.
+fn detect_red_regions(img: &LinearImage) -> Vec<(f64, f64, f64)> {
+    const CELLS: u32 = 64;
+    let cw = (img.width / CELLS).max(1);
+    let ch = (img.height / CELLS).max(1);
+    let gw = img.width.div_ceil(cw);
+    let gh = img.height.div_ceil(ch);
+    let mut marks = vec![false; (gw * gh) as usize];
+    for gy in 0..gh {
+        for gx in 0..gw {
+            let x0 = gx * cw;
+            let y0 = gy * ch;
+            for y in y0..(y0 + ch).min(img.height) {
+                for x in x0..(x0 + cw).min(img.width) {
+                    let px = img.get(x, y);
+                    if px[0] > px[1] * 1.3 && px[0] > px[2] * 1.3 {
+                        marks[(gy * gw + gx) as usize] = true;
+                        break;
+                    }
+                }
+                if marks[(gy * gw + gx) as usize] {
+                    break;
+                }
+            }
+        }
+    }
+    // 4-connected components over marked cells.
+    let mut seen = vec![false; marks.len()];
+    let mut out = Vec::new();
+    for start in 0..marks.len() {
+        if !marks[start] || seen[start] {
+            continue;
+        }
+        let mut stack = vec![start];
+        seen[start] = true;
+        let mut n = 0.0f64;
+        let mut cells = Vec::new();
+        while let Some(idx) = stack.pop() {
+            let gy = (idx as u32) / gw;
+            let gx = (idx as u32) % gw;
+            cells.push((gx, gy));
+            n += 1.0;
+            for (nx, ny) in
+                [(gx.wrapping_sub(1), gy), (gx + 1, gy), (gx, gy.wrapping_sub(1)), (gx, gy + 1)]
+            {
+                if nx < gw && ny < gh {
+                    let ni = (ny * gw + nx) as usize;
+                    if marks[ni] && !seen[ni] {
+                        seen[ni] = true;
+                        stack.push(ni);
+                    }
+                }
+            }
+        }
+        // Pupil-sized blob only: relative to the whole image, a pupil is a
+        // tiny compact cluster. Cap both area and radius.
+        if n / (gw * gh) as f64 > 0.005 {
+            continue;
+        }
+        let min_gx = cells.iter().map(|c| c.0).min().unwrap();
+        let max_gx = cells.iter().map(|c| c.0).max().unwrap();
+        let min_gy = cells.iter().map(|c| c.1).min().unwrap();
+        let max_gy = cells.iter().map(|c| c.1).max().unwrap();
+        // Refine to pixel level: mean of the actual red-dominant pixels in
+        // the component's bounding box gives an exact pupil center, so the
+        // fix (which blends by distance) is strongest where it matters.
+        let x0 = min_gx * cw;
+        let y0 = min_gy * ch;
+        let x1 = ((max_gx + 1) * cw).min(img.width);
+        let y1 = ((max_gy + 1) * ch).min(img.height);
+        let mut sum_x = 0.0f64;
+        let mut sum_y = 0.0f64;
+        let mut n_px = 0.0f64;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let px = img.get(x, y);
+                if px[0] > px[1] * 1.3 && px[0] > px[2] * 1.3 {
+                    sum_x += x as f64;
+                    sum_y += y as f64;
+                    n_px += 1.0;
+                }
+            }
+        }
+        if n_px == 0.0 {
+            continue;
+        }
+        let cx_px = sum_x / n_px;
+        let cy_px = sum_y / n_px;
+        let max_d = (y0..y1)
+            .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+            .filter(|&(x, y)| {
+                let px = img.get(x, y);
+                px[0] > px[1] * 1.3 && px[0] > px[2] * 1.3
+            })
+            .map(|(x, y)| ((x as f64 - cx_px).powi(2) + (y as f64 - cy_px).powi(2)).sqrt())
+            .fold(0.0f64, f64::max);
+        let cx = cx_px / img.width as f64;
+        let cy = cy_px / img.height as f64;
+        // The region geometry is rx = r·width, ry = r·height; cover the blob
+        // in both axes and cap so a stray blob can never cover a big area.
+        let r = ((max_d + 1.0) / img.width as f64).clamp(0.01, 0.08);
+        out.push((cx, cy, r));
+    }
+    out
+}
+
 fn red_eye(img: &LinearImage, op: &Op) -> LinearImage {
     let mut out = img.clone();
+    if fbool(op, "auto", false) {
+        for (cx, cy, cr) in detect_red_regions(img) {
+            fix_red_region(img, &mut out, cx, cy, cr);
+        }
+        return out;
+    }
     let Some(regions) = param(op, "regions").and_then(Value::as_array) else {
         return out;
     };
@@ -319,37 +474,7 @@ fn red_eye(img: &LinearImage, op: &Op) -> LinearImage {
             region["y"].as_f64().unwrap_or(0.0),
             region["r"].as_f64().unwrap_or(0.0),
         );
-        let rx = (cr * img.width as f64).round().max(1.0) as i64;
-        let ry = (cr * img.height as f64).round().max(1.0) as i64;
-        let cx_px = (cx * img.width as f64).round() as i64;
-        let cy_px = (cy * img.height as f64).round() as i64;
-        for dy in -ry..=ry {
-            for dx in -rx..=rx {
-                let x = cx_px + dx;
-                let y = cy_px + dy;
-                if x < 0 || y < 0 || x >= img.width as i64 || y >= img.height as i64 {
-                    continue;
-                }
-                let norm =
-                    (dx * dx) as f64 / (rx * rx) as f64 + (dy * dy) as f64 / (ry * ry) as f64;
-                if norm > 1.0 {
-                    continue;
-                }
-                let px = img.get(x as u32, y as u32);
-                // red-eye signature: red strongly dominant
-                if px[0] > px[1] * 1.3 && px[0] > px[2] * 1.3 {
-                    let l = luminance(px);
-                    let fixed = [l * 0.9, l, l];
-                    let w = (1.0 - norm) as f32;
-                    let mix = |a: f32, b: f32| a * (1.0 - w) + b * w;
-                    out.set(
-                        x as u32,
-                        y as u32,
-                        [mix(px[0], fixed[0]), mix(px[1], fixed[1]), mix(px[2], fixed[2])],
-                    );
-                }
-            }
-        }
+        fix_red_region(img, &mut out, cx, cy, cr);
     }
     out
 }

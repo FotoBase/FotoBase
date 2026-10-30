@@ -235,23 +235,35 @@ fn validate_params(op_type: &str, params: &Value, idx: usize) -> Result<(), Reci
             }
         }
         "red_eye" => {
-            let regions = p.get("regions").and_then(Value::as_array).ok_or_else(|| {
-                RecipeError(format!("ops[{idx}] red_eye.regions must be an array"))
-            })?;
-            for (j, r) in regions.iter().enumerate() {
-                let r = r.as_object().ok_or_else(|| {
-                    RecipeError(format!("ops[{idx}] red_eye.regions[{j}] must be an object"))
-                })?;
-                for key in ["x", "y", "r"] {
-                    let v = r.get(key).and_then(Value::as_f64).ok_or_else(|| {
-                        RecipeError(format!(
-                            "ops[{idx}] red_eye.regions[{j}].{key} must be a number"
-                        ))
+            if let Some(v) = p.get("auto") {
+                if !v.is_boolean() {
+                    return err(format!("ops[{idx}] red_eye.auto must be a boolean"));
+                }
+            }
+            // `regions` is required unless `auto` requests detection.
+            let auto = p.get("auto").and_then(Value::as_bool).unwrap_or(false);
+            let regions = p.get("regions").and_then(Value::as_array);
+            if regions.is_none() && !auto {
+                return err(format!(
+                    "ops[{idx}] red_eye.regions must be an array (or set auto=true)"
+                ));
+            }
+            if let Some(regions) = regions {
+                for (j, r) in regions.iter().enumerate() {
+                    let r = r.as_object().ok_or_else(|| {
+                        RecipeError(format!("ops[{idx}] red_eye.regions[{j}] must be an object"))
                     })?;
-                    if !(0.0..=1.0).contains(&v) {
-                        return err(format!(
-                            "ops[{idx}] red_eye.regions[{j}].{key} = {v} out of range [0, 1]"
-                        ));
+                    for key in ["x", "y", "r"] {
+                        let v = r.get(key).and_then(Value::as_f64).ok_or_else(|| {
+                            RecipeError(format!(
+                                "ops[{idx}] red_eye.regions[{j}].{key} must be a number"
+                            ))
+                        })?;
+                        if !(0.0..=1.0).contains(&v) {
+                            return err(format!(
+                                "ops[{idx}] red_eye.regions[{j}].{key} = {v} out of range [0, 1]"
+                            ));
+                        }
                     }
                 }
             }
@@ -353,7 +365,7 @@ fn validate_extra_params(
         "temperature" => &["kelvin_shift"],
         "tint" => &["green_magenta"],
         "grayscale" => &["enabled"],
-        "red_eye" => &["regions"],
+        "red_eye" => &["regions", "auto"],
         "text" => &["text", "x", "y", "size", "color", "font", "rotation"],
         "retouch" => &["strokes"],
         _ => &[],

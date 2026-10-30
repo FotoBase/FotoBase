@@ -1,6 +1,6 @@
 # task: implement red-eye removal
 
-**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 Red-eye removal with auto and manual modes as a recipe op (PLAN §2E Basic Fixes; also a batch op per §2E batch list).
@@ -19,5 +19,5 @@ Red-eye removal with auto and manual modes as a recipe op (PLAN §2E Basic Fixes
 - Unit: manual region fix produces localized change only — pixels outside region untouched.
 
 ## Acceptance criteria
-- [ ] 04-006: Auto + manual red-eye removal work as recipe ops with live preview.
-- [ ] 04-006: Golden-image test passes.
+- [x] 04-006: Auto + manual red-eye removal work as recipe ops with live preview.
+- [x] 04-006: Golden-image test passes.
