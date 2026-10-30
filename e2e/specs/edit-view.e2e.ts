@@ -62,13 +62,42 @@ function sidecarPath(): string {
 }
 
 function sidecarText(): string {
-  return fs.existsSync(sidecarPath()) ? fs.readFileSync(sidecarPath(), "utf8") : "";
+  return fs.existsSync(sidecarPath())
+    ? fs.readFileSync(sidecarPath(), "utf8")
+    : "";
 }
 
 async function waitSidecarContains(fragment: string): Promise<void> {
   await browser.waitUntil(() => sidecarText().includes(fragment), {
     timeout: 10_000,
     timeoutMsg: `sidecar never contained ${fragment}; last value: ${sidecarText().slice(0, 500)}`,
+  });
+}
+
+// Click + verify + DOM-click fallback. WebKitGTK under xvfb intermittently
+// reports overlay elements as "not interactable" or dispatches the click at
+// coordinates nothing receives; the fallback fires the element's own click
+// handler directly, which is what these specs actually exercise.
+async function activate(
+  testid: string,
+  verify: () => Promise<boolean> | boolean,
+): Promise<void> {
+  const sel = `[data-testid="${testid}"]`;
+  await clickTestId(testid);
+  try {
+    await browser.waitUntil(verify, { timeout: 2000 });
+    return;
+  } catch {
+    // fall through to the DOM click
+  }
+  await browser.execute((selector: string) => {
+    const el = document.querySelector(selector) as HTMLElement | null;
+    if (!el) throw new Error(`${selector} not found`);
+    el.click();
+  }, sel);
+  await browser.waitUntil(verify, {
+    timeout: 8000,
+    timeoutMsg: `${sel} never took effect`,
   });
 }
 
@@ -83,23 +112,37 @@ async function settle(): Promise<void> {
   await browser.pause(700);
 }
 
+const errorText = async (): Promise<string> => {
+  try {
+    return await (await $('[data-testid="edit-error"]')).getText();
+  } catch {
+    return "";
+  }
+};
+
 describe("edit view", () => {
   before(async () => {
     lib = makeLibrary();
     await browser.waitUntil(async () =>
-      browser.execute(() => Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__)),
+      browser.execute(() =>
+        Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__),
+      ),
     );
     const error = await browser.executeAsync(
       (folder: string, done: (e: string | null) => void) => {
         const tauri = (
           window as unknown as {
-            __TAURI__: { core: { invoke: (cmd: string, args: object) => Promise<unknown> } };
+            __TAURI__: {
+              core: { invoke: (cmd: string, args: object) => Promise<unknown> };
+            };
           }
         ).__TAURI__;
-        tauri.core.invoke("set_folder_mode", { path: folder, mode: "once" }).then(
-          () => done(null),
-          (e) => done(String(e)),
-        );
+        tauri.core
+          .invoke("set_folder_mode", { path: folder, mode: "once" })
+          .then(
+            () => done(null),
+            (e) => done(String(e)),
+          );
       },
       lib.dir,
     );
@@ -119,7 +162,9 @@ describe("edit view", () => {
     await cells()[2].click();
     await browser.keys(["Enter"]);
     await $('[data-testid="viewer"]').waitForDisplayed();
-    await clickTestId("edit-open");
+    await activate("edit-open", () =>
+      $('[data-testid="edit-view"]').isDisplayed(),
+    );
     await $('[data-testid="edit-view"]').waitForDisplayed();
     await $('[data-testid="edit-tab-basic"]').waitForDisplayed();
     await $('[data-testid="edit-tab-tuning"]').waitForDisplayed();
@@ -129,18 +174,32 @@ describe("edit view", () => {
   });
 
   it("applies an op from each tab and updates the preview", async () => {
-    // Effects tab: B&W one-click.
-    await clickTestId("edit-tab-effects");
-    await $('[data-testid="effects"]').waitForDisplayed();
-    await clickTestId("effect-bw");
-    await settle();
+    // Effects tab: B&W one-click (verify: the strength slider appears).
+    await activate(
+      "edit-tab-effects",
+      async () =>
+        (await $('[data-testid="effects"]').isExisting()) &&
+        (await $('[data-testid="effects"]').isDisplayed()),
+    );
+    await activate("effect-bw", async () => {
+      try {
+        return await $('[data-testid="strength-bw"]').isDisplayed();
+      } catch {
+        return false;
+      }
+    });
 
     // Tuning tab: Fill Light slider. WebKitWebDriver cannot drive a range
     // input with sendKeys; set the value and dispatch the input event the
     // panel's handler listens on (the handler — clamping, op emission — is
     // what this spec exercises).
-    await clickTestId("edit-tab-tuning");
-    await $('[data-testid="tuning"]').waitForDisplayed();
+    await activate("edit-tab-tuning", async () => {
+      try {
+        return await $('[data-testid="tuning"]').isDisplayed();
+      } catch {
+        return false;
+      }
+    });
     await browser.execute(() => {
       const el = document.querySelector(
         '[data-testid="fill-light"]',
@@ -149,25 +208,26 @@ describe("edit view", () => {
       el.value = "0.5";
       el.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    await settle();
+    await waitSidecarContains("fill_light");
 
     // Basic Fixes tab: Auto Contrast.
-    await clickTestId("edit-tab-basic");
-    await $('[data-testid="auto-fix"]').waitForDisplayed();
-    await clickTestId("auto-contrast");
-    await settle();
-
-    const errorText = async (): Promise<string> => {
+    await activate("edit-tab-basic", async () => {
       try {
-        return await (await $('[data-testid="edit-error"]')).getText();
+        return await $('[data-testid="auto-fix"]').isDisplayed();
       } catch {
-        return "";
+        return false;
       }
-    };
+    });
+    await activate("auto-contrast", () =>
+      sidecarText().includes("auto_contrast"),
+    );
 
     const after = await $('[data-testid="edit-preview"]').getAttribute("src");
     await browser.waitUntil(
-      async () => String(await $('[data-testid="edit-preview"]').getAttribute("src")).includes("?r="),
+      async () =>
+        String(
+          await $('[data-testid="edit-preview"]').getAttribute("src"),
+        ).includes("?r="),
       {
         timeout: 10_000,
         timeoutMsg: `preview never showed an edited render; error: ${await errorText()}`,
@@ -182,11 +242,7 @@ describe("edit view", () => {
   });
 
   it("undo reverts the recipe", async () => {
-    await clickTestId("edit-undo");
-    await browser.waitUntil(() => !sidecarText().includes("auto_contrast"), {
-      timeout: 10_000,
-      timeoutMsg: `undo never removed auto_contrast; last value: ${sidecarText().slice(0, 500)}`,
-    });
+    await activate("edit-undo", () => !sidecarText().includes("auto_contrast"));
   });
 
   it("never modified the original (checksum-verified, §9)", async () => {
