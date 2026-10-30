@@ -132,12 +132,35 @@ pub fn parse_value(value: &Value) -> Result<(Recipe, Vec<String>), RecipeError> 
     Ok((Recipe { spec: RECIPE_SPEC.into(), version, ops: parsed }, warnings))
 }
 
+/// One forward migration step: recipes of spec shape `from` are rewritten to
+/// shape `from + 1` (spec §4). Each step is a pure function over the parsed
+/// packet; the chain is applied in order on read.
+type MigrationStep = fn(Recipe, &mut Vec<String>) -> Recipe;
+
+/// Forward migrations, indexed so `MIGRATIONS[v - 1]` upgrades a v-`v`
+/// recipe to v-`v+1`. Empty today: v1 is the current shape, so migration is
+/// the identity — the seam is the point (spec §4: migrate forward on read,
+/// write back migrated on next save).
+const MIGRATIONS: &[MigrationStep] = &[];
+
+/// Read path for stored recipes (TASK-04-002): parse, then apply every
+/// migration up to the current spec version, transparently. A recipe written
+/// by a newer reader is rejected, never down-migrated.
+pub fn migrate(json: &str) -> Result<(Recipe, Vec<String>), RecipeError> {
+    let (mut recipe, mut warnings) = parse(json)?;
+    while recipe.version < RECIPE_VERSION {
+        let step = MIGRATIONS[recipe.version as usize - 1];
+        recipe = step(recipe, &mut warnings);
+        recipe.version += 1;
+    }
+    Ok((recipe, warnings))
+}
+
 impl Recipe {
     /// Parse a recipe packet; warnings (unknown ops) are dropped.
     pub fn parse(json: &str) -> Result<(Recipe, Vec<String>), RecipeError> {
         parse(json)
     }
-
     /// Serialize back to a conforming packet (round-trip: parse(to_json(r)) == r).
     pub fn to_json(&self) -> String {
         serde_json::to_string(&json!({

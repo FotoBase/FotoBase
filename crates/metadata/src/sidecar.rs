@@ -1052,6 +1052,23 @@ impl Sidecar {
             .filter(|t| !t.is_empty())
     }
 
+    /// Store an edit recipe as `fb:Recipe` (TASK-04-002, 00-010 §2): a
+    /// versioned JSON packet per docs/edit-recipe-spec-v1.md, one recipe per
+    /// photo. Replaces an existing recipe in place; everything else in the
+    /// packet stays verbatim (merge-on-write, 00-010 §3).
+    pub fn set_recipe(&mut self, recipe_json: &str) {
+        let d = self.tree.ensure_description_ns("fb");
+        d.attributes.retain(|(k, _)| k != "fb:Recipe");
+        d.set_or_replace_child("fb", "Recipe", recipe_json);
+    }
+
+    /// Remove `fb:Recipe` (revert to original). Nothing else is touched.
+    pub fn clear_recipe(&mut self) {
+        if let Some(d) = self.tree.description_mut() {
+            d.remove_prop("fb", "Recipe");
+        }
+    }
+
     /// Artist (`dc:creator`, an ordered array). Several creators written by
     /// another tool read joined with ", ".
     pub fn artist(&self) -> Option<String> {

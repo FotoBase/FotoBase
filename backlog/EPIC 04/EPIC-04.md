@@ -10,7 +10,7 @@
 ## feat: edit recipe engine
 
 - [x] `04-001` (L) Recipe engine core: versioned ops model (00-011 spec), pure functions over linear-light buffers, same code for preview (screen-res) and export (full-res).
-- [ ] `04-002` (M) Recipe stored in `fb:Recipe` XMP namespace; versioning + migration path.
+- [x] `04-002` (M) Recipe stored in `fb:Recipe` XMP namespace; versioning + migration path.
 - [ ] `04-003` (M) Undo / redo / undo all / revert; per-photo edit history.
 - [ ] `04-004` (M) Golden-image test harness per recipe op (per-pixel tolerance, §9).
 
