@@ -53,8 +53,11 @@ jobs:
       # TASK-01-012: libde265 (HEIC/HEVC) + dav1d (AVIF/AV1) for the embedded
       # libheif build in fotobase-render. Bottles, so this is fast.
       - name: Install HEIC/AVIF codec deps
+        id: codec-deps
         if: runner.os == 'macOS'
-        run: brew install libde265 dav1d
+        run: |
+          brew install libde265 dav1d
+          echo "key=$(brew list --versions libde265 dav1d | tr ' /' '--')" >> "$GITHUB_OUTPUT"
 
       - name: Install Linux system deps (Tauri/WebKitGTK build deps)
         if: runner.os == 'Linux'
@@ -84,6 +87,14 @@ jobs:
           components: clippy
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          # pkg-config bakes the *versioned* Homebrew Cellar path
+          # (/opt/homebrew/Cellar/libde265/<ver>/lib) into cached build-script
+          # link args; when brew bumps a codec formula the old path vanishes
+          # and stale caches fail with "library 'de265' not found". Fold the
+          # installed codec versions into the cache key so a brew bump
+          # invalidates the cache instead of breaking the link.
+          key: ${{ runner.os }}-codec-${{ steps.codec-deps.outputs.key }}
 
       - name: cargo clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets -- -D warnings

@@ -1151,14 +1151,15 @@ fn quit_from_tray(app: tauri::AppHandle) {
     tray::quit(&app);
 }
 
-/// Close-to-tray over IPC for the e2e suite (TASK-03-025): runs the exact
-/// handler the titlebar close button triggers. The spec cannot use the JS
-/// `close()` API — on Linux/WebKitGTK it destroys the webview even when the
-/// close request is prevented (tauri-apps/tauri#8435), which kills the app
-/// mid-test.
+/// Close-to-tray over IPC for the e2e suite (TASK-03-025): runs the same
+/// interception the titlebar close button triggers, minus the `hide()` —
+/// WebKitWebDriver cannot execute against a hidden view, so under the driver
+/// the intercepted window stays mapped. (The JS `close()` API is unusable
+/// here too: on Linux/WebKitGTK it destroys the webview even when the close
+/// request is prevented — tauri-apps/tauri#8435.)
 #[tauri::command]
 fn close_main_window(app: tauri::AppHandle) {
-    if !tray::handle_close_request(&app) {
+    if !tray::close_intercepted(&app) {
         // Interception declined (close_to_tray off): close for real, the
         // same outcome the un-intercepted titlebar close would have.
         if let Some(win) = app.get_webview_window("main") {

@@ -6,11 +6,11 @@
 // exposes the same `tray::quit` as the `quit_from_tray` command) fully
 // exits with no orphan process.
 //
-// The runs pass FOTOBASE_E2E_KEEP_WINDOW (see wdio.conf.ts): the
-// close-to-tray interception still fires (the app does not exit) but the
-// window stays mapped, because WebKitWebDriver cannot execute commands
-// against a hidden (unmapped) view — every post-close command would time
-// out. The hide itself is one `win.hide()` call.
+// The close-to-tray interception is driven through the `close_main_window`
+// IPC command (tray::close_intercepted minus the hide): WebKitWebDriver
+// cannot execute against a hidden (unmapped) view, so the spec's window
+// stays mapped while the interception and background-watching behavior are
+// still what the spec proves.
 
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -68,14 +68,24 @@ describe("tray background watching", () => {
     const fresh = path.join(lib.dir, "while-closed.jpg");
     fs.writeFileSync(fresh, Buffer.alloc(512, 0xab));
     // The catalog is the queryable side effect: resolve the folder id, then
-    // wait for the watched rescan to list the new file.
+    // wait for the watched rescan to list the new file. IPC errors are
+    // captured so a failure names the actual error, not "null has no find".
+    let ipcError = "";
     await browser.waitUntil(async () => {
-      const folders = (await invoke("list_folders")) as { id: number; path: string }[];
+      const folders = (await invoke("list_folders")) as { id: number; path: string }[] | null;
+      if (!folders) {
+        ipcError = "list_folders failed";
+        return false;
+      }
       const id = folders.find((f) => f.path === lib.dir)?.id;
       if (id === undefined) return false;
-      const files = (await invoke("list_files", { folders: [id] })) as { filename: string }[];
+      const files = (await invoke("list_files", { folders: [id] })) as { filename: string }[] | null;
+      if (!files) {
+        ipcError = "list_files failed";
+        return false;
+      }
       return files.some((f) => f.filename === "while-closed.jpg");
-    }, { timeoutMsg: "watcher missed a file written while the window was closed" });
+    }, { timeoutMsg: `watcher missed a file written while the window was closed${ipcError ? ` (${ipcError})` : ""}` });
   });
 
   it("quit fully exits the process", async () => {

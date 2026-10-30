@@ -88,10 +88,6 @@ export const config: WebdriverIO.Config = {
         HOME: home,
         XDG_DATA_HOME: path.join(home, ".local", "share"),
         XDG_CONFIG_HOME: path.join(home, ".config"),
-        // Tray spec: WebKitWebDriver cannot execute against a hidden view,
-        // so the tray's close-to-tray interception keeps the window mapped
-        // under the driver (the app still does not exit).
-        FOTOBASE_E2E_KEEP_WINDOW: "1",
       },
     });
     await waitForPort(DRIVER_PORT, 30_000);
