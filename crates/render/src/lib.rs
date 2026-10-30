@@ -199,7 +199,11 @@ fn decode(bytes: &[u8], src: &Path) -> Result<(Vec<u8>, u32, u32), RenderError> 
     match sniff(bytes) {
         Sniffed::Jpeg => match zune_jpeg_decode(bytes) {
             Ok(out) => Ok(out),
-            Err(detail) => Err(RenderError::Decode { path: src.to_path_buf(), detail }),
+            // zune runs strict (rejects e.g. junk bytes between segments —
+            // some cameras and many test fixtures produce those). Fall back
+            // to the `image` crate decoder instead of failing the render.
+            Err(_) => decode_with_image(bytes)
+                .map_err(|detail| RenderError::Decode { path: src.to_path_buf(), detail }),
         },
         // GIF/BMP/TIFF/WebP (and PNG fallback) through the `image` crate.
         Sniffed::Png | Sniffed::Gif | Sniffed::Bmp | Sniffed::Tiff | Sniffed::Webp => {
@@ -600,6 +604,39 @@ mod tests {
         assert_eq!(fit(1000, 1000, 100), (100, 100));
         assert_eq!(fit(3, 7, 5), (2, 5));
         assert_eq!(fit(0, 0, 100), (0, 0));
+    }
+
+    /// A JPEG zune's strict mode rejects (junk between segments — the e2e
+    /// fixture is one) still decodes via the `image` fallback instead of
+    /// failing the render (TASK-04-010 e2e found this).
+    #[test]
+    fn decode_falls_back_to_image_crate_when_zune_is_strict() {
+        // Encode a valid 16×16 JPEG, then splice junk bytes between the
+        // SOI marker and the following segment — exactly the shape that
+        // trips zune's strict mode.
+        let mut buf = Vec::new();
+        {
+            use image::ImageEncoder as _;
+            let px = vec![128u8; 16 * 16 * 3];
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 90)
+                .write_image(&px, 16, 16, image::ExtendedColorType::Rgb8)
+                .unwrap();
+        }
+        // Junk bytes between header segments (after the APP0/JFIF block) —
+        // the shape the e2e fixture has that trips zune's strict mode while
+        // the `image` decoder shrugs it off.
+        let app0_len = u16::from_be_bytes([buf[4], buf[5]]) as usize;
+        let insert_at = 4 + app0_len; // end of the APP0 segment
+        let mut bytes = buf.clone();
+        bytes.splice(insert_at..insert_at, b"junk-between-segments".to_vec());
+
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("strict.jpg");
+        std::fs::write(&src, &bytes).unwrap();
+        assert!(zune_jpeg_decode(&bytes).is_err(), "fixture must trip zune's strict mode");
+        let (rgb, w, h) = decode(&bytes, &src).expect("fallback decode");
+        assert_eq!((w, h), (16, 16));
+        assert_eq!(rgb.len(), 16 * 16 * 3);
     }
 
     #[test]
