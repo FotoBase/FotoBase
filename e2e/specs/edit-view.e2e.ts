@@ -37,6 +37,25 @@ const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
 
 const cells = () => $$('[data-testid="grid-cell"]');
 
+// WebKitGTK intermittently reports an interactable-looking element as "not
+// interactable" (element re-rendered between lookup and click). Scroll into
+// view and retry; the selector is named when giving up so failures say what
+// could not be clicked.
+async function clickTestId(testid: string): Promise<void> {
+  const sel = `[data-testid="${testid}"]`;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const el = await $(sel);
+      await el.scrollIntoView();
+      await el.click();
+      return;
+    } catch {
+      await browser.pause(500);
+    }
+  }
+  throw new Error(`could not click ${sel}`);
+}
+
 async function waitForCellCount(count: number): Promise<void> {
   await browser.waitUntil(async () => (await cells().length) === count, {
     timeoutMsg: `expected ${count} grid cells`,
@@ -84,7 +103,7 @@ describe("edit view", () => {
     await cells()[2].click();
     await browser.keys(["Enter"]);
     await $('[data-testid="viewer"]').waitForDisplayed();
-    await $('[data-testid="edit-open"]').click();
+    await clickTestId("edit-open");
     await $('[data-testid="edit-view"]').waitForDisplayed();
     await $('[data-testid="edit-tab-basic"]').waitForDisplayed();
     await $('[data-testid="edit-tab-tuning"]').waitForDisplayed();
@@ -97,21 +116,22 @@ describe("edit view", () => {
     const before = await $('[data-testid="edit-preview"]').getAttribute("src");
 
     // Effects tab: B&W one-click.
-    await $('[data-testid="edit-tab-effects"]').click();
+    await clickTestId("edit-tab-effects");
     await $('[data-testid="effects"]').waitForDisplayed();
-    await $('[data-testid="effect-bw"]').click();
+    await clickTestId("effect-bw");
     await settle();
 
     // Tuning tab: Fill Light slider.
-    await $('[data-testid="edit-tab-tuning"]').click();
+    await clickTestId("edit-tab-tuning");
     await $('[data-testid="tuning"]').waitForDisplayed();
+    await $('[data-testid="fill-light"]').scrollIntoView();
     await $('[data-testid="fill-light"]').setValue(0.5);
     await settle();
 
     // Basic Fixes tab: Auto Contrast.
-    await $('[data-testid="edit-tab-basic"]').click();
+    await clickTestId("edit-tab-basic");
     await $('[data-testid="auto-fix"]').waitForDisplayed();
-    await $('[data-testid="auto-contrast"]').click();
+    await clickTestId("auto-contrast");
     await settle();
 
     const after = await $('[data-testid="edit-preview"]').getAttribute("src");
@@ -127,7 +147,7 @@ describe("edit view", () => {
   });
 
   it("undo reverts the recipe", async () => {
-    await $('[data-testid="edit-undo"]').click();
+    await clickTestId("edit-undo");
     await settle();
     const sidecar = fs.readFileSync(path.join(lib.dir, `${SOLO}.xmp`), "utf8");
     expect(sidecar).not.toContain("auto_contrast");
