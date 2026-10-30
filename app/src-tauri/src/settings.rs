@@ -157,6 +157,15 @@ pub struct Settings {
     /// one shot (camera clocks drift).
     #[serde(default = "default_stack_window_secs")]
     pub stack_window_secs: u32,
+    /// Tray behavior on window close (TASK-03-025, PLAN §6 P2a): on, the
+    /// close button hides the window and watching continues from the tray;
+    /// off, closing the window quits the app as before.
+    #[serde(default = "default_close_to_tray")]
+    pub close_to_tray: bool,
+}
+
+fn default_close_to_tray() -> bool {
+    true
 }
 
 fn default_stack_window_secs() -> u32 {
@@ -186,6 +195,7 @@ impl Default for Settings {
             folder_view: FolderView::default(),
             single_click_edit: false,
             stack_window_secs: default_stack_window_secs(),
+            close_to_tray: default_close_to_tray(),
         }
     }
 }
@@ -221,6 +231,20 @@ mod tests {
         assert_eq!(s.update_mode, UpdateMode::CheckButAsk);
         assert!(s.show_tooltips);
         assert_eq!(s.grid_renderer, GridRenderer::Dom);
+    }
+
+    #[test]
+    fn close_to_tray_defaults_on_and_round_trips() {
+        // TASK-03-025: default per P2a — closing the window hides it and
+        // watching continues; the option can turn it off.
+        assert!(Settings::default().close_to_tray);
+        let dir = tempfile::tempdir().unwrap();
+        let mut s = Settings::load(dir.path());
+        assert!(s.close_to_tray, "missing settings.json falls back to the default");
+        s.close_to_tray = false;
+        s.save(dir.path()).unwrap();
+        let reloaded = Settings::load(dir.path());
+        assert!(!reloaded.close_to_tray);
     }
 
     #[test]

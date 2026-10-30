@@ -1,6 +1,6 @@
 # task: tray icon for background watching
 
-**Feature:** [FEAT-03-02-os-integration](FEAT-03-02-os-integration.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-02-os-integration](FEAT-03-02-os-integration.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-29)
 
 ## Description
 System-tray icon showing and controlling background watching, so the watcher keeps running with the main window closed (PLAN §6 P2a deliverable "Tray icon for background watching").
@@ -20,6 +20,6 @@ System-tray icon showing and controlling background watching, so the watcher kee
 - Unit: menu action mapping (pause/resume) toggles watcher state.
 
 ## Acceptance criteria
-- [ ] 03-025: tray icon shows and controls background watching.
-- [ ] 03-025: watcher runs with the main window closed.
-- [ ] 03-025: tray quit fully exits the app.
+- [x] 03-025: tray icon shows and controls background watching.
+- [x] 03-025: watcher runs with the main window closed.
+- [x] 03-025: tray quit fully exits the app.

@@ -30,6 +30,7 @@ pub mod stream;
 pub mod tag_commands;
 pub mod thumb;
 pub mod trash_commands;
+pub mod tray;
 
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase";
@@ -1142,6 +1143,31 @@ fn ping() -> &'static str {
     "pong"
 }
 
+/// Tray quit, exposed over IPC for the e2e suite (TASK-03-025): WebDriver
+/// cannot click the OS tray, so the spec drives the same [`tray::quit`]
+/// code path the menu item runs.
+#[tauri::command]
+fn quit_from_tray(app: tauri::AppHandle) {
+    tray::quit(&app);
+}
+
+/// Close-to-tray over IPC for the e2e suite (TASK-03-025): runs the same
+/// interception the titlebar close button triggers, minus the `hide()` —
+/// WebKitWebDriver cannot execute against a hidden view, so under the driver
+/// the intercepted window stays mapped. (The JS `close()` API is unusable
+/// here too: on Linux/WebKitGTK it destroys the webview even when the close
+/// request is prevented — tauri-apps/tauri#8435.)
+#[tauri::command]
+fn close_main_window(app: tauri::AppHandle) {
+    if !tray::close_intercepted(&app) {
+        // Interception declined (close_to_tray off): close for real, the
+        // same outcome the un-intercepted titlebar close would have.
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.destroy();
+        }
+    }
+}
+
 // --- Codec capability (TASK-02-005, PLAN §10) --------------------------------
 
 /// The frontend WebView probes its own decoders once at startup and reports
@@ -1705,10 +1731,29 @@ pub fn run() {
                 }
                 perf_probe::spawn_completion_watcher(state.catalog_path.clone(), cfg.expected);
             }
+            // Tray icon (TASK-03-025, PLAN §6 P2a): shows and controls
+            // background watching; the window sits hidden under it when
+            // closed. Failure is non-fatal — the app runs without a tray.
+            if let Err(e) = tray::build_tray(app.handle()) {
+                tracing::warn!("tray icon unavailable: {e}");
+            }
+            tray::spawn_status_updater(app.handle().clone());
             Ok(())
+        })
+        // Close-to-tray (TASK-03-025): the close button hides the window
+        // and watching continues; quitting happens from the tray menu
+        // (fully exits) or when the setting is off.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if tray::handle_close_request(window.app_handle()) {
+                    api.prevent_close();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             ping,
+            quit_from_tray,
+            close_main_window,
             report_codec_support,
             get_codec_support,
             stop_stream,

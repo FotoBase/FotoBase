@@ -41,6 +41,9 @@ export interface Settings {
   single_click_edit: boolean;
   /// RAW+JPEG pair detector window in seconds (TASK-03-021).
   stack_window_secs: number;
+  /// Closing the main window hides it and watching continues from the
+  /// tray (TASK-03-025, PLAN §6 P2a). Off: close quits the app.
+  close_to_tray: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -60,6 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
   folder_view: "tree",
   single_click_edit: false,
   stack_window_secs: 5,
+  close_to_tray: true,
 };
 
 // Image types the file-association option (TASK-01-025, PLAN §2M) can

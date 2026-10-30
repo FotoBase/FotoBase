@@ -74,6 +74,12 @@
     apply({ ...settings, single_click_edit: on });
   }
 
+  // Close-to-tray (TASK-03-025): on, the window's close button hides it and
+  // watching continues from the tray; off, closing quits the app.
+  function setCloseToTray(on: boolean): void {
+    apply({ ...settings, close_to_tray: on });
+  }
+
   function setShowHidden(show: boolean): void {
     apply({ ...settings, show_hidden: show });
   }
@@ -310,6 +316,18 @@
             onchange={(e) => setSingleClickEdit(e.currentTarget.checked)}
           />
           {t("options.singleClickEdit")}
+        </label>
+
+        <!-- Close-to-tray (TASK-03-025): closing the window hides it and
+             watching continues from the tray. -->
+        <label class="options-row options-check">
+          <input
+            type="checkbox"
+            data-testid="close-to-tray"
+            checked={settings.close_to_tray}
+            onchange={(e) => setCloseToTray(e.currentTarget.checked)}
+          />
+          {t("options.closeToTray")}
         </label>
 
         <!-- Hidden items (TASK-03-009) and the catalog-trash undo window
