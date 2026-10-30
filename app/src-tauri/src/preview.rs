@@ -58,6 +58,36 @@ pub fn placeholder() -> PreviewReply {
 /// vanished from disk all degrade to the placeholder — the viewer never
 /// pops an error dialog.
 pub fn resolve_preview(hash: &str, catalog: &Catalog) -> PreviewReply {
+    resolve_preview_with_recipe(hash, None, Path::new(""), catalog)
+}
+
+/// [`resolve_preview`] with an edit-preview override (TASK-04-010): when
+/// `recipe_id` names an edited cache entry (`<cache_dir>/edit/<hash>-r<id>.jpg`),
+/// its bytes are served instead of the original's — the edit view's live
+/// preview, still fetched by the WebView straight from disk (PLAN §3 rule 3).
+/// A missing/corrupt cache entry falls back to the original bytes so the
+/// image never blanks out while a render is in flight.
+pub fn resolve_preview_with_recipe(
+    hash: &str,
+    recipe_id: Option<&str>,
+    cache_dir: &Path,
+    catalog: &Catalog,
+) -> PreviewReply {
+    if let Some(id) = recipe_id {
+        if crate::thumb::is_cache_key(hash)
+            && id.len() == 32
+            && id.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            let edited = cache_dir.join("edit").join(format!("{hash}-r{id}.jpg"));
+            if let Ok(bytes) = std::fs::read(&edited) {
+                return PreviewReply { status: 200, content_type: "image/jpeg", body: bytes };
+            }
+        }
+    }
+    resolve_preview_original(hash, catalog)
+}
+
+fn resolve_preview_original(hash: &str, catalog: &Catalog) -> PreviewReply {
     if !crate::thumb::is_cache_key(hash) {
         return placeholder();
     }

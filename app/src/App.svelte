@@ -26,6 +26,7 @@
   import ThumbnailGrid from "./lib/ThumbnailGrid.svelte";
   import TrashDialog from "./lib/TrashDialog.svelte";
   import Viewer from "./lib/Viewer.svelte";
+  import EditView from "./lib/EditView.svelte";
   import { deleteFromDisk, exitApp, refreshFolderThumbnails, revealInDisk } from "./lib/file-menu";
   import {
     addToAlbum,
@@ -132,6 +133,15 @@
     index: 0,
     slideshow: false,
   });
+
+  // Single-photo edit view (TASK-04-010): opened from the viewer's Edit
+  // button; overlays the viewer until closed.
+  let edit = $state<{ open: boolean; index: number }>({ open: false, index: 0 });
+
+  function openEdit(item: GridItem): void {
+    const index = photos.findIndex((p) => p.id === item.id);
+    edit = { open: true, index: index < 0 ? 0 : index };
+  }
 
   function openViewer(item: GridItem, slideshow = false): void {
     const index = photos.findIndex((p) => p.id === item.id);
@@ -919,6 +929,14 @@
       }}
       onalbumschanged={() => void refreshAlbums()}
       onclose={() => (viewer = { open: false, index: 0, slideshow: false })}
+      onedit={openEdit}
+    />
+  {/if}
+  {#if edit.open}
+    <EditView
+      items={photos}
+      startIndex={edit.index}
+      onclose={() => (edit = { open: false, index: 0 })}
     />
   {/if}
   <ContextMenu

@@ -20,11 +20,14 @@
     previewSrc: string;
     /// Fired on every state change with the current effects state.
     onchange: (state: EffectsState) => void;
+    /// State to start from (TASK-04-010): the edit view passes the state it
+    /// restored from the photo's recipe so reopening keeps the effects.
+    initial?: EffectsState;
   }
 
-  let { previewSrc, onchange }: Props = $props();
+  let { previewSrc, onchange, initial }: Props = $props();
 
-  let state = $state<EffectsState>({});
+  let state = $state<EffectsState>({ ...(initial ?? {}) });
 
   let announced = false;
   $effect(() => {

@@ -20,11 +20,16 @@
     previewSrc: string;
     /// Fired on every state change with the current red-eye state.
     onchange: (state: RedEyeState) => void;
+    /// State to start from (TASK-04-010): the edit view passes the state it
+    /// restored from the photo's recipe so reopening keeps the edits.
+    initial?: RedEyeState;
   }
 
-  let { previewSrc, onchange }: Props = $props();
+  let { previewSrc, onchange, initial }: Props = $props();
 
-  let state = $state<RedEyeState>({ auto: false, regions: [] });
+  let state = $state<RedEyeState>(
+    initial ? { auto: initial.auto, regions: initial.regions.map((r) => ({ ...r })) } : { auto: false, regions: [] },
+  );
   let manual = $state(false);
   // Stage box in px (the full image's display size). Measured from the base
   // image; jsdom-safe because tests stub getBoundingClientRect.

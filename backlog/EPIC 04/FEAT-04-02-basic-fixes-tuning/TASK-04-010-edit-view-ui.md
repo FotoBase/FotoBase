@@ -1,6 +1,6 @@
 # task: build edit view ui
 
-**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 The single-photo edit view: large preview, edit tabs (Basic Fixes, Tuning, Effects), filmstrip, and live preview (PLAN §2D "Edit view — single photo with edit tabs and filmstrip"; §6 P2b).
@@ -19,5 +19,5 @@ The single-photo edit view: large preview, edit tabs (Basic Fixes, Tuning, Effec
 - Integration: edit-session checksum of the original before/after is identical (§9 Data safety).
 
 ## Acceptance criteria
-- [ ] 04-010: Edit view shows single photo, edit tabs, filmstrip, live preview.
-- [ ] 04-010: Originals never modified during editing (checksum-verified).
+- [x] 04-010: Edit view shows single photo, edit tabs, filmstrip, live preview.
+- [x] 04-010: Originals never modified during editing (checksum-verified).
