@@ -1,6 +1,6 @@
 # task: build recipe engine core
 
-**Feature:** [FEAT-04-05-edit-recipe-engine](FEAT-04-05-edit-recipe-engine.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-05-edit-recipe-engine](FEAT-04-05-edit-recipe-engine.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 The versioned edit-recipe engine: an ordered ops model per the 00-011 spec, implemented as pure functions over linear-light buffers, with one code path for preview (screen-res) and export (full-res) (PLAN §5 "Edit recipe", §3 rule 5). This is the foundation every other EPIC-04 feature builds on.
@@ -21,5 +21,5 @@ The versioned edit-recipe engine: an ordered ops model per the 00-011 spec, impl
 - Unit: recipe serialization round-trips (serialize → parse → identical op list).
 
 ## Acceptance criteria
-- [ ] 04-001: Versioned ops model implemented per 00-011 spec; ops are pure functions over linear-light buffers.
-- [ ] 04-001: Same op code path produces identical results at preview and export resolution.
+- [x] 04-001: Versioned ops model implemented per 00-011 spec; ops are pure functions over linear-light buffers.
+- [x] 04-001: Same op code path produces identical results at preview and export resolution.
