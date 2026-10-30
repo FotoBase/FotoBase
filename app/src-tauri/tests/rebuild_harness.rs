@@ -253,12 +253,10 @@ fn incremental_rebuild_skips_unchanged_and_keeps_user_data() {
         f.rating = Some(4);
     }
     // The drifted sidecar's hash moves with it (the external edit, not the
-    // rebuild, changed the bytes).
+    // rebuild, changed the bytes). Keyed exactly like the snapshot does —
+    // native separators, so this is Windows-safe.
     let sc_key = normalize(&sc);
-    expected.sidecars.insert(
-        sc_key,
-        after.sidecars.iter().find(|(k, _)| k.ends_with("2024/b.png.xmp")).unwrap().1.clone(),
-    );
+    expected.sidecars.insert(sc_key.clone(), after.sidecars.get(&sc_key).cloned().flatten());
     let diff = fotobase_lib::rebuild_harness::diff(&expected, &after);
     assert!(diff.pass, "incremental rebuild must not lose data: {:#?}", diff.diffs);
 }
