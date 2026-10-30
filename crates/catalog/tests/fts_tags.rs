@@ -298,6 +298,12 @@ fn keystroke_latency_on_50k_photos_stays_interactive() {
         )
         .unwrap();
 
+    // Warm the FTS index into the page cache first: the intent is
+    // steady-state per-keystroke latency, not cold-start cost, and a shared
+    // CI runner can push the first (cold) query past the budget (seen as a
+    // 253.6ms vs 250ms flake on macos-15).
+    let _ = cat.search_files_detailed("warmup", None, 500);
+
     for query in ["z", "ze", "zeb", "zebr", "zebrafish", "tag1", "tag150", "dinner", "dinner num"] {
         let start = Instant::now();
         let hits = cat.search_files_detailed(query, None, 500).unwrap();
