@@ -26,6 +26,7 @@ pub mod perf_probe;
 pub mod preview;
 pub mod rating;
 pub mod rebuild;
+pub mod rebuild_harness;
 pub mod settings;
 pub mod stream;
 pub mod tag_commands;

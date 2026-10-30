@@ -1,6 +1,6 @@
 # task: rebuild acceptance harness — delete catalog, rebuild, diff
 
-**Feature:** [FEAT-03-02-os-integration](FEAT-03-02-os-integration.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-02-os-integration](FEAT-03-02-os-integration.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in review (2026-10-30)
 
 ## Description
 Automated harness proving the P2a acceptance "delete catalog → rebuild → no loss": snapshot user data, wipe the catalog, rebuild from sidecars, diff (PLAN §9 Rebuildability row). This is the regression gate for every sidecar-writing feature in EPIC-03.
@@ -21,6 +21,6 @@ Automated harness proving the P2a acceptance "delete catalog → rebuild → no 
 - Integration: deliberately dropping a sidecar write from one mutation makes the diff FAIL (proves the harness detects regressions).
 
 ## Acceptance criteria
-- [ ] 03-026: harness reproduces the §9 rebuildability check end-to-end.
-- [ ] 03-026: zero user-data loss on the fixture in CI.
-- [ ] 03-026: a seeded regression is caught by the harness (verified once, noted in PR).
+- [x] 03-026: harness reproduces the §9 rebuildability check end-to-end.
+- [x] 03-026: zero user-data loss on the fixture in CI.
+- [x] 03-026: a seeded regression is caught by the harness (verified once, noted in PR).
