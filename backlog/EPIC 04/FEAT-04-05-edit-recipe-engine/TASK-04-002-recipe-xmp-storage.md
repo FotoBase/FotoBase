@@ -1,6 +1,6 @@
 # task: store recipes in fb:recipe xmp
 
-**Feature:** [FEAT-04-05-edit-recipe-engine](FEAT-04-05-edit-recipe-engine.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in progress (2026-10-30)
+**Feature:** [FEAT-04-05-edit-recipe-engine](FEAT-04-05-edit-recipe-engine.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 Persist edit recipes in the custom `fb:Recipe` XMP namespace as versioned JSON (PLAN §5), with a migration path for older recipe versions. Recipes must survive catalog rebuild since sidecars are the source of truth for user data (§5 Authority).
