@@ -57,7 +57,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install libde265 dav1d
-          echo "key=$(brew list --versions libde265 dav1d | tr ' /' '--')" >> "$GITHUB_OUTPUT"
+          echo "key=$(brew list --versions libde265 dav1d | tr ' /\n' '--_')" >> "$GITHUB_OUTPUT"
 
       - name: Install Linux system deps (Tauri/WebKitGTK build deps)
         if: runner.os == 'Linux'

@@ -184,8 +184,15 @@ impl FolderManager {
     /// Whether any folder is watched (`scan_mode = 'always'`): tray status
     /// "watching" vs "idle".
     pub fn has_watched_folders(&self) -> bool {
-        let cat = self.catalog.lock().map_err(|_| ()).expect("catalog mutex poisoned");
-        !top_level_roots(&cat).is_empty()
+        // A scan holds the catalog lock for its whole run, and this is polled
+        // by the tray updater while it holds `AppState::folders` — blocking
+        // here would stall every IPC command behind that lock. A busy catalog
+        // means a watched-folder scan is running, i.e. something is watched.
+        match self.catalog.try_lock() {
+            Ok(cat) => !top_level_roots(&cat).is_empty(),
+            Err(std::sync::TryLockError::WouldBlock) => true,
+            Err(std::sync::TryLockError::Poisoned(_)) => panic!("catalog mutex poisoned"),
+        }
     }
 }
 
