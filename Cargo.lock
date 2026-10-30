@@ -1321,12 +1321,14 @@ name = "fotobase-render"
 version = "0.1.0"
 dependencies = [
  "fast_image_resize",
+ "fotobase-core",
  "fotobase-jobs",
  "fotobase-video",
  "image",
  "lcms2",
  "libheif-rs",
  "miniz_oxide 0.8.9",
+ "serde_json",
  "sha2",
  "tempfile",
  "thiserror 2.0.21",
