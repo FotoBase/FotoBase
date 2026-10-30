@@ -1151,6 +1151,22 @@ fn quit_from_tray(app: tauri::AppHandle) {
     tray::quit(&app);
 }
 
+/// Close-to-tray over IPC for the e2e suite (TASK-03-025): runs the exact
+/// handler the titlebar close button triggers. The spec cannot use the JS
+/// `close()` API — on Linux/WebKitGTK it destroys the webview even when the
+/// close request is prevented (tauri-apps/tauri#8435), which kills the app
+/// mid-test.
+#[tauri::command]
+fn close_main_window(app: tauri::AppHandle) {
+    if !tray::handle_close_request(&app) {
+        // Interception declined (close_to_tray off): close for real, the
+        // same outcome the un-intercepted titlebar close would have.
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.destroy();
+        }
+    }
+}
+
 // --- Codec capability (TASK-02-005, PLAN §10) --------------------------------
 
 /// The frontend WebView probes its own decoders once at startup and reports
@@ -1736,6 +1752,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ping,
             quit_from_tray,
+            close_main_window,
             report_codec_support,
             get_codec_support,
             stop_stream,

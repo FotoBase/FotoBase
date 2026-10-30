@@ -51,17 +51,11 @@ describe("tray background watching", () => {
   });
 
   it("keeps the process and the watcher alive when the window closes", async () => {
-    // Close the window (the tray intercepts the request and hides it).
-    const error = await browser.executeAsync((done: (e: string | null) => void) => {
-      const tauri = (
-        window as unknown as {
-          __TAURI__: {
-            window: { getCurrentWindow: () => { close: () => Promise<void> } };
-          };
-        }
-      ).__TAURI__;
-      tauri.window.getCurrentWindow().close().then(() => done(null), (e) => done(String(e)));
-    });
+    // Close the window through the interception itself. The JS window
+    // `close()` API cannot be used here: on Linux/WebKitGTK it destroys
+    // the webview even when the close request is prevented
+    // (tauri-apps/tauri#8435), killing the app mid-test.
+    const error = await invoke("close_main_window");
     expect(error).toBeNull();
     // The app is still alive: the session survives and IPC answers.
     await browser.waitUntil(async () => (await invoke("ping")) === "pong", {
