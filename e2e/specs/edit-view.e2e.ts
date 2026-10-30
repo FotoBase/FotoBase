@@ -67,6 +67,18 @@ function sidecarText(): string {
     : "";
 }
 
+// The solo photo's catalog id (sidecar checks and IPC need the id, and the
+// cell order is not the write order).
+async function soloId(): Promise<number> {
+  const info = (await invoke("find_file_by_path", {
+    path: `${lib.dir}/${SOLO}`,
+  })) as {
+    id: number;
+  } | null;
+  if (!info) throw new Error("solo photo not in catalog");
+  return info.id;
+}
+
 async function waitSidecarContains(fragment: string): Promise<void> {
   await browser.waitUntil(() => sidecarText().includes(fragment), {
     timeout: 10_000,
@@ -233,21 +245,6 @@ describe("edit view", () => {
       await browser.waitUntil(fillSaved, { timeout: 3000 });
     } catch {
       // fall through
-    }
-    if (!fillSaved()) {
-      await browser.execute(() => {
-        const el = document.querySelector(
-          '[data-testid="fill-light"]',
-        ) as HTMLInputElement | null;
-        if (!el) throw new Error("fill-light slider not found");
-        el.focus();
-      });
-      for (let i = 0; i < 10; i++) await browser.keys(["ArrowRight"]);
-      try {
-        await browser.waitUntil(fillSaved, { timeout: 3000 });
-      } catch {
-        // fall through
-      }
     }
     if (!fillSaved()) {
       await browser.execute(() => {

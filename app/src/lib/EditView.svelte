@@ -194,7 +194,7 @@
   });
 </script>
 
-<div class="edit-view" data-testid="edit-view">
+<div class="edit-view" data-testid="edit-view" data-file-id={current?.id ?? ""}>
   <div class="edit-view-header">
     <div class="edit-view-tabs" role="tablist">
       {#each EDIT_TABS as tb (tb)}
