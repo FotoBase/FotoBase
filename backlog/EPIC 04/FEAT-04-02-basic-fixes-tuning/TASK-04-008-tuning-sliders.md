@@ -1,6 +1,6 @@
 # task: implement tuning tab sliders and neutral picker
 
-**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 Tuning tab with Fill Light, Highlights, Shadows, and Color Temperature sliders plus a neutral-color (white balance) eyedropper picker (PLAN §2E Tuning tab), all as recipe ops with live preview.
@@ -19,5 +19,5 @@ Tuning tab with Fill Light, Highlights, Shadows, and Color Temperature sliders p
 - Unit: neutral picker on a known-gray pixel yields identity/neutral white balance.
 
 ## Acceptance criteria
-- [ ] 04-008: Tuning sliders and neutral-color picker update the live preview without perceptible lag.
-- [ ] 04-008: Golden-image tests pass for each op.
+- [x] 04-008: Tuning sliders and neutral-color picker update the live preview without perceptible lag.
+- [x] 04-008: Golden-image tests pass for each op.

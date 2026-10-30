@@ -1241,6 +1241,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "fotobase-catalog",
+ "fotobase-core",
  "fotobase-jobs",
  "fotobase-metadata",
  "fotobase-render",
