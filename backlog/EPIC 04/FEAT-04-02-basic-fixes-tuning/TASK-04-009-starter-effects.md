@@ -1,6 +1,6 @@
 # task: implement starter effects
 
-**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in progress (2026-10-30)
+**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 Starter effects — Sharpen, Sepia, B&W, Saturation (with strength slider) — as recipe ops (PLAN §6 P2b "Starter effects"; §2E Effects, P2 items).
