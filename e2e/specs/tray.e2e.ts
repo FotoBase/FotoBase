@@ -21,19 +21,28 @@ import { makeLibrary, type Library } from "../support/library";
 
 let lib: Library;
 
-const invoke = (cmd: string, args: object = {}): Promise<unknown> =>
-  browser.executeAsync(
-    (cmd: string, args: object, done: (e: string | null, v: unknown) => void) => {
+type Reply = { ok: true; value: unknown } | { ok: false; error: string };
+
+// WebDriver's async-script callback carries ONE result, so the reply is
+// wrapped; a rejected command throws here.
+const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
+  const reply = await browser.executeAsync<Reply, [string, object]>(
+    (cmd: string, args: object, done: (r: Reply) => void) => {
       const tauri = (
         window as unknown as {
           __TAURI__: { core: { invoke: (c: string, a: object) => Promise<unknown> } };
         }
       ).__TAURI__;
-      tauri.core.invoke(cmd, args).then((v) => done(null, v), (e) => done(String(e), null));
+      tauri.core
+        .invoke(cmd, args)
+        .then((value) => done({ ok: true, value }), (e) => done({ ok: false, error: String(e) }));
     },
     cmd,
     args,
   );
+  if (!reply.ok) throw new Error(`${cmd} failed: ${reply.error}`);
+  return reply.value;
+};
 
 const appProcesses = (): string =>
   execSync("ps -eo comm,args | grep -E '/fotobase( |$)' | grep -v grep || true", {
@@ -91,7 +100,15 @@ describe("tray background watching", () => {
   it("quit fully exits the process", async () => {
     // Same function the tray menu's Quit item runs (tray::quit); the OS
     // tray itself is outside WebDriver's reach.
-    await invoke("quit_from_tray");
+    // Fire-and-forget: the app exits before it could reply, which would kill
+    // the WebDriver session mid-command.
+    await browser.execute(() => {
+      (
+        window as unknown as {
+          __TAURI__: { core: { invoke: (c: string) => Promise<unknown> } };
+        }
+      ).__TAURI__.core.invoke("quit_from_tray");
+    });
     await browser.waitUntil(() => appProcesses().trim() === "", {
       timeout: 10_000,
       timeoutMsg: "fotobase process still alive after tray quit",
