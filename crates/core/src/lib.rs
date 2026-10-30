@@ -1,5 +1,9 @@
 //! Fotobase domain types and edit recipe model (PLAN §3).
 
+pub mod apply;
+pub mod buffer;
+pub mod recipe;
+
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase-core";
 
