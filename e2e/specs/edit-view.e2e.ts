@@ -155,11 +155,12 @@ describe("edit view", () => {
   });
 
   it("opens the edit view with tabs, filmstrip and a live preview", async () => {
-    // Open the viewer on the solo photo (third cell). A double-click is
-    // unreliable in WebKitWebDriver (the first click's selection re-render
-    // can swallow the dblclick), so use the keyboard path: click selects,
-    // Enter opens.
-    await cells()[2].click();
+    // Open the viewer on the solo photo — selected by filename, not cell
+    // index (the catalog's order is not the library's write order). A
+    // double-click is unreliable in WebKitWebDriver (the first click's
+    // selection re-render can swallow the dblclick), so use the keyboard
+    // path: click selects, Enter opens.
+    await $(`[data-testid="grid-cell"] img[alt="${SOLO}"]`).click();
     await browser.keys(["Enter"]);
     await $('[data-testid="viewer"]').waitForDisplayed();
     await activate("edit-open", () =>
@@ -210,10 +211,22 @@ describe("edit view", () => {
       }
     };
     const fillSaved = (): boolean => sidecarText().includes("fill_light");
-    const sliderDiagnostics = async (): Promise<string> =>
-      `slider=${await sliderState()} error=${await errorText()} src=${String(
-        await $('[data-testid="edit-preview"]').getAttribute("src"),
-      ).slice(0, 60)}`;
+    const sliderDiagnostics = async (): Promise<string> => {
+      const recipe = await invoke("get_recipe", {
+        fileId:
+          (await invoke("find_file_by_path", { path: `${lib.dir}/${SOLO}` })) !=
+          null
+            ? (
+                (await invoke("find_file_by_path", {
+                  path: `${lib.dir}/${SOLO}`,
+                })) as { id: number }
+              ).id
+            : -1,
+      }).catch((e) => `get_recipe failed: ${e}`);
+      return `slider=${await sliderState()} error=${await errorText()} recipe=${JSON.stringify(
+        recipe,
+      ).slice(0, 200)}`;
+    };
 
     try {
       await (await $('[data-testid="fill-light"]')).click();
