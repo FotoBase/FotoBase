@@ -1,6 +1,6 @@
 # task: build recipe engine core
 
-**Feature:** [FEAT-04-05-edit-recipe-engine](FEAT-04-05-edit-recipe-engine.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in progress (2026-10-30)
+**Feature:** [FEAT-04-05-edit-recipe-engine](FEAT-04-05-edit-recipe-engine.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 The versioned edit-recipe engine: an ordered ops model per the 00-011 spec, implemented as pure functions over linear-light buffers, with one code path for preview (screen-res) and export (full-res) (PLAN §5 "Edit recipe", §3 rule 5). This is the foundation every other EPIC-04 feature builds on.
