@@ -2,6 +2,7 @@
 
 pub mod apply;
 pub mod buffer;
+pub mod history;
 pub mod recipe;
 
 /// Crate identity, used by the workspace smoke test.

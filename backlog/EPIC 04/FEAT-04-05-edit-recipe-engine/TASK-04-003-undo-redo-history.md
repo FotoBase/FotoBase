@@ -1,6 +1,6 @@
 # task: implement undo, redo, and per-photo edit history
 
-**Feature:** [FEAT-04-05-edit-recipe-engine](FEAT-04-05-edit-recipe-engine.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-05-edit-recipe-engine](FEAT-04-05-edit-recipe-engine.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 Per-photo edit history with undo, redo, undo all, and revert, matching the Picasa workflow (PLAN §2E "Undo/Redo/Undo All; Revert"; §6 P2b).
@@ -19,5 +19,5 @@ Per-photo edit history with undo, redo, undo all, and revert, matching the Picas
 - Integration: revert after a series of edits leaves the original byte-identical (checksum, §9 Data safety).
 
 ## Acceptance criteria
-- [ ] 04-003: Undo/redo/undo-all/revert work with per-photo history.
-- [ ] 04-003: Originals untouched throughout (checksummed in tests).
+- [x] 04-003: Undo/redo/undo-all/revert work with per-photo history.
+- [x] 04-003: Originals untouched throughout (checksummed in tests).
