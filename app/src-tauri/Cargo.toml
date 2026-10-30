@@ -33,6 +33,10 @@ fotobase-video = { path = "../../crates/video" }
 tauri-plugin-opener = "2"
 # Delete from disk (TASK-01-021): OS trash, never a permanent delete.
 trash = "5"
+# Rebuild acceptance harness (TASK-03-026): sidecar content hashing.
+sha2 = "0.10"
+# Harness snapshot queries run against the catalog's own SQLite handle.
+rusqlite = { version = "0.32", features = ["bundled"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 # Rating command errors (TASK-03-005).
