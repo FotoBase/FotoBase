@@ -16,7 +16,7 @@
 
 ## feat: Basic Fixes & Tuning tabs
 
-- [ ] `04-005` (M) Crop (free + preset aspect ratios) and Straighten (small-angle rotate, auto-crop).
+- [x] `04-005` (M) Crop (free + preset aspect ratios) and Straighten (small-angle rotate, auto-crop).
 - [ ] `04-006` (M) Red-eye removal (auto + manual).
 - [ ] `04-007` (M) "I'm Feeling Lucky" one-click; Auto Contrast; Auto Color.
 - [ ] `04-008` (M) Tuning tab: Fill Light, Highlights, Shadows, Color Temperature sliders; neutral-color picker (white balance).
