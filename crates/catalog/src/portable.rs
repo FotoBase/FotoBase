@@ -50,6 +50,7 @@ pub const V1_OP_TYPES: &[&str] = &[
     "text",
     "retouch",
     "grayscale",
+    "bw",
     "sharpen",
     "undo_all",
 ];

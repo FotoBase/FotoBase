@@ -12,7 +12,7 @@
 - [x] `04-006` (M) Red-eye removal (auto + manual).
 - [x] `04-007` (M) "I'm Feeling Lucky" one-click; Auto Contrast; Auto Color.
 - [x] `04-008` (M) Tuning tab: Fill Light, Highlights, Shadows, Color Temperature sliders; neutral-color picker (white balance).
-- [ ] `04-009` (M) Starter effects: Sharpen, Sepia, B&W, Saturation (strength slider).
+- [x] `04-009` (M) Starter effects: Sharpen, Sepia, B&W, Saturation (strength slider).
 - [ ] `04-010` (M) Edit view UI: single photo, edit tabs, filmstrip, live preview.
 
 ## Tasks

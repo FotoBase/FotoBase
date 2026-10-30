@@ -153,6 +153,24 @@ fn missing_params_use_documented_defaults() {
     assert_eq!(a.data, c.data);
 }
 
+// TASK-04-009: the `bw` starter effect op is a known v1 op type with an
+// `amount` strength in [0, 1]; out-of-range strength is rejected.
+#[test]
+fn bw_op_is_known_and_validates_strength() {
+    let img = gradient(16, 16);
+    let out = apply_recipe(
+        &img,
+        &recipe_from_ops(json!([{ "type": "bw", "params": { "amount": 0.5 } }])),
+    );
+    assert!(out.data != img.data, "bw at 0.5 must change the image");
+    let bad = json!({ "spec": "fotobase.recipe", "version": 1,
+        "ops": [{ "type": "bw", "params": { "amount": 1.5 } }] });
+    assert!(
+        Recipe::parse(&serde_json::to_string(&bad).unwrap()).is_err(),
+        "bw amount 1.5 must be rejected"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Round-trip
 // ---------------------------------------------------------------------------

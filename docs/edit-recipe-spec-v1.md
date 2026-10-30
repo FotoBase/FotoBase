@@ -51,6 +51,7 @@ An open, versioned format. Any tool can read and apply a Fotobase recipe from th
 | `text` | `text, x, y, size, color, font, rotation` | v1: rasterized at export; params normalized |
 | `retouch` | `strokes: [{points: [[x,y]...], radius}]` | classic diffusion heal |
 | `grayscale` | `enabled: bool` | |
+| `bw` | `amount` [0..1] (1.0) | B&W blend strength; recipe op, distinct from the view-only B&W display mode |
 | `sharpen` | `amount` [0..1] | |
 | `undo_all` | — | clears all ops (equivalent to empty `ops[]`; kept for menu semantics) |
 
