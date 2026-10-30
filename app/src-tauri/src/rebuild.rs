@@ -160,7 +160,7 @@ pub fn run(app: &tauri::AppHandle) -> Result<RebuildReport, String> {
         // Rebuilt rows may carry NULL hashes again (a fresh catalog does):
         // re-run the lazy hash backfill so the grid regains its thumb://
         // keys (PLAN §10 "hash lazily"). Best-effort, dedup-guarded.
-        crate::spawn_hash_backfill(state.catalog_path.clone(), app.clone());
+        crate::spawn_hash_backfill(state.catalog_path(), app.clone());
     })
     .map_err(|e| e.to_string())
 }

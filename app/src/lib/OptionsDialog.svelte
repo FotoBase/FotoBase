@@ -5,10 +5,13 @@
   import { t, setLocale, locales } from "./i18n.svelte.js";
   import {
     clearCache,
+    createCatalog,
+    listCatalogs,
     onRebuildProgress,
     rebuildCatalog,
     registerAssociations,
     saveSettings,
+    switchCatalog,
     unregisterAssociations,
     IMAGE_EXTENSIONS,
     THEME_CHOICES,
@@ -104,6 +107,46 @@
 
   function setQuickTags(tags: string[]): void {
     apply({ ...settings, quick_tags: tags });
+  }
+
+  // Catalog switcher (TASK-03-024): list registered catalogs, switch (the
+  // backend stops watchers, flushes the queue, closes the DB and reopens
+  // the target — then announces `catalog-switched`, which reloads the
+  // shell), and create additional catalogs. Browser dev (no backend) keeps
+  // an empty list and reports failures inline, never silently.
+  let catalogs = $state<{ name: string; dir: string; current: boolean }[]>([]);
+  let newCatalogName = $state("");
+  let catalogResult = $state<string | null>(null);
+
+  $effect(() => {
+    void listCatalogs()
+      .then((list) => (catalogs = list))
+      .catch(() => (catalogs = []));
+  });
+
+  async function switchToCatalog(name: string): Promise<void> {
+    catalogResult = null;
+    try {
+      await switchCatalog(name);
+      // The backend swaps the catalog underneath us; a reload re-reads
+      // everything against the new one (no app restart needed).
+      location.reload();
+    } catch (e) {
+      catalogResult = t("options.catalog.failed", { error: String(e) });
+    }
+  }
+
+  async function onCreateCatalog(): Promise<void> {
+    const name = newCatalogName.trim();
+    if (name === "") return;
+    catalogResult = null;
+    try {
+      await createCatalog(name);
+      newCatalogName = "";
+      location.reload();
+    } catch (e) {
+      catalogResult = t("options.catalog.failed", { error: String(e) });
+    }
   }
 
   // File associations (TASK-01-025, PLAN §2M): a checked type registers
@@ -238,6 +281,40 @@
               {t(mode.labelKey)}
             </label>
           {/each}
+        </fieldset>
+
+        <!-- Catalog switcher (TASK-03-024): multiple catalogs, each with
+             its own DB, cache, and watcher state. Switching reloads the
+             shell — no app restart. -->
+        <fieldset class="options-row options-catalogs">
+          <legend>{t("options.catalog")}</legend>
+          <label class="options-row">
+            <span>{t("options.catalog.switch")}</span>
+            <select
+              data-testid="catalog-select"
+              value={catalogs.find((c) => c.current)?.name ?? ""}
+              onchange={(e) => void switchToCatalog((e.currentTarget as HTMLSelectElement).value)}
+            >
+              {#each catalogs as c (c.name)}
+                <option value={c.name}>{c.name}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="options-row">
+            <span>{t("options.catalog.new")}</span>
+            <input
+              type="text"
+              data-testid="catalog-name-input"
+              bind:value={newCatalogName}
+              placeholder={t("options.catalog.newPlaceholder")}
+            />
+            <button type="button" onclick={onCreateCatalog} data-testid="catalog-create">
+              {t("options.catalog.create")}
+            </button>
+          </label>
+          {#if catalogResult}
+            <span class="clear-result" data-testid="catalog-result">{catalogResult}</span>
+          {/if}
         </fieldset>
 
         <div class="options-row">

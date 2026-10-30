@@ -10,8 +10,11 @@ import OptionsDialog from "./OptionsDialog.svelte";
 import { t } from "./i18n.svelte.js";
 import {
   DEFAULT_SETTINGS,
+  createCatalog,
+  listCatalogs,
   registerAssociations,
   saveSettings,
+  switchCatalog,
   unregisterAssociations,
   type Settings,
 } from "./settings";
@@ -23,6 +26,9 @@ vi.mock("./settings", async (importOriginal) => {
     saveSettings: vi.fn(),
     registerAssociations: vi.fn(),
     unregisterAssociations: vi.fn(),
+    listCatalogs: vi.fn(),
+    createCatalog: vi.fn(),
+    switchCatalog: vi.fn(),
   };
 });
 
@@ -32,6 +38,9 @@ beforeEach(() => {
   vi.mocked(saveSettings).mockReset().mockResolvedValue(undefined);
   vi.mocked(registerAssociations).mockReset().mockResolvedValue(undefined);
   vi.mocked(unregisterAssociations).mockReset().mockResolvedValue(undefined);
+  vi.mocked(listCatalogs).mockReset().mockResolvedValue([]);
+  vi.mocked(createCatalog).mockReset().mockResolvedValue(undefined);
+  vi.mocked(switchCatalog).mockReset().mockResolvedValue(undefined);
 });
 
 const settle = async (): Promise<void> => {
@@ -305,5 +314,47 @@ describe("OptionsDialog portable export (TASK-03-023)", () => {
     await fireEvent.click(screen.getByTestId("export-data"));
 
     expect(screen.getByRole("dialog", { name: t("export.title") })).toBeTruthy();
+  });
+});
+
+describe("OptionsDialog catalog switcher (TASK-03-024)", () => {
+  const reload = vi.fn();
+  beforeEach(() => {
+    Object.defineProperty(window, "location", { value: { reload }, writable: true });
+  });
+
+  it("lists catalogs with the active one selected and switching invokes switch_catalog", async () => {
+    listCatalogs.mockResolvedValue([
+      { name: "Default", dir: "/data", current: true },
+      { name: "Work", dir: "/data/catalogs/work", current: false },
+    ]);
+    switchCatalog.mockResolvedValue(undefined);
+    render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });
+    await settle();
+
+    const select = screen.getByTestId("catalog-select") as HTMLSelectElement;
+    expect(select.value).toBe("Default");
+    fireEvent.change(select, { target: { value: "Work" } });
+    await settle();
+    expect(switchCatalog).toHaveBeenCalledWith("Work");
+  });
+
+  it("creates a new catalog and shows an error for a rejected name", async () => {
+    listCatalogs.mockResolvedValue([{ name: "Default", dir: "/data", current: true }]);
+    createCatalog.mockResolvedValueOnce(undefined);
+    render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });
+    await settle();
+
+    const input = screen.getByTestId("catalog-name-input") as HTMLInputElement;
+    fireEvent.input(input, { target: { value: "Work" } });
+    fireEvent.click(screen.getByTestId("catalog-create"));
+    await settle();
+    expect(createCatalog).toHaveBeenCalledWith("Work");
+
+    createCatalog.mockRejectedValueOnce(new Error("a catalog named \"Work\" already exists"));
+    fireEvent.input(input, { target: { value: "Work" } });
+    fireEvent.click(screen.getByTestId("catalog-create"));
+    await settle();
+    expect(screen.getByTestId("catalog-result").textContent).toContain("Work");
   });
 });

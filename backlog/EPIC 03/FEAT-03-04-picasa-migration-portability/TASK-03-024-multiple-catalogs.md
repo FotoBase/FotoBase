@@ -1,6 +1,6 @@
 # task: multiple catalogs and catalog switcher
 
-**Feature:** [FEAT-03-04-picasa-migration-portability](FEAT-03-04-picasa-migration-portability.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** todo
+**Feature:** [FEAT-03-04-picasa-migration-portability](FEAT-03-04-picasa-migration-portability.md) · **Epic:** [EPIC-03 — Organize](../EPIC-03.md) · **Status:** in progress (2026-10-30)
 
 ## Description
 Optional multiple catalogs (e.g. work/personal) with a switcher UI, per PLAN §6 P2a; the catalog location is user-configurable (§1 "Catalog" decision), so switching must isolate caches, watchers, and ML state completely.
@@ -20,6 +20,6 @@ Optional multiple catalogs (e.g. work/personal) with a switcher UI, per PLAN §6
 - Unit: registry create/switch/last-used logic.
 
 ## Acceptance criteria
-- [ ] 03-024: user can create and switch between multiple catalogs.
-- [ ] 03-024: no cross-contamination of caches, watcher state, or catalog data.
-- [ ] 03-024: last-used catalog opens on launch.
+- [x] 03-024: user can create and switch between multiple catalogs.
+- [x] 03-024: no cross-contamination of caches, watcher state, or catalog data.
+- [x] 03-024: last-used catalog opens on launch.

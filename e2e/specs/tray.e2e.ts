@@ -12,10 +12,10 @@
 // stays mapped while the interception and background-watching behavior are
 // still what the spec proves.
 
+import { browser, expect } from "@wdio/globals";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { browser, expect } from "@wdio/globals";
 
 import { makeLibrary, type Library } from "../support/library";
 
@@ -30,12 +30,15 @@ const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
     (cmd: string, args: object, done: (r: Reply) => void) => {
       const tauri = (
         window as unknown as {
-          __TAURI__: { core: { invoke: (c: string, a: object) => Promise<unknown> } };
+          __TAURI__: {
+            core: { invoke: (c: string, a: object) => Promise<unknown> };
+          };
         }
       ).__TAURI__;
-      tauri.core
-        .invoke(cmd, args)
-        .then((value) => done({ ok: true, value }), (e) => done({ ok: false, error: String(e) }));
+      tauri.core.invoke(cmd, args).then(
+        (value) => done({ ok: true, value }),
+        (e) => done({ ok: false, error: String(e) }),
+      );
     },
     cmd,
     args,
@@ -45,17 +48,25 @@ const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
 };
 
 const appProcesses = (): string =>
-  execSync("ps -eo comm,args | grep -E '/fotobase( |$)' | grep -v grep || true", {
-    encoding: "utf8",
-  });
+  execSync(
+    "ps -eo comm,args | grep -E '/fotobase( |$)' | grep -v grep || true",
+    {
+      encoding: "utf8",
+    },
+  );
 
 describe("tray background watching", () => {
   before(async () => {
     lib = makeLibrary();
     await browser.waitUntil(async () =>
-      browser.execute(() => Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__)),
+      browser.execute(() =>
+        Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__),
+      ),
     );
-    const error = await invoke("set_folder_mode", { path: lib.dir, mode: "always" });
+    const error = await invoke("set_folder_mode", {
+      path: lib.dir,
+      mode: "always",
+    });
     expect(error).toBeNull();
   });
 
@@ -80,21 +91,30 @@ describe("tray background watching", () => {
     // wait for the watched rescan to list the new file. IPC errors are
     // captured so a failure names the actual error, not "null has no find".
     let ipcError = "";
-    await browser.waitUntil(async () => {
-      const folders = (await invoke("list_folders")) as { id: number; path: string }[] | null;
-      if (!folders) {
-        ipcError = "list_folders failed";
-        return false;
-      }
-      const id = folders.find((f) => f.path === lib.dir)?.id;
-      if (id === undefined) return false;
-      const files = (await invoke("list_files", { folders: [id] })) as { filename: string }[] | null;
-      if (!files) {
-        ipcError = "list_files failed";
-        return false;
-      }
-      return files.some((f) => f.filename === "while-closed.jpg");
-    }, { timeoutMsg: `watcher missed a file written while the window was closed${ipcError ? ` (${ipcError})` : ""}` });
+    await browser.waitUntil(
+      async () => {
+        const folders = (await invoke("list_folders")) as
+          | { id: number; path: string }[]
+          | null;
+        if (!folders) {
+          ipcError = "list_folders failed";
+          return false;
+        }
+        const id = folders.find((f) => f.path === lib.dir)?.id;
+        if (id === undefined) return false;
+        const files = (await invoke("list_files", { folders: [id] })) as
+          | { filename: string }[]
+          | null;
+        if (!files) {
+          ipcError = "list_files failed";
+          return false;
+        }
+        return files.some((f) => f.filename === "while-closed.jpg");
+      },
+      {
+        timeoutMsg: `watcher missed a file written while the window was closed${ipcError ? ` (${ipcError})` : ""}`,
+      },
+    );
   });
 
   it("quit fully exits the process", async () => {

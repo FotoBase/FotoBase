@@ -422,6 +422,25 @@
     return () => unlisten?.();
   });
 
+  // Catalog switched (TASK-03-024): the backend swapped the active catalog
+  // underneath the shell (from the tray menu). Everything the shell holds —
+  // grid rows, search results, viewer state — belongs to the old catalog,
+  // so a full reload re-reads the new one. No app restart required.
+  $effect(() => {
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen("catalog-switched", () => {
+          location.reload();
+        });
+      } catch {
+        // Browser dev: no backend, no events.
+      }
+    })();
+    return () => unlisten?.();
+  });
+
   // Folder ini offers (TASK-03-022): a scan that meets a folder's ini
   // announces it on `folder-ini-offered`; offers recorded earlier
   // (a previous session never answered) are read once at startup. Either

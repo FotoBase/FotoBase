@@ -13,15 +13,19 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{TrayIcon, TrayIconBuilder},
-    AppHandle, Manager,
+    AppHandle, Manager, Wry,
 };
 
+use crate::catalog_db_path;
 use crate::folder_manager::FolderManager;
 
 /// Tray menu item ids (stable strings, matched in [`tray_action`]).
 pub const MENU_SHOW: &str = "fb-tray-show";
 pub const MENU_TOGGLE_PAUSE: &str = "fb-tray-toggle-pause";
 pub const MENU_QUIT: &str = "fb-tray-quit";
+/// Prefix for per-catalog switch items (TASK-03-024): `fb-tray-catalog-<n>`
+/// with n the index into the registry's catalog list *at event time*.
+pub const MENU_CATALOG_PREFIX: &str = "fb-tray-catalog-";
 
 /// What a tray menu item means. The unit-testable half of the mapping:
 /// [`tray_action`] turns the menu id into the action, the builder's
@@ -31,11 +35,16 @@ pub enum TrayAction {
     Show,
     TogglePause,
     Quit,
+    /// Switch to the catalog at this registry index (TASK-03-024).
+    SwitchCatalog(usize),
 }
 
 /// Map a tray menu-item id to its action; unknown ids are ignored (Tauri
 /// also synthesizes separator/quit ids we must not match by accident).
 pub fn tray_action(id: &str) -> Option<TrayAction> {
+    if let Some(idx) = id.strip_prefix(MENU_CATALOG_PREFIX) {
+        return idx.parse::<usize>().ok().map(TrayAction::SwitchCatalog);
+    }
     match id {
         MENU_SHOW => Some(TrayAction::Show),
         MENU_TOGGLE_PAUSE => Some(TrayAction::TogglePause),
@@ -127,16 +136,68 @@ pub fn tooltip(status: WatchStatus) -> String {
     format!("Fotobase — {status}", status = status.label())
 }
 
-/// Build the tray icon + menu and wire the menu events. The menu:
+/// Build the tray menu (shared by [`build_tray`] and [`refresh_catalogs`]):
 /// "Show Fotobase", a separator, "Pause Watching"/"Resume Watching"
-/// (updated in place as the state flips), another separator, "Quit".
-pub fn build_tray(app: &AppHandle) -> Result<TrayIcon, tauri::Error> {
+/// (updated in place as the state flips), another separator, the catalog
+/// switcher submenu (TASK-03-024, when more than one catalog is
+/// registered), and "Quit".
+fn build_menu(app: &AppHandle, toggle: &MenuItem<Wry>) -> Result<Menu<Wry>, tauri::Error> {
+    use tauri::menu::{CheckMenuItem, Submenu};
     let show = MenuItem::with_id(app, MENU_SHOW, "Show Fotobase", true, None::<&str>)?;
-    let toggle = MenuItem::with_id(app, MENU_TOGGLE_PAUSE, "Pause Watching", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, MENU_QUIT, "Quit", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&show, &sep1, &toggle, &sep2, &quit_item])?;
+
+    // Catalog switcher (TASK-03-024): one check item per registered
+    // catalog, the active one ticked. Resolved from the registry at build
+    // time so the menu always mirrors the current registry.
+    let catalogs = catalog_menu_entries(app);
+
+    let mut items: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = vec![&show, &sep1, toggle, &sep2];
+    let mut catalog_items: Vec<CheckMenuItem<Wry>> = Vec::new();
+    let submenu;
+    if catalogs.len() > 1 {
+        submenu = Submenu::with_id(app, "fb-tray-catalogs", "Switch Catalog", true)?;
+        for (i, (name, is_current)) in catalogs.iter().enumerate() {
+            let item = CheckMenuItem::with_id(
+                app,
+                format!("{MENU_CATALOG_PREFIX}{i}"),
+                name.clone(),
+                true,
+                *is_current,
+                None::<&str>,
+            )?;
+            catalog_items.push(item);
+        }
+        let refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> =
+            catalog_items.iter().map(|i| i as &dyn tauri::menu::IsMenuItem<Wry>).collect();
+        submenu.append_items(&refs)?;
+        items.push(&submenu);
+    }
+    items.push(&quit_item);
+    Menu::with_items(app, &items)
+}
+
+/// The (name, is-current) pairs the switcher submenu shows, from the live
+/// registry; empty when there is no app state (unit-test seam).
+fn catalog_menu_entries(app: &AppHandle) -> Vec<(String, bool)> {
+    let Some(state) = app.try_state::<crate::AppState>() else { return Vec::new() };
+    let Ok(registry) = state.registry.lock() else { return Vec::new() };
+    let current = state.catalog_path();
+    registry.catalogs.iter().map(|c| (c.name.clone(), catalog_db_path(&c.dir) == current)).collect()
+}
+
+/// The catalog name at a registry index, resolved at menu-event time.
+fn catalog_name_at(app: &AppHandle, idx: usize) -> Option<String> {
+    let state = app.try_state::<crate::AppState>()?;
+    let registry = state.registry.lock().ok()?;
+    registry.catalogs.get(idx).map(|c| c.name.clone())
+}
+
+/// Build the tray icon + menu and wire the menu events.
+pub fn build_tray(app: &AppHandle) -> Result<TrayIcon, tauri::Error> {
+    let toggle = MenuItem::with_id(app, MENU_TOGGLE_PAUSE, "Pause Watching", true, None::<&str>)?;
+    let menu = build_menu(app, &toggle)?;
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
@@ -151,6 +212,20 @@ pub fn build_tray(app: &AppHandle) -> Result<TrayIcon, tauri::Error> {
                     update_tray_labels(&ui, now_paused, &status);
                 }
             }
+            // TASK-03-024: switch catalogs from the tray. The index is
+            // resolved against the registry at event time; the switch runs
+            // in the background (it drains the job queue) and the menu is
+            // rebuilt at the end so the checkmark follows.
+            Some(TrayAction::SwitchCatalog(idx)) => {
+                if let Some(name) = catalog_name_at(app, idx) {
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) = crate::switch_catalog_by_name(&app, &name).await {
+                            tracing::warn!(catalog = %name, error = %e, "tray catalog switch failed");
+                        }
+                    });
+                }
+            }
             // Quit fully exits: see [`quit`].
             Some(TrayAction::Quit) => quit(app),
             None => {}
@@ -163,6 +238,20 @@ pub fn build_tray(app: &AppHandle) -> Result<TrayIcon, tauri::Error> {
     // item through this managed handle (TrayIcon has no menu getter).
     app.manage(TrayUi { tray: tray.clone(), toggle });
     Ok(tray)
+}
+
+/// Rebuild the tray menu after the registry changed (TASK-03-024): the
+/// switcher submenu mirrors the catalog list and the active catalog's
+/// checkmark follows the switch. Reuses the live pause/resume item so its
+/// label keeps updating in place.
+pub fn refresh_catalogs(app: &AppHandle) {
+    let Some(ui) = app.try_state::<TrayUi>() else { return };
+    match build_menu(app, &ui.toggle) {
+        Ok(menu) => {
+            let _ = ui.tray.set_menu(Some(menu));
+        }
+        Err(e) => tracing::warn!(error = %e, "tray menu rebuild failed"),
+    }
 }
 
 /// Managed handle to the tray pieces the status updater and the menu
@@ -290,6 +379,12 @@ mod tests {
         assert_eq!(tray_action(MENU_SHOW), Some(TrayAction::Show));
         assert_eq!(tray_action(MENU_TOGGLE_PAUSE), Some(TrayAction::TogglePause));
         assert_eq!(tray_action(MENU_QUIT), Some(TrayAction::Quit));
+        // TASK-03-024: catalog switch items decode their registry index.
+        assert_eq!(tray_action("fb-tray-catalog-0"), Some(TrayAction::SwitchCatalog(0)));
+        assert_eq!(tray_action("fb-tray-catalog-12"), Some(TrayAction::SwitchCatalog(12)));
+        // Malformed indices and unknown ids are ignored.
+        assert_eq!(tray_action("fb-tray-catalog-x"), None);
+        assert_eq!(tray_action("fb-tray-catalog-"), None);
         // Tauri's predefined items and anything unknown must be ignored.
         assert_eq!(tray_action("separator"), None);
         assert_eq!(tray_action(""), None);
