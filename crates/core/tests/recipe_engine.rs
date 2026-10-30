@@ -290,3 +290,125 @@ fn geometric_ops_match_within_tolerance() {
     let (mean, max) = diff_aligned(&small, &big, 4);
     assert!(mean <= 0.03 && max <= 0.1, "geometry within tolerance (mean {mean}, max {max})");
 }
+
+// ---------------------------------------------------------------------------
+// Red-eye (TASK-04-006)
+// ---------------------------------------------------------------------------
+
+/// Test scene: neutral skin patches each carrying a red-eye pupil, plus a
+/// saturated red rectangle that must NOT be treated as an eye (auto mode
+/// targets small pupil-like blobs, not large red areas).
+fn eye_scene(w: u32, h: u32) -> LinearImage {
+    LinearImage::from_fn(w, h, |x, y| {
+        let fx = x as f32 / w as f32;
+        let fy = y as f32 / h as f32;
+        let mut px = [0.3, 0.3, 0.3];
+        // Two skin patches with pupils — the auto-detector's fixtures.
+        let ell = |cx: f32, cy: f32, r: f32| {
+            let dx = fx - cx;
+            let dy = (fy - cy) * w as f32 / h as f32;
+            dx * dx + dy * dy < r * r
+        };
+        for (cx, cy) in [(0.3, 0.5), (0.7, 0.5)] {
+            if ell(cx, cy, 0.06) {
+                px = [0.75, 0.62, 0.50]; // skin: r > g,b but not dominant enough
+            }
+            if ell(cx, cy, 0.02) {
+                px = [0.9, 0.04, 0.04]; // red pupil
+            }
+        }
+        // Large saturated red area — not an eye.
+        if fx > 0.85 && fy > 0.85 {
+            px = [0.9, 0.05, 0.05];
+        }
+        px
+    })
+}
+
+#[test]
+fn red_eye_auto_mode_detects_and_darkens_pupils() {
+    let img = eye_scene(128, 96);
+    let out = apply_recipe(
+        &img,
+        &recipe_from_ops(json!([{ "type": "red_eye", "params": { "auto": true } }])),
+    );
+    // Pupil cores must be darkened toward neutral (red dominance removed) —
+    // sample the whole pupil, not one pixel: the detector centers on the
+    // red blob's centroid, which need not coincide with a fixture lattice
+    // point.
+    for (cx, cy) in [(0.3_f64, 0.5_f64), (0.7_f64, 0.5_f64)] {
+        let bx = (cx * 128.0).round() as i64;
+        let by = (cy * 96.0).round() as i64;
+        let mut fixed_any = false;
+        let mut darkest = f32::MAX;
+        for y in (by - 3)..=(by + 3) {
+            for x in (bx - 3)..=(bx + 3) {
+                if !(0..128).contains(&x) || !(0..96).contains(&y) {
+                    continue;
+                }
+                let px = out.get(x as u32, y as u32);
+                let orig = img.get(x as u32, y as u32);
+                if orig[0] > orig[1] * 1.3 && orig[0] > orig[2] * 1.3 {
+                    assert!(px[0] < orig[0], "pupil pixel ({x},{y}) must be darkened");
+                    darkest = darkest.min(px[0]);
+                    if px[0] <= px[1] * 1.3 && px[0] <= px[2] * 1.3 {
+                        fixed_any = true;
+                    }
+                }
+            }
+        }
+        assert!(fixed_any, "pupil at ({bx},{by}) must have a fully fixed core pixel");
+        assert!(darkest < 0.4, "pupil core must be dark, got {darkest}");
+    }
+}
+
+#[test]
+fn red_eye_auto_mode_ignores_skin_and_large_red_areas() {
+    let img = eye_scene(128, 96);
+    let out = apply_recipe(
+        &img,
+        &recipe_from_ops(json!([{ "type": "red_eye", "params": { "auto": true } }])),
+    );
+    // Skin just outside the pupil must be untouched.
+    let skin = out.get((0.3 * 128.0 + 3.0 * 0.06 * 128.0) as u32, (0.5 * 96.0) as u32);
+    let orig = img.get((0.3 * 128.0 + 3.0 * 0.06 * 128.0) as u32, (0.5 * 96.0) as u32);
+    assert_eq!(skin, orig, "skin must not be modified by auto red-eye");
+    // The large red area must be untouched (too big to be a pupil).
+    let big = out.get(120, 92);
+    assert_eq!(big, [0.9, 0.05, 0.05], "large red area must not be treated as an eye");
+}
+
+#[test]
+fn red_eye_manual_fix_is_localized() {
+    let img = eye_scene(128, 96);
+    // Fix only the left eye's region.
+    let out = apply_recipe(
+        &img,
+        &recipe_from_ops(
+            json!([{ "type": "red_eye", "params": { "regions": [{ "x": 0.3, "y": 0.5, "r": 0.03 }] } }]),
+        ),
+    );
+    // Left pupil fixed…
+    let l = out.get((0.3 * 128.0) as u32, (0.5 * 96.0) as u32);
+    assert!(l[0] < img.get((0.3 * 128.0) as u32, (0.5 * 96.0) as u32)[0], "left pupil fixed");
+    // …the right pupil is outside the region and must be untouched.
+    let r = out.get((0.7 * 128.0) as u32, (0.5 * 96.0) as u32);
+    assert_eq!(
+        r,
+        img.get((0.7 * 128.0) as u32, (0.5 * 96.0) as u32),
+        "pixels outside the region are untouched"
+    );
+}
+
+#[test]
+fn red_eye_auto_param_is_validated_and_documented() {
+    // auto is a boolean when present.
+    assert!(recipe_from_ops(json!([{ "type": "red_eye", "params": { "auto": true } }]))
+        .to_json()
+        .contains("red_eye"));
+    let bad = serde_json::from_str::<Value>(
+        r#"{ "spec": "fotobase.recipe", "version": 1, "ops": [{ "type": "red_eye", "params": { "auto": "yes" } }] }"#,
+    )
+    .unwrap();
+    assert!(Recipe::parse(&bad.to_string()).is_err(), "auto must be a boolean");
+}

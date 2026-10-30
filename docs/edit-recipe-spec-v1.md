@@ -47,7 +47,7 @@ An open, versioned format. Any tool can read and apply a Fotobase recipe from th
 | `shadow_recovery` | `amount` [0..1] | |
 | `sepia` | `amount` [0..1] | |
 | `warm_colors`, `cool_colors` | `amount` [0..1] | Picasa Tuning-tab equivalents |
-| `red_eye` | `regions: [{x, y, r}]` | normalized circles |
+| `red_eye` | `regions: [{x, y, r}]`, optional `auto: bool` | normalized circles; `auto: true` detects pupils (red-dominance blobs) instead of using explicit regions |
 | `text` | `text, x, y, size, color, font, rotation` | v1: rasterized at export; params normalized |
 | `retouch` | `strokes: [{points: [[x,y]...], radius}]` | classic diffusion heal |
 | `grayscale` | `enabled: bool` | |
