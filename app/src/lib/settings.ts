@@ -198,3 +198,27 @@ export async function findFileByPath(
   const { invoke } = await import("@tauri-apps/api/core");
   return await invoke<FilePathMatch | null>("find_file_by_path", { path });
 }
+
+// Catalog registry (TASK-03-024): multiple catalogs with a switcher. The
+// backend owns the registry file; the frontend lists, creates, and switches
+// through IPC, then reloads when the backend announces the switch.
+export interface CatalogSummary {
+  name: string;
+  dir: string;
+  current: boolean;
+}
+
+export async function listCatalogs(): Promise<CatalogSummary[]> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return await invoke<CatalogSummary[]>("list_catalogs");
+}
+
+export async function createCatalog(name: string, dir?: string): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("create_catalog", { name, dir: dir ?? null });
+}
+
+export async function switchCatalog(name: string): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("switch_catalog", { name });
+}

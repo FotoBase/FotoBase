@@ -14,6 +14,7 @@ use tauri_plugin_updater::UpdaterExt;
 
 pub mod associations;
 pub mod batch_commands;
+pub mod catalog_registry;
 pub mod codec;
 pub mod datetime_commands;
 pub mod display_profile;
@@ -34,6 +35,8 @@ pub mod tray;
 
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase";
+
+pub use catalog_registry::{catalog_cache_dir, catalog_db_path};
 
 /// Capacity of the thumbnail render queue: bounded, per PLAN §3 rule 4.
 const THUMB_QUEUE_CAPACITY: usize = 64;
@@ -79,10 +82,17 @@ struct AppState {
     app_handle: tauri::AppHandle,
     /// App data dir: settings.json lives here.
     data_dir: PathBuf,
-    catalog_path: PathBuf,
+    /// Paths of the *active* catalog (TASK-03-024): swapped by
+    /// `switch_catalog` without an app restart. `Mutex` because the switch
+    /// rewrites them while commands read them.
+    catalog_path: Mutex<PathBuf>,
     catalog: Mutex<Option<Catalog>>,
-    /// Thumbnail cache directory backing the `thumb://` scheme.
-    cache_dir: PathBuf,
+    /// Thumbnail cache directory backing the `thumb://` scheme (per-catalog,
+    /// TASK-03-024).
+    cache_dir: Mutex<PathBuf>,
+    /// Catalog registry (TASK-03-024): the JSON list of catalog locations
+    /// under `data_dir`, separate from any catalog.
+    registry: Mutex<catalog_registry::Registry>,
     /// Bounded queue for cache-miss thumbnail renders (TASK-01-011).
     thumbs: fotobase_jobs::Queue<thumb::ThumbOutcome>,
     /// Bounded queue for the rebuild-catalog job (TASK-01-023); one key,
@@ -128,6 +138,18 @@ struct AppState {
     streams: stream::StreamRegistry,
 }
 
+impl AppState {
+    /// Snapshot of the active catalog's database path.
+    fn catalog_path(&self) -> PathBuf {
+        self.catalog_path.lock().map(|g| g.clone()).unwrap_or_default()
+    }
+
+    /// Snapshot of the active catalog's thumbnail-cache directory.
+    fn cache_dir(&self) -> PathBuf {
+        self.cache_dir.lock().map(|g| g.clone()).unwrap_or_default()
+    }
+}
+
 /// Destination profile for the render pipeline (TASK-02-001, PLAN §6 P1.5):
 /// the OS display profile on macOS/Windows, the bundled sRGB profile on
 /// Linux or wherever no usable display profile exists.
@@ -168,7 +190,7 @@ fn with_catalog_mut<T>(
 /// old trash entries (TASK-03-009, TASK-03-012). Called whenever the lazily
 /// opened connection is created — the first command after startup.
 fn open_shell_catalog(state: &AppState) -> Result<Catalog, String> {
-    let mut cat = Catalog::open(&state.catalog_path).map_err(|e| format!("open catalog: {e}"))?;
+    let mut cat = Catalog::open(state.catalog_path()).map_err(|e| format!("open catalog: {e}"))?;
     let settings =
         state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?.clone();
     if let Err(err) = trash_commands::apply_settings(&mut cat, &settings) {
@@ -195,7 +217,7 @@ fn with_folder_manager<T>(
         // the grid without any user action. Without this, a scan that lands
         // after startup never reaches the UI (perf decision run: the grid
         // scrolled EMPTY, so no thumb:// request ever happened).
-        let catalog_path = state.catalog_path.clone();
+        let catalog_path = state.catalog_path();
         let hook = std::sync::Arc::new(move |report: &fotobase_scanner::ScanReport| {
             let _ = app_handle.emit("library-changed", ());
             if !report.folder_ini_offered.is_empty() {
@@ -204,7 +226,7 @@ fn with_folder_manager<T>(
             spawn_hash_backfill(catalog_path.clone(), app_handle.clone());
         });
         let fm = folder_manager::FolderManager::open_with(
-            &state.catalog_path,
+            &state.catalog_path(),
             fotobase_scanner::DEFAULT_DEBOUNCE,
             Some(hook),
         )?;
@@ -763,7 +785,7 @@ async fn adjust_datetime(
     adjustment.validate().map_err(|e| e.to_string())?;
     let queue = state.datetime_jobs.clone();
     let job_app = app.clone();
-    let catalog_path = state.catalog_path.clone();
+    let catalog_path = state.catalog_path();
     let seq = DATETIME_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let handle = queue
         .try_enqueue(
@@ -816,7 +838,7 @@ async fn export_user_data(
     state: tauri::State<'_, AppState>,
 ) -> Result<fotobase_catalog::ExportReport, String> {
     let queue = state.exports.clone();
-    let catalog_path = state.catalog_path.clone();
+    let catalog_path = state.catalog_path();
     let seq = EXPORT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let handle = queue
         .try_enqueue(
@@ -1110,7 +1132,7 @@ async fn refresh_folder_thumbnails(
     path: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<usize, String> {
-    let cache_dir = state.cache_dir.clone();
+    let cache_dir = state.cache_dir();
     let queue = state.thumbs.clone();
     queue.drain().await;
     with_catalog(&state, |cat| {
@@ -1297,7 +1319,7 @@ fn set_settings(new: settings::Settings, state: tauri::State<'_, AppState>) -> R
 async fn clear_cache(state: tauri::State<'_, AppState>) -> Result<u64, String> {
     // Clone before the await: a borrow derived from `State` must not be
     // held across an await point (the command future has to stay Send).
-    let cache_dir = state.cache_dir.clone();
+    let cache_dir = state.cache_dir();
     let queue = state.thumbs.clone();
     thumb::clear_thumbnail_cache(&cache_dir, &queue).await.map_err(|e| format!("clear cache: {e}"))
 }
@@ -1368,7 +1390,7 @@ async fn start_import(
 
     let queue = state.imports.clone();
     let job_app = app.clone();
-    let job_catalog_path = state.catalog_path.clone();
+    let job_catalog_path = state.catalog_path();
     let seq = IMPORT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let handle = queue
         .try_enqueue(
@@ -1517,6 +1539,173 @@ async fn install_pending_update(state: tauri::State<'_, AppState>) -> Result<(),
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// One row of the switcher UI: name, directory, and whether it is active.
+#[derive(Debug, Serialize)]
+pub struct CatalogSummary {
+    pub name: String,
+    pub dir: String,
+    pub current: bool,
+}
+
+/// List registered catalogs for the Options switcher (TASK-03-024).
+#[tauri::command]
+fn list_catalogs(state: tauri::State<'_, AppState>) -> Result<Vec<CatalogSummary>, String> {
+    let registry = state.registry.lock().map_err(|e| format!("registry mutex poisoned: {e}"))?;
+    let current = state.catalog_path();
+    Ok(registry
+        .catalogs
+        .iter()
+        .map(|c| CatalogSummary {
+            name: c.name.clone(),
+            dir: c.dir.to_string_lossy().into_owned(),
+            current: catalog_db_path(&c.dir) == current,
+        })
+        .collect())
+}
+
+/// Create a new catalog (empty DB + thumbnail cache under its own
+/// directory) and switch to it (TASK-03-024 functional spec: "create
+/// additional catalogs from options").
+#[tauri::command]
+async fn create_catalog(
+    name: String,
+    dir: Option<String>,
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let dir = match dir {
+        Some(d) if !d.trim().is_empty() => PathBuf::from(d),
+        // Default location: a sibling directory under the data dir.
+        _ => state.data_dir.join("catalogs").join(catalog_slug(&name)),
+    };
+    let entry = {
+        let mut registry =
+            state.registry.lock().map_err(|e| format!("registry mutex poisoned: {e}"))?;
+        registry.create(&name, &dir).map_err(|e| e.to_string())?.clone()
+    };
+    registry_save(&state)?;
+    switch_to_catalog(&state, &app, &entry).await
+}
+
+/// Switch the active catalog (TASK-03-024): stop watchers, flush the job
+/// queue, close the DB, reopen the target — no app restart beyond the
+/// frontend reload the `catalog-switched` event triggers.
+#[tauri::command]
+async fn switch_catalog(
+    name: String,
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let entry = {
+        let registry =
+            state.registry.lock().map_err(|e| format!("registry mutex poisoned: {e}"))?;
+        registry.get(&name).ok_or_else(|| format!("no catalog named {name:?}"))?.clone()
+    };
+    switch_to_catalog(&state, &app, &entry).await
+}
+
+/// Used by the tray menu, which identifies catalogs by name too.
+pub async fn switch_catalog_by_name(app: &tauri::AppHandle, name: &str) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let entry = {
+        let registry =
+            state.registry.lock().map_err(|e| format!("registry mutex poisoned: {e}"))?;
+        registry.get(name).ok_or_else(|| format!("no catalog named {name:?}"))?.clone()
+    };
+    switch_to_catalog(&state, app, &entry).await
+}
+
+/// Filesystem slug for a default catalog directory ("My Work" → "my-work").
+fn catalog_slug(name: &str) -> String {
+    let slug: String = name
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let slug = slug.trim_matches('-').to_string();
+    if slug.is_empty() {
+        "catalog".to_string()
+    } else {
+        slug
+    }
+}
+
+/// Persist the registry after a create/switch (best-effort: a failed save
+/// only costs the last-used memory, never catalog data).
+fn registry_save(state: &AppState) -> Result<(), String> {
+    state
+        .registry
+        .lock()
+        .map_err(|e| format!("registry mutex poisoned: {e}"))?
+        .save(&state.data_dir)
+        .map_err(|e| format!("save registry: {e}"))
+}
+
+/// The switch lifecycle (technical spec): stop watchers, flush the job
+/// queue, close the DB (WAL checkpoint), reopen the target catalog, restart
+/// watchers. Reuses the tray-icon lifecycle from 03-025: the tray menu is
+/// rebuilt so the checkmark follows the active catalog.
+async fn switch_to_catalog(
+    state: &tauri::State<'_, AppState>,
+    app: &tauri::AppHandle,
+    entry: &catalog_registry::CatalogEntry,
+) -> Result<(), String> {
+    let target_db = catalog_db_path(&entry.dir);
+    let target_cache = catalog_cache_dir(&entry.dir);
+    if state.catalog_path() == target_db {
+        return Ok(());
+    }
+
+    // 1. Stop the watcher: dropping the FolderManager stops its threads and
+    //    closes its own catalog connection — no watcher keeps firing into a
+    //    catalog we are about to close.
+    if let Some(fm) =
+        state.folders.lock().map_err(|e| format!("folder manager mutex poisoned: {e}"))?.take()
+    {
+        fm.stop();
+    }
+
+    // 2. Flush the job queue (PLAN §3 rule 4): drain waits for queued and
+    //    running jobs. Jobs captured the old catalog path at enqueue time,
+    //    so they finish writing the OLD catalog before we close it — no
+    //    half-written work, no cross-catalog writes.
+    state.thumbs.drain().await;
+    state.rebuilds.drain().await;
+    state.imports.drain().await;
+    state.datetime_jobs.drain().await;
+    state.exports.drain().await;
+
+    // 3. Close the DB: dropping the connection closes it; SQLite
+    //    checkpoints the WAL when the last connection closes. The next
+    //    command lazily reopens against the new path.
+    *state.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))? = None;
+
+    // 4. Reopen target: swap paths, make sure its cache dir exists, and
+    //    restart the watcher lazily (`with_folder_manager` re-creates the
+    //    FolderManager against the new catalog on its next use).
+    std::fs::create_dir_all(&target_cache).map_err(|e| format!("create cache dir: {e}"))?;
+    *state.catalog_path.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))? = target_db;
+    *state.cache_dir.lock().map_err(|e| format!("cache mutex poisoned: {e}"))? = target_cache;
+
+    // 5. Record last-used so the next launch opens this catalog.
+    {
+        let mut registry =
+            state.registry.lock().map_err(|e| format!("registry mutex poisoned: {e}"))?;
+        registry.switch(&entry.name).map_err(|e| e.to_string())?;
+    }
+    registry_save(state)?;
+
+    // 6. Tell the frontend (it reloads — the grid, search index and viewer
+    //    state all belong to the old catalog) and rebuild the tray menu so
+    //    its checkmark follows.
+    let _ = app.emit("catalog-switched", &entry.name);
+    let _ = app.emit("library-changed", ());
+    tray::refresh_catalogs(app);
+    tracing::info!(catalog = %entry.name, "switched catalog");
+    Ok(())
+}
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -1534,7 +1723,7 @@ pub fn run() {
             // `?s=2` selects the HiDPI (1024px) cache entry (TASK-01-024).
             let req = thumb::request_from_uri(request.uri());
             let reply = match &req {
-                Some(req) => thumb::resolve_thumb(req, &state.cache_dir),
+                Some(req) => thumb::resolve_thumb(req, &state.cache_dir()),
                 None => thumb::placeholder(),
             };
             // A real (cached) JPEG went out: the protocol's
@@ -1551,7 +1740,7 @@ pub fn run() {
                         Ok::<_, fotobase_catalog::CatalogError>(thumb::enqueue_missing_thumbs(
                             req,
                             cat,
-                            &state.cache_dir,
+                            &state.cache_dir(),
                             &state.thumbs,
                             state.display_profile.lock().ok().and_then(|g| g.clone()),
                             // TASK-02-004: videos extract via the shipped
@@ -1622,8 +1811,6 @@ pub fn run() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
-            let cache_dir = data_dir.join("thumbnails");
-            std::fs::create_dir_all(&cache_dir)?;
             // Queue::new spawns its worker; block_on supplies the runtime
             // context (setup runs outside an async fn).
             let thumbs = tauri::async_runtime::block_on(async {
@@ -1642,6 +1829,16 @@ pub fn run() {
                 fotobase_jobs::Queue::new(EXPORT_QUEUE_CAPACITY)
             });
             let persisted = settings::Settings::load(&data_dir);
+            // Catalog registry (TASK-03-024): which catalog opens at launch
+            // (the last-used one, functional spec). The default entry keeps
+            // the legacy layout — DB + thumbnail cache directly in the data
+            // dir — so existing installs need no migration.
+            let registry = catalog_registry::Registry::load(&data_dir);
+            let entry = registry.entry_for_launch().clone();
+            let catalog_path = catalog_db_path(&entry.dir);
+            let cache_dir = catalog_cache_dir(&entry.dir);
+            std::fs::create_dir_all(&cache_dir)?;
+            tracing::info!(catalog = %entry.name, "opening catalog");
             // OS-opened files (TASK-01-025): whatever the OS passed on the
             // command line that is an existing supported image is parked
             // for the frontend to pick up and route into the viewer.
@@ -1650,9 +1847,10 @@ pub fn run() {
             app.manage(AppState {
                 app_handle: app.handle().clone(),
                 data_dir: data_dir.clone(),
-                catalog_path: data_dir.join("catalog.db"),
+                catalog_path: Mutex::new(catalog_path),
                 catalog: Mutex::new(None),
-                cache_dir,
+                cache_dir: Mutex::new(cache_dir),
+                registry: Mutex::new(registry),
                 thumbs,
                 rebuilds,
                 imports,
@@ -1729,7 +1927,7 @@ pub fn run() {
                 }) {
                     tracing::warn!("perf harness: arming fixture folder failed: {e}");
                 }
-                perf_probe::spawn_completion_watcher(state.catalog_path.clone(), cfg.expected);
+                perf_probe::spawn_completion_watcher(state.catalog_path(), cfg.expected);
             }
             // Tray icon (TASK-03-025, PLAN §6 P2a): shows and controls
             // background watching; the window sits hidden under it when
@@ -1821,6 +2019,9 @@ pub fn run() {
             list_associations,
             register_associations,
             unregister_associations,
+            list_catalogs,
+            create_catalog,
+            switch_catalog,
             take_open_files,
             find_file_by_path,
             perf_probe
