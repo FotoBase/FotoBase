@@ -190,9 +190,11 @@ describe("edit view", () => {
     });
 
     // Tuning tab: Fill Light slider. WebKitWebDriver cannot drive a range
-    // input with sendKeys; set the value and dispatch the input event the
-    // panel's handler listens on (the handler — clamping, op emission — is
-    // what this spec exercises).
+    // input with sendKeys reliably; try real keyboard steps first (the
+    // window-level arrow handler skips editable targets, so the input gets
+    // them), then fall back to dispatching the input event the panel's
+    // handler listens on (the handler — clamping, op emission — is what
+    // this spec exercises).
     await activate("edit-tab-tuning", async () => {
       try {
         return await $('[data-testid="tuning"]').isDisplayed();
@@ -205,9 +207,23 @@ describe("edit view", () => {
         '[data-testid="fill-light"]',
       ) as HTMLInputElement | null;
       if (!el) throw new Error("fill-light slider not found");
-      el.value = "0.5";
-      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.focus();
     });
+    for (let i = 0; i < 10; i++) await browser.keys(["ArrowRight"]);
+    try {
+      await browser.waitUntil(() => sidecarText().includes("fill_light"), {
+        timeout: 3000,
+      });
+    } catch {
+      await browser.execute(() => {
+        const el = document.querySelector(
+          '[data-testid="fill-light"]',
+        ) as HTMLInputElement | null;
+        if (!el) throw new Error("fill-light slider not found");
+        el.value = "0.5";
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
     await waitSidecarContains("fill_light");
 
     // Basic Fixes tab: Auto Contrast.
