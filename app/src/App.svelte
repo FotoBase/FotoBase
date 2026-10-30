@@ -135,7 +135,8 @@
   });
 
   // Single-photo edit view (TASK-04-010): opened from the viewer's Edit
-  // button; overlays the viewer until closed.
+  // button; replaces the viewer while open (both listen on window keys, so
+  // only one may be mounted) and closes back into it.
   let edit = $state<{ open: boolean; index: number }>({ open: false, index: 0 });
 
   function openEdit(item: GridItem): void {
@@ -918,7 +919,7 @@
     onaddtoalbum={openTrayAlbumPicker}
     onbatch={(e) => (batchDialog = { open: true, ...e })}
   />
-  {#if viewer.open}
+  {#if viewer.open && !edit.open}
     <Viewer
       items={photos}
       startIndex={viewer.index}

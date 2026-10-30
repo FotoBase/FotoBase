@@ -77,8 +77,12 @@ describe("edit view", () => {
   });
 
   it("opens the edit view with tabs, filmstrip and a live preview", async () => {
-    // Open the viewer on the solo photo (third cell), then Edit.
-    await cells()[2].doubleClick();
+    // Open the viewer on the solo photo (third cell). A double-click is
+    // unreliable in WebKitWebDriver (the first click's selection re-render
+    // can swallow the dblclick), so use the keyboard path: click selects,
+    // Enter opens.
+    await cells()[2].click();
+    await browser.keys(["Enter"]);
     await $('[data-testid="viewer"]').waitForDisplayed();
     await $('[data-testid="edit-open"]').click();
     await $('[data-testid="edit-view"]').waitForDisplayed();
@@ -136,5 +140,8 @@ describe("edit view", () => {
   it("Escape closes the edit view", async () => {
     await browser.keys(["Escape"]);
     await $('[data-testid="edit-view"]').waitForDisplayed({ reverse: true });
+    // The viewer underneath comes back (EditView overlays it, not replaces
+    // the session).
+    await $('[data-testid="viewer"]').waitForDisplayed();
   });
 });
