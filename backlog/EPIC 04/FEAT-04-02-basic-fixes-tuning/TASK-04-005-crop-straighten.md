@@ -1,6 +1,6 @@
 # task: implement crop and straighten ops
 
-**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 Crop (free + preset aspect ratios) and Straighten (small-angle rotate with auto-crop) as recipe ops on the Basic Fixes tab (PLAN §2E Basic Fixes, §6 P2b), with live preview.
@@ -20,5 +20,5 @@ Crop (free + preset aspect ratios) and Straighten (small-angle rotate with auto-
 - Golden-image test per op (per-pixel tolerance, §9).
 
 ## Acceptance criteria
-- [ ] 04-005: Crop (free + presets) and Straighten (small-angle, auto-crop) work as recipe ops with live preview.
-- [ ] 04-005: Golden-image tests pass for both ops.
+- [x] 04-005: Crop (free + presets) and Straighten (small-angle, auto-crop) work as recipe ops with live preview.
+- [x] 04-005: Golden-image tests pass for both ops.
