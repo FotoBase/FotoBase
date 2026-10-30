@@ -189,12 +189,12 @@ describe("edit view", () => {
       }
     });
 
-    // Tuning tab: Fill Light slider. WebKitWebDriver cannot drive a range
-    // input with sendKeys reliably; try real keyboard steps first (the
-    // window-level arrow handler skips editable targets, so the input gets
-    // them), then fall back to dispatching the input event the panel's
-    // handler listens on (the handler — clamping, op emission — is what
-    // this spec exercises).
+    // Tuning tab: Fill Light slider. WebKitGTK refuses sendKeys on range
+    // inputs and synthetic events are unreliable here, so try, in order: a
+    // real WebDriver click (the center of a 0..1 slider is exactly 0.5),
+    // keyboard steps on the focused input, and finally a dispatched input
+    // event — the panel's handler (clamping, op emission) is what the spec
+    // exercises, whichever interaction reaches it.
     await activate("edit-tab-tuning", async () => {
       try {
         return await $('[data-testid="tuning"]').isDisplayed();
@@ -202,19 +202,41 @@ describe("edit view", () => {
         return false;
       }
     });
-    await browser.execute(() => {
-      const el = document.querySelector(
-        '[data-testid="fill-light"]',
-      ) as HTMLInputElement | null;
-      if (!el) throw new Error("fill-light slider not found");
-      el.focus();
-    });
-    for (let i = 0; i < 10; i++) await browser.keys(["ArrowRight"]);
+    const sliderState = async (): Promise<string> => {
+      try {
+        return String(await (await $('[data-testid="fill-light"]')).getValue());
+      } catch {
+        return "unreachable";
+      }
+    };
+    const fillSaved = (): boolean => sidecarText().includes("fill_light");
+    const sliderDiagnostics = async (): Promise<string> =>
+      `slider=${await sliderState()} error=${await errorText()} src=${String(
+        await $('[data-testid="edit-preview"]').getAttribute("src"),
+      ).slice(0, 60)}`;
+
     try {
-      await browser.waitUntil(() => sidecarText().includes("fill_light"), {
-        timeout: 3000,
-      });
+      await (await $('[data-testid="fill-light"]')).click();
+      await browser.waitUntil(fillSaved, { timeout: 3000 });
     } catch {
+      // fall through
+    }
+    if (!fillSaved()) {
+      await browser.execute(() => {
+        const el = document.querySelector(
+          '[data-testid="fill-light"]',
+        ) as HTMLInputElement | null;
+        if (!el) throw new Error("fill-light slider not found");
+        el.focus();
+      });
+      for (let i = 0; i < 10; i++) await browser.keys(["ArrowRight"]);
+      try {
+        await browser.waitUntil(fillSaved, { timeout: 3000 });
+      } catch {
+        // fall through
+      }
+    }
+    if (!fillSaved()) {
       await browser.execute(() => {
         const el = document.querySelector(
           '[data-testid="fill-light"]',
@@ -224,7 +246,10 @@ describe("edit view", () => {
         el.dispatchEvent(new Event("input", { bubbles: true }));
       });
     }
-    await waitSidecarContains("fill_light");
+    await browser.waitUntil(fillSaved, {
+      timeout: 10_000,
+      timeoutMsg: `fill_light never saved; ${await sliderDiagnostics()}`,
+    });
 
     // Basic Fixes tab: Auto Contrast.
     await activate("edit-tab-basic", async () => {
