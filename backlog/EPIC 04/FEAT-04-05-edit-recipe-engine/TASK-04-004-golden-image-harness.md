@@ -1,6 +1,6 @@
 # task: build golden-image test harness for recipe ops
 
-**Feature:** [FEAT-04-05-edit-recipe-engine](FEAT-04-05-edit-recipe-engine.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-05-edit-recipe-engine](FEAT-04-05-edit-recipe-engine.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 A golden-image regression harness (per-pixel tolerance, PLAN §9 Render fidelity) that every recipe op must pass, proving preview and export paths produce identical results (epic acceptance).
@@ -19,5 +19,5 @@ A golden-image regression harness (per-pixel tolerance, PLAN §9 Render fidelity
 - Integration: each op's preview-res and full-res outputs match their goldens within tolerance.
 
 ## Acceptance criteria
-- [ ] 04-004: Golden-image harness exists with per-pixel tolerance and covers every recipe op.
-- [ ] 04-004: Harness wired into CI and fails on regressions.
+- [x] 04-004: Golden-image harness exists with per-pixel tolerance and covers every recipe op.
+- [x] 04-004: Harness wired into CI and fails on regressions.

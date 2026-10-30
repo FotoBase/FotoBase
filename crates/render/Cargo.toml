@@ -38,6 +38,11 @@ miniz_oxide = "0.8"
 libheif-rs = { version = "3", default-features = false, features = ["embedded-libheif", "v1_17"], optional = true }
 
 [dev-dependencies]
+# TASK-04-004: golden-image harness for recipe ops lives here per the task
+# spec ("crates/render or a test-support crate"); the recipe engine itself
+# is fotobase-core, so it is a dev-dependency for the test only.
+fotobase-core = { path = "../core" }
+serde_json = "1"
 tokio = { version = "1", features = ["rt", "macros"] }
 tempfile = "3"
 miniz_oxide = "0.8"
