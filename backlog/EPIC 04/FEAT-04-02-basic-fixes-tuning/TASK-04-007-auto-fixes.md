@@ -1,6 +1,6 @@
 # task: implement one-click auto fixes
 
-**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-02-basic-fixes-tuning](FEAT-04-02-basic-fixes-tuning.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-10-30)
 
 ## Description
 "I'm Feeling Lucky" one-click fix plus separate Auto Contrast and Auto Color one-clicks as recipe ops (PLAN §2E Basic Fixes; §6 P2b). Auto contrast/color are also batch ops (§2E).
@@ -19,5 +19,5 @@
 - Unit: ops are deterministic — same input, same output across runs.
 
 ## Acceptance criteria
-- [ ] 04-007: I'm Feeling Lucky, Auto Contrast, Auto Color work as one-click recipe ops.
-- [ ] 04-007: Golden-image tests pass for each.
+- [x] 04-007: I'm Feeling Lucky, Auto Contrast, Auto Color work as one-click recipe ops.
+- [x] 04-007: Golden-image tests pass for each.
