@@ -1166,6 +1166,17 @@ fn ping() -> &'static str {
     "pong"
 }
 
+/// Neutral-color (white balance) picker (TASK-04-008): turn a sampled
+/// preview pixel (normalized [0, 1] RGB) into the temperature/tint params
+/// that neutralize it. Pure math from the shared engine — the frontend only
+/// samples the canvas and records the params.
+#[tauri::command]
+fn neutral_balance(r: f64, g: f64, b: f64) -> fotobase_core::apply::WhiteBalance {
+    let (kelvin_shift, green_magenta) =
+        fotobase_core::apply::neutral_balance([r as f32, g as f32, b as f32]);
+    fotobase_core::apply::WhiteBalance { kelvin_shift, green_magenta }
+}
+
 /// Tray quit, exposed over IPC for the e2e suite (TASK-03-025): WebDriver
 /// cannot click the OS tray, so the spec drives the same [`tray::quit`]
 /// code path the menu item runs.
@@ -1951,6 +1962,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ping,
+            neutral_balance,
             quit_from_tray,
             close_main_window,
             report_codec_support,

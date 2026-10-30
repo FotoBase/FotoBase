@@ -22,6 +22,9 @@ serde_json = "1"
 # Settings (TASK-01-022) serialize to settings.json over IPC.
 serde = { version = "1", features = ["derive"] }
 fotobase-catalog = { path = "../../crates/catalog" }
+# Edit recipe engine (TASK-04-008): the neutral picker's balance math lives
+# next to the ops it inverts.
+fotobase-core = { path = "../../crates/core" }
 fotobase-jobs = { path = "../../crates/jobs" }
 fotobase-render = { path = "../../crates/render" }
 # Rebuild catalog (TASK-01-023): full scans of watched folders.

@@ -157,6 +157,28 @@ fn grayscale(px: [f32; 3]) -> [f32; 3] {
     [l, l, l]
 }
 
+/// Neutral-color (white-balance) picker math (TASK-04-008, PLAN §2E Tuning
+/// tab): given a linear-light sample the user says should be neutral,
+/// compute the `temperature` (`kelvin_shift`) and `tint` (`green_magenta`)
+/// params that make the ops neutralize it. Pure inverse of the two point
+/// ops above: solving `temperature(tint(px, m), s) == gray` for `s, m`
+/// gives `s = 2·(b − r)` and `m` from the r/g balance; both clamped to the
+/// ops' documented [-1, 1] param range.
+pub fn neutral_balance(px: [f32; 3]) -> (f64, f64) {
+    let [r, g, b] = px.map(f64::from);
+    let s = (2.0 * (b - r)).clamp(-1.0, 1.0);
+    let m = (-((r - g) + 0.25 * s - 0.05 * s * (1.0 - s.abs())) / 0.30).clamp(-1.0, 1.0);
+    (s, m)
+}
+
+/// Serializable form of [`neutral_balance`]'s result (TASK-04-008 IPC).
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WhiteBalance {
+    pub kelvin_shift: f64,
+    pub green_magenta: f64,
+}
+
 fn sepia(px: [f32; 3], amount: f64) -> [f32; 3] {
     let a = amount as f32;
     let l = luminance(px);
@@ -789,6 +811,45 @@ mod tests {
         let v = json!({ "type": t, "params": params });
         let o: Op = serde_json::from_value(v).unwrap();
         o
+    }
+
+    // TASK-04-008: neutral-color picker math. `neutral_balance` must return
+    // identity params for an already-neutral pixel and params that make the
+    // temperature/tint ops neutralize a cast sample.
+    #[test]
+    fn neutral_picker_on_gray_pixel_yields_identity() {
+        for v in [0.0f32, 0.25, 0.5, 0.75, 1.0] {
+            let (kelvin_shift, green_magenta) = neutral_balance([v, v, v]);
+            assert_eq!(kelvin_shift, 0.0);
+            assert_eq!(green_magenta, 0.0);
+        }
+    }
+
+    #[test]
+    fn neutral_picker_params_neutralize_a_warm_cast() {
+        let sample = [0.6f32, 0.45, 0.3];
+        let (s, m) = neutral_balance(sample);
+        let out = temperature(tint(sample, m), s);
+        assert!((out[0] - out[1]).abs() < 1e-3, "r≈g after balance: {out:?}");
+        assert!((out[1] - out[2]).abs() < 1e-3, "g≈b after balance: {out:?}");
+    }
+
+    #[test]
+    fn neutral_picker_params_neutralize_a_green_cast() {
+        let sample = [0.4f32, 0.55, 0.42];
+        let (s, m) = neutral_balance(sample);
+        let out = temperature(tint(sample, m), s);
+        assert!((out[0] - out[1]).abs() < 1e-3, "r≈g after balance: {out:?}");
+        assert!((out[1] - out[2]).abs() < 1e-3, "g≈b after balance: {out:?}");
+    }
+
+    #[test]
+    fn neutral_picker_params_stay_in_range() {
+        for sample in [[0.9f32, 0.1, 0.1], [0.05, 0.9, 0.05], [0.1, 0.1, 0.9]] {
+            let (s, m) = neutral_balance(sample);
+            assert!((-1.0..=1.0).contains(&s));
+            assert!((-1.0..=1.0).contains(&m));
+        }
     }
 
     #[test]
