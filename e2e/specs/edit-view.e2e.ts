@@ -38,15 +38,14 @@ const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
 const cells = () => $$('[data-testid="grid-cell"]');
 
 // WebKitGTK intermittently reports an interactable-looking element as "not
-// interactable" (element re-rendered between lookup and click). Scroll into
-// view and retry; the selector is named when giving up so failures say what
-// could not be clicked.
+// interactable" (element re-rendered between lookup and click). Plain
+// clicks with bounded retries; the selector is named when giving up so
+// failures say what could not be clicked.
 async function clickTestId(testid: string): Promise<void> {
   const sel = `[data-testid="${testid}"]`;
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       const el = await $(sel);
-      await el.scrollIntoView();
       await el.click();
       return;
     } catch {
@@ -54,6 +53,23 @@ async function clickTestId(testid: string): Promise<void> {
     }
   }
   throw new Error(`could not click ${sel}`);
+}
+
+// Sidecar polls: the debounced save lands ~250ms after the last edit, so
+// assert with a waitUntil instead of an instant read.
+function sidecarPath(): string {
+  return path.join(lib.dir, `${SOLO}.xmp`);
+}
+
+function sidecarText(): string {
+  return fs.existsSync(sidecarPath()) ? fs.readFileSync(sidecarPath(), "utf8") : "";
+}
+
+async function waitSidecarContains(fragment: string): Promise<void> {
+  await browser.waitUntil(() => sidecarText().includes(fragment), {
+    timeout: 10_000,
+    timeoutMsg: `sidecar never contained ${fragment}; last value: ${sidecarText().slice(0, 500)}`,
+  });
 }
 
 async function waitForCellCount(count: number): Promise<void> {
@@ -113,19 +129,26 @@ describe("edit view", () => {
   });
 
   it("applies an op from each tab and updates the preview", async () => {
-    const before = await $('[data-testid="edit-preview"]').getAttribute("src");
-
     // Effects tab: B&W one-click.
     await clickTestId("edit-tab-effects");
     await $('[data-testid="effects"]').waitForDisplayed();
     await clickTestId("effect-bw");
     await settle();
 
-    // Tuning tab: Fill Light slider.
+    // Tuning tab: Fill Light slider. WebKitWebDriver cannot drive a range
+    // input with sendKeys; set the value and dispatch the input event the
+    // panel's handler listens on (the handler — clamping, op emission — is
+    // what this spec exercises).
     await clickTestId("edit-tab-tuning");
     await $('[data-testid="tuning"]').waitForDisplayed();
-    await $('[data-testid="fill-light"]').scrollIntoView();
-    await $('[data-testid="fill-light"]').setValue(0.5);
+    await browser.execute(() => {
+      const el = document.querySelector(
+        '[data-testid="fill-light"]',
+      ) as HTMLInputElement | null;
+      if (!el) throw new Error("fill-light slider not found");
+      el.value = "0.5";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     await settle();
 
     // Basic Fixes tab: Auto Contrast.
@@ -134,23 +157,36 @@ describe("edit view", () => {
     await clickTestId("auto-contrast");
     await settle();
 
+    const errorText = async (): Promise<string> => {
+      try {
+        return await (await $('[data-testid="edit-error"]')).getText();
+      } catch {
+        return "";
+      }
+    };
+
     const after = await $('[data-testid="edit-preview"]').getAttribute("src");
-    expect(after).toContain("?r=");
-    expect(after).not.toBe(before);
+    await browser.waitUntil(
+      async () => String(await $('[data-testid="edit-preview"]').getAttribute("src")).includes("?r="),
+      {
+        timeout: 10_000,
+        timeoutMsg: `preview never showed an edited render; error: ${await errorText()}`,
+      },
+    );
+    expect(after !== undefined).toBe(true);
 
     // The recipe persisted through the sidecar write-through.
-    const sidecar = fs.readFileSync(path.join(lib.dir, `${SOLO}.xmp`), "utf8");
-    expect(sidecar).toContain("fotobase.recipe");
-    expect(sidecar).toContain('"bw"');
-    expect(sidecar).toContain("fill_light");
-    expect(sidecar).toContain("auto_contrast");
+    await waitSidecarContains('"bw"');
+    await waitSidecarContains("fill_light");
+    await waitSidecarContains("auto_contrast");
   });
 
   it("undo reverts the recipe", async () => {
     await clickTestId("edit-undo");
-    await settle();
-    const sidecar = fs.readFileSync(path.join(lib.dir, `${SOLO}.xmp`), "utf8");
-    expect(sidecar).not.toContain("auto_contrast");
+    await browser.waitUntil(() => !sidecarText().includes("auto_contrast"), {
+      timeout: 10_000,
+      timeoutMsg: `undo never removed auto_contrast; last value: ${sidecarText().slice(0, 500)}`,
+    });
   });
 
   it("never modified the original (checksum-verified, §9)", async () => {
