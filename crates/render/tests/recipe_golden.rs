@@ -34,6 +34,7 @@ const TOLERANCES: &[(&str, f64)] = &[
     ("auto_color", 1.0),
     ("auto_contrast", 1.0),
     ("brightness", 1.0),
+    ("bw", 1.0),
     ("cool_colors", 1.0),
     ("crop", 2.0),
     ("fill_light", 1.0),
@@ -185,6 +186,10 @@ fn cases() -> Vec<GoldenCase> {
             recipe: op("auto_contrast", json!({})),
             tol: by_op("auto_contrast"),
         },
+        // TASK-04-009 starter effects: golden per effect at the effect's
+        // default strength and at mid strength (0.5).
+        GoldenCase { name: "bw", recipe: op("bw", json!({ "amount": 1.0 })), tol: by_op("bw") },
+        GoldenCase { name: "bw_mid", recipe: op("bw", json!({ "amount": 0.5 })), tol: by_op("bw") },
         GoldenCase {
             name: "brightness",
             recipe: op("brightness", json!({ "amount": 0.3 })),
@@ -244,8 +249,18 @@ fn cases() -> Vec<GoldenCase> {
             tol: by_op("saturation"),
         },
         GoldenCase {
+            name: "saturation_default",
+            recipe: op("saturation", json!({ "amount": 0.3 })),
+            tol: by_op("saturation"),
+        },
+        GoldenCase {
             name: "sepia",
             recipe: op("sepia", json!({ "amount": 1.0 })),
+            tol: by_op("sepia"),
+        },
+        GoldenCase {
+            name: "sepia_mid",
+            recipe: op("sepia", json!({ "amount": 0.5 })),
             tol: by_op("sepia"),
         },
         GoldenCase {
@@ -256,6 +271,11 @@ fn cases() -> Vec<GoldenCase> {
         GoldenCase {
             name: "sharpen",
             recipe: op("sharpen", json!({ "amount": 0.5 })),
+            tol: by_op("sharpen"),
+        },
+        GoldenCase {
+            name: "sharpen_full",
+            recipe: op("sharpen", json!({ "amount": 1.0 })),
             tol: by_op("sharpen"),
         },
         GoldenCase {

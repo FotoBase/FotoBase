@@ -36,6 +36,7 @@ pub const V1_OP_TYPES: &[&str] = &[
     "text",
     "retouch",
     "grayscale",
+    "bw",
     "sharpen",
     "undo_all",
 ];
@@ -227,6 +228,7 @@ fn validate_params(op_type: &str, params: &Value, idx: usize) -> Result<(), Reci
         "tint" => unit("green_magenta", -1.0, 1.0)?,
         "saturation" | "brightness" => unit("amount", -1.0, 1.0)?,
         "sharpen" => unit("amount", 0.0, 1.0)?,
+        "bw" => unit("amount", 0.0, 1.0)?,
         "grayscale" => {
             if let Some(v) = p.get("enabled") {
                 if !v.is_boolean() {
@@ -361,7 +363,7 @@ fn validate_extra_params(
         "crop" => &["x", "y", "w", "h"],
         "straighten" => &["angle", "auto_fill"],
         "fill_light" | "highlight_recovery" | "shadow_recovery" | "sepia" | "warm_colors"
-        | "cool_colors" | "saturation" | "brightness" | "sharpen" => &["amount"],
+        | "cool_colors" | "saturation" | "brightness" | "sharpen" | "bw" => &["amount"],
         "temperature" => &["kelvin_shift"],
         "tint" => &["green_magenta"],
         "grayscale" => &["enabled"],

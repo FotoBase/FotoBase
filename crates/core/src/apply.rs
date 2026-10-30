@@ -44,7 +44,12 @@ fn apply_op(img: &LinearImage, op: &Op) -> LinearImage {
         "fill_light" => per_pixel(img, |px| fill_light(px, fnum(op, "amount", 0.5))),
         "temperature" => per_pixel(img, |px| temperature(px, fnum(op, "kelvin_shift", 0.0))),
         "tint" => per_pixel(img, |px| tint(px, fnum(op, "green_magenta", 0.0))),
-        "saturation" => per_pixel(img, |px| saturation(px, fnum(op, "amount", 0.0))),
+        // amount 0 is a no-op: skip the per-pixel pass so the buffer is
+        // bit-identical (TASK-04-009 strength-0 semantics).
+        "saturation" => match fnum(op, "amount", 0.0) {
+            0.0 => img.clone(),
+            a => per_pixel(img, |px| saturation(px, a)),
+        },
         "brightness" => per_pixel(img, |px| brightness(px, fnum(op, "amount", 0.0))),
         "highlight_recovery" => {
             per_pixel(img, |px| highlight_recovery(px, fnum(op, "amount", 0.0)))
@@ -63,6 +68,7 @@ fn apply_op(img: &LinearImage, op: &Op) -> LinearImage {
                 img.clone()
             }
         }
+        "bw" => per_pixel(img, |px| bw(px, fnum(op, "amount", 1.0))),
         "sharpen" => sharpen(img, fnum(op, "amount", 0.5)),
         // `undo_all` is handled in `apply_recipe` (restart from the original).
         "undo_all" => img.clone(),
@@ -155,6 +161,19 @@ fn shadow_recovery(px: [f32; 3], amount: f64) -> [f32; 3] {
 fn grayscale(px: [f32; 3]) -> [f32; 3] {
     let l = luminance(px);
     [l, l, l]
+}
+
+/// B&W starter effect (TASK-04-009): blend toward grayscale by `amount`.
+/// This is the *recipe op* — the EPIC-03 view-only B&W display mode is a
+/// separate, non-destructive presentation setting and stays independent.
+fn bw(px: [f32; 3], amount: f64) -> [f32; 3] {
+    let a = amount as f32;
+    let l = luminance(px);
+    [
+        clamp01(px[0] * (1.0 - a) + l * a),
+        clamp01(px[1] * (1.0 - a) + l * a),
+        clamp01(px[2] * (1.0 - a) + l * a),
+    ]
 }
 
 /// Neutral-color (white-balance) picker math (TASK-04-008, PLAN §2E Tuning
@@ -910,5 +929,43 @@ mod tests {
         let out = sharpen(&i, 1.0);
         assert!(out.get(3, 0)[0] < 0.2, "dark side gets darker at the edge");
         assert!(out.get(4, 0)[0] > 0.8, "bright side gets brighter at the edge");
+    }
+
+    // TASK-04-009: starter effects. Strength 0 must leave the buffer
+    // unchanged for every effect op (testing criteria).
+    #[test]
+    fn effect_strength_zero_leaves_buffer_unchanged() {
+        let i = img();
+        for t in ["sharpen", "sepia", "bw", "saturation"] {
+            let r = json!({
+                "spec": "fotobase.recipe", "version": 1,
+                "ops": [{ "type": t, "params": { "amount": 0.0 } }]
+            });
+            let recipe = Recipe::parse(&serde_json::to_string(&r).unwrap()).unwrap().0;
+            let out = apply_recipe(&i, &recipe);
+            assert_eq!(out.data, i.data, "{t} at strength 0 changed the buffer");
+        }
+    }
+
+    #[test]
+    fn bw_blends_toward_grayscale_by_strength() {
+        // Full strength: identical to the grayscale conversion.
+        let full = per_pixel(&img(), |px| bw(px, 1.0));
+        let gray = per_pixel(&img(), grayscale);
+        assert_eq!(full.data, gray.data, "bw at 1.0 must equal grayscale");
+        // Mid strength: strictly between the original and the grayscale.
+        let orig = img();
+        let mid = per_pixel(&orig, |px| bw(px, 0.5));
+        for idx in 0..orig.data.len() {
+            let (o, m, g) = (orig.data[idx], mid.data[idx], gray.data[idx]);
+            let lo = o.min(g) - 1e-6;
+            let hi = o.max(g) + 1e-6;
+            assert!(m >= lo && m <= hi, "bw(0.5) {m} outside [{o},{g}]");
+            // Grayscale input is already at both endpoints — only assert a
+            // real blend where the original differs from gray.
+            if (o - g).abs() > 1e-6 {
+                assert!(m != o && m != g, "bw(0.5) must actually blend");
+            }
+        }
     }
 }

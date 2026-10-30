@@ -131,8 +131,10 @@ const messages: Record<string, Dict> = {
     "viewer.rating": "Rate {n}",
     "viewer.ratingFailed": "Could not save rating: {error}",
     "options.ratings": "Enable 1–5 ratings (default: single star)",
-    "options.singleClickEdit": "Single click opens the edit view (Ctrl/Cmd-click selects)",
-    "options.closeToTray": "Closing the window keeps watching from the tray (quit from the tray icon)",
+    "options.singleClickEdit":
+      "Single click opens the edit view (Ctrl/Cmd-click selects)",
+    "options.closeToTray":
+      "Closing the window keeps watching from the tray (quit from the tray icon)",
     "options.quickTags": "Quick Tags (one per line, up to 10)",
     "quickTags.title": "Quick Tags",
     "tags.title": "Tags",
@@ -154,7 +156,8 @@ const messages: Record<string, Dict> = {
     "albums.empty": "No albums yet.",
     "albums.edit": "Edit album…",
     "albums.delete": "Delete album",
-    "albums.deleteConfirm": "Delete album “{name}”? The photos stay in your library.",
+    "albums.deleteConfirm":
+      "Delete album “{name}”? The photos stay in your library.",
     "albums.setCover": "Use as album cover",
     "albums.removeFromPicked": "Remove from this album",
     "albums.dialog.createTitle": "New album",
@@ -172,7 +175,8 @@ const messages: Record<string, Dict> = {
     "tray.title": "Photo Tray",
     "tray.count": "{count} in tray · {held} held",
     "tray.add": "Add selection",
-    "tray.empty": "The tray is empty. Right-click a photo and choose “Add to tray”.",
+    "tray.empty":
+      "The tray is empty. Right-click a photo and choose “Add to tray”.",
     "tray.clear": "Clear",
     "tray.clearTitle": "Remove all unheld photos (Ctrl/Cmd+Shift+T)",
     "tray.hold": "Hold",
@@ -184,7 +188,8 @@ const messages: Record<string, Dict> = {
     "batch.renameTitle": "Rename photos",
     "batch.moveTitle": "Move photos",
     "batch.pattern": "Name pattern",
-    "batch.patternHint": "{stem} original name · {n} counter · {date} capture date. The extension is kept.",
+    "batch.patternHint":
+      "{stem} original name · {n} counter · {date} capture date. The extension is kept.",
     "batch.start": "Start at",
     "batch.step": "Step",
     "batch.pad": "Digits",
@@ -232,9 +237,12 @@ const messages: Record<string, Dict> = {
     "datetime.tz.offset": "Correct UTC offset",
     "datetime.tz.hint": "For example +02:00 or -05:30 (from -12:00 to +14:00).",
     "datetime.tz.keepClock": "The clock time is right, only the zone was wrong",
-    "datetime.tz.keepMoment": "The moment is right, show it in this zone (camera was on UTC)",
-    "datetime.tz.invalid": "Enter an offset like +02:00, between -12:00 and +14:00.",
-    "datetime.merge.hint": "Pick one moment both cameras photographed and enter what each clock shows. The selected photos (this camera) move by the difference.",
+    "datetime.tz.keepMoment":
+      "The moment is right, show it in this zone (camera was on UTC)",
+    "datetime.tz.invalid":
+      "Enter an offset like +02:00, between -12:00 and +14:00.",
+    "datetime.merge.hint":
+      "Pick one moment both cameras photographed and enter what each clock shows. The selected photos (this camera) move by the difference.",
     "datetime.merge.reference": "The right camera's clock shows",
     "datetime.merge.other": "This camera's clock shows",
     "datetime.merge.shift": "Shift: {seconds} s",
@@ -262,7 +270,8 @@ const messages: Record<string, Dict> = {
     "trash.undo": "Undo",
     "trash.undoAll": "Undo all",
     "trash.close": "Close",
-    "trash.skipped": "{n} could not be restored any more (album or photo is gone).",
+    "trash.skipped":
+      "{n} could not be restored any more (album or photo is gone).",
     "trash.failed": "Undo failed: {error}",
     "stack.badge": "Stack of {n} photos",
     "stack.picker.title": "Stack ({n} photos)",
@@ -292,7 +301,13 @@ const messages: Record<string, Dict> = {
     "edit.tuning.temperature": "Color Temperature",
     "edit.tuning.picker": "Neutral picker",
     "edit.tuning.pickerHint": "Click a pixel that should be neutral",
-    "edit.tuning.hint": "Adjust tone and color, or pick a neutral pixel for white balance",
+    "edit.tuning.hint":
+      "Adjust tone and color, or pick a neutral pixel for white balance",
+    "edit.effects.sharpen": "Sharpen",
+    "edit.effects.sepia": "Sepia",
+    "edit.effects.bw": "B&W",
+    "edit.effects.saturation": "Saturation",
+    "edit.effects.strength": "Strength",
     "menu.stackPhotos": "Stack photos",
     "menu.unstack": "Unstack",
     "menu.showStack": "Show stack…",
@@ -330,11 +345,13 @@ const messages: Record<string, Dict> = {
     "export.run": "Export",
     "export.running": "Exporting…",
     "export.close": "Close",
-    "export.done": "Exported {albums} albums, {tags} tags and {recipes} recipes:",
+    "export.done":
+      "Exported {albums} albums, {tags} tags and {recipes} recipes:",
     "export.unreadable":
       "{n} recipes are not valid v1 recipes; they are kept unchanged in the JSON export (unreadable_recipes) and left out of CSV.",
     "export.error": "Export failed: {error}",
-    "options.stackWindow": "RAW+JPEG pair window (seconds between capture times)",
+    "options.stackWindow":
+      "RAW+JPEG pair window (seconds between capture times)",
     "trash.action.album_remove": "Removed from album",
     "trash.action.hide": "Hidden photo",
     "trash.action.hideFolder": "Hidden folder",
@@ -475,8 +492,10 @@ const messages: Record<string, Dict> = {
     "viewer.rating": "{n} bewerten",
     "viewer.ratingFailed": "Bewertung konnte nicht gespeichert werden: {error}",
     "options.ratings": "1–5-Bewertungen aktivieren (Standard: ein Stern)",
-    "options.singleClickEdit": "Einzelklick öffnet die Bearbeitungsansicht (Strg/Cmd-Klick wählt aus)",
-    "options.closeToTray": "Beim Schließen des Fensters läuft das Beobachten über das Tray-Symbol weiter (Beenden über das Tray-Symbol)",
+    "options.singleClickEdit":
+      "Einzelklick öffnet die Bearbeitungsansicht (Strg/Cmd-Klick wählt aus)",
+    "options.closeToTray":
+      "Beim Schließen des Fensters läuft das Beobachten über das Tray-Symbol weiter (Beenden über das Tray-Symbol)",
     "options.quickTags": "Schnell-Tags (einer pro Zeile, bis zu 10)",
     "quickTags.title": "Schnell-Tags",
     "tags.title": "Tags",
@@ -499,7 +518,8 @@ const messages: Record<string, Dict> = {
     "albums.empty": "Noch keine Alben.",
     "albums.edit": "Album bearbeiten…",
     "albums.delete": "Album löschen",
-    "albums.deleteConfirm": "Album „{name}“ löschen? Die Fotos bleiben in deiner Bibliothek.",
+    "albums.deleteConfirm":
+      "Album „{name}“ löschen? Die Fotos bleiben in deiner Bibliothek.",
     "albums.setCover": "Als Albumcover verwenden",
     "albums.removeFromPicked": "Aus diesem Album entfernen",
     "albums.dialog.createTitle": "Neues Album",
@@ -511,15 +531,18 @@ const messages: Record<string, Dict> = {
     "albums.save": "Speichern",
     "albums.cancel": "Abbrechen",
     "albums.failed": "Album-Änderung fehlgeschlagen: {error}",
-    "albums.membershipEmpty": "Noch keine Alben – lege eines in der Seitenleiste an.",
+    "albums.membershipEmpty":
+      "Noch keine Alben – lege eines in der Seitenleiste an.",
     "menu.addToTray": "Zur Ablage hinzufügen",
     "menu.removeFromTray": "Aus der Ablage entfernen",
     "tray.title": "Fotoablage",
     "tray.count": "{count} in der Ablage · {held} gehalten",
     "tray.add": "Auswahl hinzufügen",
-    "tray.empty": "Die Ablage ist leer. Rechtsklick auf ein Foto und „Zur Ablage hinzufügen“ wählen.",
+    "tray.empty":
+      "Die Ablage ist leer. Rechtsklick auf ein Foto und „Zur Ablage hinzufügen“ wählen.",
     "tray.clear": "Leeren",
-    "tray.clearTitle": "Alle nicht gehaltenen Fotos entfernen (Strg/Cmd+Umschalt+T)",
+    "tray.clearTitle":
+      "Alle nicht gehaltenen Fotos entfernen (Strg/Cmd+Umschalt+T)",
     "tray.hold": "Halten",
     "tray.release": "Lösen",
     "tray.remove": "Aus der Ablage entfernen",
@@ -529,7 +552,8 @@ const messages: Record<string, Dict> = {
     "batch.renameTitle": "Fotos umbenennen",
     "batch.moveTitle": "Fotos verschieben",
     "batch.pattern": "Namensmuster",
-    "batch.patternHint": "{stem} Originalname · {n} Zähler · {date} Aufnahmedatum. Die Dateiendung bleibt.",
+    "batch.patternHint":
+      "{stem} Originalname · {n} Zähler · {date} Aufnahmedatum. Die Dateiendung bleibt.",
     "batch.start": "Start bei",
     "batch.step": "Schrittweite",
     "batch.pad": "Stellen",
@@ -540,9 +564,12 @@ const messages: Record<string, Dict> = {
     "batch.autoSuffix": "„ (2)“, „ (3)“ anhängen…",
     "batch.apply": "Anwenden",
     "batch.cancel": "Abbrechen",
-    "batch.collision.duplicate_target": "gleicher neuer Name wie bei einem anderen Foto",
-    "batch.collision.target_exists": "eine Datei mit diesem Namen existiert bereits",
-    "batch.collision.sidecar_exists": "eine Sidecar-Datei mit diesem Namen existiert bereits",
+    "batch.collision.duplicate_target":
+      "gleicher neuer Name wie bei einem anderen Foto",
+    "batch.collision.target_exists":
+      "eine Datei mit diesem Namen existiert bereits",
+    "batch.collision.sidecar_exists":
+      "eine Sidecar-Datei mit diesem Namen existiert bereits",
     "batch.failed": "Stapeländerung fehlgeschlagen: {error}",
     "batch.nothingToDo": "Nichts zu ändern.",
     "menu.adjustDateTime": "Datum/Uhrzeit anpassen…",
@@ -575,11 +602,15 @@ const messages: Record<string, Dict> = {
     "datetime.shift.minutes": "Minuten",
     "datetime.shift.seconds": "Sekunden",
     "datetime.tz.offset": "Richtiger UTC-Versatz",
-    "datetime.tz.hint": "Zum Beispiel +02:00 oder -05:30 (von -12:00 bis +14:00).",
+    "datetime.tz.hint":
+      "Zum Beispiel +02:00 oder -05:30 (von -12:00 bis +14:00).",
     "datetime.tz.keepClock": "Die Uhrzeit stimmt, nur die Zeitzone war falsch",
-    "datetime.tz.keepMoment": "Der Zeitpunkt stimmt, in dieser Zeitzone anzeigen (Kamera stand auf UTC)",
-    "datetime.tz.invalid": "Versatz wie +02:00 eingeben, zwischen -12:00 und +14:00.",
-    "datetime.merge.hint": "Einen Moment wählen, den beide Kameras aufgenommen haben, und die Uhrzeit beider Kameras eintragen. Die ausgewählten Fotos (diese Kamera) werden um die Differenz verschoben.",
+    "datetime.tz.keepMoment":
+      "Der Zeitpunkt stimmt, in dieser Zeitzone anzeigen (Kamera stand auf UTC)",
+    "datetime.tz.invalid":
+      "Versatz wie +02:00 eingeben, zwischen -12:00 und +14:00.",
+    "datetime.merge.hint":
+      "Einen Moment wählen, den beide Kameras aufgenommen haben, und die Uhrzeit beider Kameras eintragen. Die ausgewählten Fotos (diese Kamera) werden um die Differenz verschoben.",
     "datetime.merge.reference": "Uhr der richtigen Kamera zeigt",
     "datetime.merge.other": "Uhr dieser Kamera zeigt",
     "datetime.merge.shift": "Verschiebung: {seconds} s",
@@ -599,15 +630,18 @@ const messages: Record<string, Dict> = {
     "menu.unhide": "Einblenden",
     "menu.hideFolder": "Ordner ausblenden",
     "menu.unhideFolder": "Ordner einblenden",
-    "options.showHidden": "Ausgeblendete Fotos und Ordner anzeigen (abgeblendet)",
-    "options.trashWindow": "Rückgängig-Frist für entfernte / ausgeblendete Elemente (Tage)",
+    "options.showHidden":
+      "Ausgeblendete Fotos und Ordner anzeigen (abgeblendet)",
+    "options.trashWindow":
+      "Rückgängig-Frist für entfernte / ausgeblendete Elemente (Tage)",
     "app.trash": "Papierkorb",
     "trash.title": "Katalog-Papierkorb",
     "trash.empty": "Nichts rückgängig zu machen.",
     "trash.undo": "Rückgängig",
     "trash.undoAll": "Alle rückgängig",
     "trash.close": "Schließen",
-    "trash.skipped": "{n} konnten nicht mehr wiederhergestellt werden (Album oder Foto existiert nicht mehr).",
+    "trash.skipped":
+      "{n} konnten nicht mehr wiederhergestellt werden (Album oder Foto existiert nicht mehr).",
     "trash.failed": "Rückgängig fehlgeschlagen: {error}",
     "stack.badge": "Stapel mit {n} Fotos",
     "stack.picker.title": "Stapel ({n} Fotos)",
@@ -637,13 +671,20 @@ const messages: Record<string, Dict> = {
     "edit.tuning.temperature": "Farbtemperatur",
     "edit.tuning.picker": "Neutral-Pipette",
     "edit.tuning.pickerHint": "Klicke auf ein Pixel, das neutral sein sollte",
-    "edit.tuning.hint": "Passe Ton und Farbe an, oder wähle ein neutrales Pixel für den Weißabgleich",
+    "edit.tuning.hint":
+      "Passe Ton und Farbe an, oder wähle ein neutrales Pixel für den Weißabgleich",
+    "edit.effects.sharpen": "Schärfen",
+    "edit.effects.sepia": "Sepia",
+    "edit.effects.bw": "Schwarzweiß",
+    "edit.effects.saturation": "Sättigung",
+    "edit.effects.strength": "Stärke",
     "menu.stackPhotos": "Fotos stapeln",
     "menu.unstack": "Stapel auflösen",
     "menu.showStack": "Stapel anzeigen…",
     "app.stacks": "Stapel…",
     "stacks.title": "Vorgeschlagene Stapel",
-    "stacks.empty": "Keine RAW+JPEG-Paare oder bearbeiteten Versionen zum Stapeln.",
+    "stacks.empty":
+      "Keine RAW+JPEG-Paare oder bearbeiteten Versionen zum Stapeln.",
     "stacks.kind.raw_jpeg": "RAW + JPEG",
     "stacks.kind.edited": "Bearbeitete Version",
     "stacks.stack": "Stapeln",
@@ -657,7 +698,8 @@ const messages: Record<string, Dict> = {
     "folderIni.later": "Später fragen",
     "folderIni.done":
       "{folder}: {written} Fotos aktualisiert — {stars} Sterne, {albums} Alben angelegt, {faces} Gesichter",
-    "folderIni.failed": "{n} Fotos konnten nicht übernommen werden. Bitte erneut versuchen.",
+    "folderIni.failed":
+      "{n} Fotos konnten nicht übernommen werden. Bitte erneut versuchen.",
     "folderIni.error": "Übernahme fehlgeschlagen: {error}",
     "options.exportData": "Meine Daten exportieren…",
     "export.title": "Meine Daten exportieren",
@@ -675,11 +717,13 @@ const messages: Record<string, Dict> = {
     "export.run": "Exportieren",
     "export.running": "Exportiere…",
     "export.close": "Schließen",
-    "export.done": "{albums} Alben, {tags} Tags und {recipes} Rezepte exportiert:",
+    "export.done":
+      "{albums} Alben, {tags} Tags und {recipes} Rezepte exportiert:",
     "export.unreadable":
       "{n} Rezepte sind keine gültigen v1-Rezepte; sie bleiben im JSON-Export unverändert erhalten (unreadable_recipes) und fehlen im CSV.",
     "export.error": "Export fehlgeschlagen: {error}",
-    "options.stackWindow": "RAW+JPEG-Paarfenster (Sekunden zwischen Aufnahmezeiten)",
+    "options.stackWindow":
+      "RAW+JPEG-Paarfenster (Sekunden zwischen Aufnahmezeiten)",
     "trash.action.album_remove": "Aus Album entfernt",
     "trash.action.hide": "Ausgeblendetes Foto",
     "trash.action.hideFolder": "Ausgeblendeter Ordner",
