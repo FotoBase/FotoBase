@@ -27,11 +27,14 @@
     /// preview into an offscreen canvas and averages a 3×3 window. Tests
     /// inject a deterministic sampler.
     samplePixel?: (nx: number, ny: number) => Promise<[number, number, number]>;
+    /// State to start from (TASK-04-010): the edit view passes the state it
+    /// restored from the photo's recipe so reopening keeps the sliders.
+    initial?: TuningState;
   }
 
-  let { previewSrc, onchange, samplePixel }: Props = $props();
+  let { previewSrc, onchange, samplePixel, initial }: Props = $props();
 
-  let state = $state<TuningState>({ ...DEFAULT_TUNING });
+  let state = $state<TuningState>({ ...(initial ?? DEFAULT_TUNING) });
   // Picker armed: the next click on the preview defines neutral.
   let picking = $state(false);
   let baseImg: HTMLImageElement | undefined;

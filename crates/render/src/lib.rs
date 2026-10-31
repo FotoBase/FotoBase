@@ -199,7 +199,11 @@ fn decode(bytes: &[u8], src: &Path) -> Result<(Vec<u8>, u32, u32), RenderError> 
     match sniff(bytes) {
         Sniffed::Jpeg => match zune_jpeg_decode(bytes) {
             Ok(out) => Ok(out),
-            Err(detail) => Err(RenderError::Decode { path: src.to_path_buf(), detail }),
+            // zune runs strict (rejects e.g. junk bytes between segments —
+            // some cameras and many test fixtures produce those). Fall back
+            // to the `image` crate decoder instead of failing the render.
+            Err(_) => decode_with_image(bytes)
+                .map_err(|detail| RenderError::Decode { path: src.to_path_buf(), detail }),
         },
         // GIF/BMP/TIFF/WebP (and PNG fallback) through the `image` crate.
         Sniffed::Png | Sniffed::Gif | Sniffed::Bmp | Sniffed::Tiff | Sniffed::Webp => {
@@ -352,6 +356,120 @@ pub fn thumbnail_job(
 /// Render (or fetch from cache) the thumbnail for a video file
 /// (TASK-02-004, PLAN §2 Video strategy thumbnails bullet).
 ///
+/// A rendered (or cache-hit) recipe preview (TASK-04-010).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecipePreview {
+    /// Path of the cached preview file (JPEG).
+    pub path: PathBuf,
+    /// True when served from the on-disk cache; the source was not decoded.
+    pub from_cache: bool,
+}
+
+/// Stable cache-key suffix for a recipe: first 16 bytes of the recipe
+/// JSON's SHA-256, lowercase hex. Two different recipes never share a
+/// cache entry; the same recipe text always does.
+pub fn recipe_id(recipe_json: &str) -> String {
+    let digest = Sha256::digest(recipe_json.as_bytes());
+    digest[..16].iter().fold(String::new(), |mut acc, b| {
+        use std::fmt::Write;
+        let _ = write!(acc, "{b:02x}");
+        acc
+    })
+}
+
+/// Render (or fetch from cache) the edited preview for `src` under
+/// `recipe_json` (TASK-04-010, PLAN §2D live preview, §3 rules 3–5).
+///
+/// Pipeline: decode → linear-light buffer → the shared recipe engine
+/// (the exact code the golden tests pin and export reuses) → resize to
+/// `max_edge` (never upscaling) → JPEG → atomic `.tmp` + rename cache
+/// write. Cache layout: `<cache_dir>/edit/<content-hash>-r<recipe-id>.jpg`.
+///
+/// Unlike thumbnails, no display-ICC transform is applied: the edit view
+/// samples and adjusts pixels, so baking a display transform into the
+/// preview would corrupt the edit. The preview is untransformed sRGB.
+///
+/// A malformed recipe is an error — the edit view must never silently show
+/// the original for a recipe it could not read. Unknown *op types* inside a
+/// well-formed packet are skipped per the reader conformance rule
+/// (edit-recipe spec §5).
+pub fn recipe_preview(
+    src: &Path,
+    cache_dir: &Path,
+    recipe_json: &str,
+    max_edge: u32,
+    quality: u8,
+) -> Result<RecipePreview, RenderError> {
+    let bytes = std::fs::read(src)?;
+    let hash: String = Sha256::digest(&bytes)[..16].iter().fold(String::new(), |mut acc, b| {
+        use std::fmt::Write;
+        let _ = write!(acc, "{b:02x}");
+        acc
+    });
+    let id = recipe_id(recipe_json);
+    let dir = cache_dir.join("edit");
+    let cached = dir.join(format!("{hash}-r{id}.jpg"));
+    if cached_dimensions(&cached).is_some() {
+        return Ok(RecipePreview { path: cached, from_cache: true });
+    }
+
+    let (recipe, _skipped) =
+        fotobase_core::recipe::parse(recipe_json).map_err(|e| RenderError::Decode {
+            path: src.to_path_buf(),
+            detail: format!("malformed edit recipe: {}", e.0),
+        })?;
+
+    let (rgb, src_w, src_h) = decode(&bytes, src)?;
+    // The pipeline treats decoded 8-bit values as the engine's [0, 1]
+    // domain (same convention as the golden harness, which compares
+    // engine output on 0–255-encoded PNGs).
+    let linear = fotobase_core::buffer::LinearImage {
+        width: src_w,
+        height: src_h,
+        data: rgb.iter().map(|b| f32::from(*b) / 255.0).collect(),
+    };
+    let out = fotobase_core::apply::apply_recipe(&linear, &recipe);
+    let srgb: Vec<u8> =
+        out.data.iter().map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8).collect();
+    let (dst_w, dst_h) = fit(out.width, out.height, max_edge);
+    let resized = resize(&srgb, out.width, out.height, dst_w, dst_h);
+    let encoded = encode_jpeg(&resized, dst_w, dst_h, quality);
+
+    std::fs::create_dir_all(&dir)?;
+    let tmp = dir.join(format!("{hash}-r{id}.jpg.tmp"));
+    std::fs::write(&tmp, &encoded)?;
+    if let Err(e) = std::fs::rename(&tmp, &cached) {
+        let _ = std::fs::remove_file(&tmp);
+        if !cached.exists() {
+            return Err(e.into());
+        }
+        // Lost a race with another worker that wrote the same entry: fine.
+    }
+    Ok(RecipePreview { path: cached, from_cache: false })
+}
+
+/// [`recipe_preview`] as a queue job: visible-first priority, coalescing on
+/// the caller's key, cancellation-aware (PLAN §3 rule 4).
+pub fn recipe_preview_job(
+    src: PathBuf,
+    cache_dir: PathBuf,
+    recipe_json: String,
+    max_edge: u32,
+    quality: u8,
+) -> Job<Result<RecipePreview, RenderError>> {
+    job(move |ctx| {
+        let src = src.clone();
+        let cache_dir = cache_dir.clone();
+        let recipe_json = recipe_json.clone();
+        async move {
+            if ctx.is_cancelled() {
+                return Outcome::Cancelled;
+            }
+            Outcome::Done(recipe_preview(&src, &cache_dir, &recipe_json, max_edge, quality))
+        }
+    })
+}
+
 /// One frame is extracted at ~10% of the clip's duration and fed through the
 /// exact same resize/encode/cache pipeline as images — same cache-key scheme
 /// (the content hash of the *video* file, matching the catalog's stored hash
@@ -486,6 +604,39 @@ mod tests {
         assert_eq!(fit(1000, 1000, 100), (100, 100));
         assert_eq!(fit(3, 7, 5), (2, 5));
         assert_eq!(fit(0, 0, 100), (0, 0));
+    }
+
+    /// A JPEG zune's strict mode rejects (junk between segments — the e2e
+    /// fixture is one) still decodes via the `image` fallback instead of
+    /// failing the render (TASK-04-010 e2e found this).
+    #[test]
+    fn decode_falls_back_to_image_crate_when_zune_is_strict() {
+        // Encode a valid 16×16 JPEG, then splice junk bytes between the
+        // SOI marker and the following segment — exactly the shape that
+        // trips zune's strict mode.
+        let mut buf = Vec::new();
+        {
+            use image::ImageEncoder as _;
+            let px = vec![128u8; 16 * 16 * 3];
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 90)
+                .write_image(&px, 16, 16, image::ExtendedColorType::Rgb8)
+                .unwrap();
+        }
+        // Junk bytes between header segments (after the APP0/JFIF block) —
+        // the shape the e2e fixture has that trips zune's strict mode while
+        // the `image` decoder shrugs it off.
+        let app0_len = u16::from_be_bytes([buf[4], buf[5]]) as usize;
+        let insert_at = 4 + app0_len; // end of the APP0 segment
+        let mut bytes = buf.clone();
+        bytes.splice(insert_at..insert_at, b"junk-between-segments".to_vec());
+
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("strict.jpg");
+        std::fs::write(&src, &bytes).unwrap();
+        assert!(zune_jpeg_decode(&bytes).is_err(), "fixture must trip zune's strict mode");
+        let (rgb, w, h) = decode(&bytes, &src).expect("fallback decode");
+        assert_eq!((w, h), (16, 16));
+        assert_eq!(rgb.len(), 16 * 16 * 3);
     }
 
     #[test]

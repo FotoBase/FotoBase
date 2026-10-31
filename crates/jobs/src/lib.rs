@@ -497,11 +497,18 @@ impl<T: Send + Sync + 'static> Queue<T> {
 
 impl<T> Drop for Queue<T> {
     fn drop(&mut self) {
-        // Best effort: stop the worker from waiting forever on an owned queue.
-        if let Ok(mut state) = self.inner.state.try_lock() {
-            state.closed = true;
-            // Same permit-storing rationale as `close`.
-            state.work.notify_one();
+        // Only the LAST handle stops the worker: a dropped clone must not
+        // close the queue for its siblings (commands clone the shared queue
+        // for the duration of one call — TASK-04-010 edit previews exposed
+        // this: the clone's drop closed the queue for every later render).
+        // Entries hold the queue through a Weak, so a strong count of 1
+        // means this really is the last handle.
+        if Arc::strong_count(&self.inner) == 1 {
+            if let Ok(mut state) = self.inner.state.try_lock() {
+                state.closed = true;
+                // Same permit-storing rationale as `close`.
+                state.work.notify_one();
+            }
         }
     }
 }
@@ -641,5 +648,27 @@ mod tests {
         });
         token.cancelled().await;
         assert!(token.is_cancelled());
+    }
+
+    /// Dropping a clone must not close the queue for its siblings
+    /// (TASK-04-010): commands clone the shared queue for the duration of
+    /// one call and drop it at the end; the e2e run showed the clone's drop
+    /// closing the queue ("job queue is closed" on the next render).
+    #[tokio::test]
+    async fn dropping_a_clone_leaves_the_queue_open() {
+        let queue = Queue::new(2);
+        let clone = queue.clone();
+        drop(clone);
+        let job = job(|_ctx| async move { Outcome::Done(1u32) });
+        let handle = queue.enqueue("k", Priority::Visible, job).await.unwrap();
+        assert!(matches!(*handle.result().await, Outcome::Done(1)));
+    }
+
+    #[tokio::test]
+    async fn close_still_refuses_new_jobs() {
+        let queue = Queue::new(2);
+        queue.close().await;
+        let job = job(|_ctx| async move { Outcome::Done(1u32) });
+        assert!(queue.enqueue("k", Priority::Visible, job).await.is_err());
     }
 }

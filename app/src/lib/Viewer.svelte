@@ -43,6 +43,8 @@
     /// the shell can refresh album counts and an open album view.
     onalbumschanged?: () => void;
     onclose?: () => void;
+    /// Open the single photo in the edit view (TASK-04-010).
+    onedit?: (item: GridItem) => void;
   }
 
   let {
@@ -54,6 +56,7 @@
     onrate = () => {},
     onalbumschanged = () => {},
     onclose = () => {},
+    onedit = () => {},
   }: Props = $props();
 
   let index = $state(Math.max(0, Math.min(startIndex, items.length - 1)));
@@ -323,6 +326,17 @@
     >
       {t("viewer.info")}
     </button>
+    {#if current && !isVideo}
+      <button
+        type="button"
+        class="viewer-edit-toggle"
+        data-testid="edit-open"
+        title={t("edit.view.open")}
+        onclick={() => onedit(current)}
+      >
+        {t("edit.view.open")}
+      </button>
+    {/if}
   </div>
   <div class="filmstrip" data-testid="filmstrip">
     {#each items as item, i (item.id)}

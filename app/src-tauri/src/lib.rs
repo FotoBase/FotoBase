@@ -18,6 +18,7 @@ pub mod catalog_registry;
 pub mod codec;
 pub mod datetime_commands;
 pub mod display_profile;
+pub mod edit;
 pub mod emit_pacer;
 pub mod file_menu;
 pub mod folder_manager;
@@ -59,6 +60,11 @@ const DATETIME_QUEUE_CAPACITY: usize = 4;
 /// Capacity of the portable-export queue (TASK-03-023): bounded, per PLAN
 /// §3 rule 4; exports are cheap reads, the single worker serializes them.
 const EXPORT_QUEUE_CAPACITY: usize = 2;
+
+/// Capacity of the edit-preview render queue (TASK-04-010): bounded, per
+/// PLAN §3 rule 4; renders coalesce on (content hash, recipe id), so a
+/// burst of slider drags collapses onto the latest recipe.
+const EDIT_QUEUE_CAPACITY: usize = 8;
 
 /// Sequence number for unique portable-export job keys.
 static EXPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -106,6 +112,9 @@ struct AppState {
     datetime_jobs: fotobase_jobs::Queue<fotobase_catalog::AdjustReport>,
     /// Bounded queue for portable user-data exports (TASK-03-023).
     exports: fotobase_jobs::Queue<fotobase_catalog::ExportReport>,
+    /// Bounded queue for edit-view preview renders (TASK-04-010).
+    edits:
+        fotobase_jobs::Queue<Result<fotobase_render::RecipePreview, fotobase_render::RenderError>>,
     /// Cancel token of the most recently started import (TASK-01-017):
     /// `cancel_import` trips it, the running job observes the flag.
     import_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
@@ -1177,6 +1186,57 @@ fn neutral_balance(r: f64, g: f64, b: f64) -> fotobase_core::apply::WhiteBalance
     fotobase_core::apply::WhiteBalance { kelvin_shift, green_magenta }
 }
 
+// --- Edit view (TASK-04-010, PLAN §2D) ---------------------------------------
+
+/// The photo's stored edit recipe (`fb:Recipe`, sidecar source of truth).
+#[tauri::command]
+fn get_recipe(file_id: i64, state: tauri::State<'_, AppState>) -> Result<Option<String>, String> {
+    with_catalog_sync(&state, |cat| cat.file_recipe(file_id))
+}
+
+/// Persist the edit recipe: sidecar write-through (original untouched), then
+/// the catalog mirror. An empty ops packet clears the recipe.
+#[tauri::command]
+fn set_recipe(
+    file_id: i64,
+    recipe: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    with_catalog_sync(&state, |cat| {
+        edit::apply_recipe_to_photo(cat, file_id, &recipe)
+            .map_err(|e| {
+                fotobase_catalog::SyncError::Catalog(fotobase_catalog::CatalogError::Corrupted(e))
+            })
+            .and(Ok(()))
+    })
+}
+
+/// Render (or fetch from cache) the photo's edited preview at screen
+/// resolution in the bounded job queue (visible-first priority). Returns
+/// the `preview://` URI the edit view's `<img>` uses — no image bytes over
+/// IPC (PLAN §3 rule 3). The catalog lock is held only to resolve the
+/// source; the render await happens after it is dropped.
+#[tauri::command]
+async fn render_edit_preview(
+    file_id: i64,
+    recipe: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    let queue = state.edits.clone();
+    let cache_dir = state.cache_dir();
+    let prepared = with_catalog(&state, |cat| {
+        edit::prepare_edit_preview(cat, &cache_dir, file_id, &recipe)
+            .map_err(fotobase_catalog::CatalogError::Corrupted)
+    })?;
+    match prepared.job {
+        Some(job) => {
+            let p = edit::PreparedEditPreview { hash: prepared.hash, job: Some(job) };
+            edit::finish_edit_preview(&queue, p, &recipe).await
+        }
+        None => Ok(format!("preview://{}", prepared.hash)),
+    }
+}
+
 /// Tray quit, exposed over IPC for the e2e suite (TASK-03-025): WebDriver
 /// cannot click the OS tray, so the spec drives the same [`tray::quit`]
 /// code path the menu item runs.
@@ -1789,10 +1849,20 @@ pub fn run() {
         })
         .register_uri_scheme_protocol(PREVIEW_PROTOCOL, |ctx, request| {
             let state = ctx.app_handle().state::<AppState>();
-            // Same URI grammar as thumb:// — reuse its parser.
+            // Same URI grammar as thumb:// — reuse its parser. The `?r=` query
+            // selects an edited preview from the on-disk cache (TASK-04-010);
+            // a miss falls back to the original bytes.
             let hash = thumb::hash_from_uri(request.uri()).unwrap_or_default();
+            let recipe_id =
+                request.uri().query().and_then(|q| q.strip_prefix("r=")).map(str::to_string);
+            let cache_dir = state.cache_dir();
             let reply = with_catalog(&state, |cat| {
-                Ok::<_, fotobase_catalog::CatalogError>(preview::resolve_preview(&hash, cat))
+                Ok::<_, fotobase_catalog::CatalogError>(preview::resolve_preview_with_recipe(
+                    &hash,
+                    recipe_id.as_deref(),
+                    &cache_dir,
+                    cat,
+                ))
             })
             .unwrap_or_else(|_| preview::placeholder());
             preview_response(reply)
@@ -1840,6 +1910,9 @@ pub fn run() {
             let exports = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(EXPORT_QUEUE_CAPACITY)
             });
+            let edits = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(EDIT_QUEUE_CAPACITY)
+            });
             let persisted = settings::Settings::load(&data_dir);
             // Catalog registry (TASK-03-024): which catalog opens at launch
             // (the last-used one, functional spec). The default entry keeps
@@ -1868,6 +1941,7 @@ pub fn run() {
                 imports,
                 datetime_jobs,
                 exports,
+                edits,
                 import_cancel: Mutex::new(None),
                 settings: Mutex::new(persisted),
                 pending_update: Mutex::new(None),
@@ -1963,6 +2037,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ping,
             neutral_balance,
+            get_recipe,
+            set_recipe,
+            render_edit_preview,
             quit_from_tray,
             close_main_window,
             report_codec_support,

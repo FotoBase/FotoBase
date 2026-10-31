@@ -24,15 +24,22 @@
     previewSrc: string;
     /// Fired on every state change with the current crop/straighten state.
     onchange: (state: CropStraightenState) => void;
+    /// State to start from (TASK-04-010): the edit view passes the state it
+    /// restored from the photo's recipe so reopening keeps the crop.
+    initial?: CropStraightenState;
   }
 
-  let { previewSrc, onchange }: Props = $props();
+  let { previewSrc, onchange, initial }: Props = $props();
 
-  let state = $state<CropStraightenState>({
-    crop: { x: 0, y: 0, w: 1, h: 1 },
-    angle: 0,
-    autoFill: true,
-  });
+  let state = $state<CropStraightenState>(
+    initial
+      ? { crop: { ...initial.crop }, angle: initial.angle, autoFill: initial.autoFill ?? true }
+      : {
+          crop: { x: 0, y: 0, w: 1, h: 1 },
+          angle: 0,
+          autoFill: true,
+        },
+  );
   let activePreset = $state<string>("free");
   // Stage box in px (the full image's display size). Measured from the base
   // image; jsdom-safe because tests stub getBoundingClientRect.

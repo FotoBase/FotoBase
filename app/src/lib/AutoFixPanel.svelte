@@ -14,11 +14,14 @@
     previewSrc: string;
     /// Fired on every state change with the current auto-fix state.
     onchange: (state: AutoFixState) => void;
+    /// State to start from (TASK-04-010): the edit view passes the state it
+    /// restored from the photo's recipe so reopening keeps the edits.
+    initial?: AutoFixState;
   }
 
-  let { previewSrc, onchange }: Props = $props();
+  let { previewSrc, onchange, initial }: Props = $props();
 
-  let state = $state<AutoFixState>({ autoColor: false, autoContrast: false });
+  let state = $state<AutoFixState>(initial ? { ...initial } : { autoColor: false, autoContrast: false });
 
   // The edit view needs the initial (untouched) state to know the photo has
   // no auto-fix ops yet — emit once on mount.

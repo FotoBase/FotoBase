@@ -290,6 +290,39 @@ impl Catalog {
         self.mutate_user_data(file_id, |sc| sc.set_gps(lat, lon))
     }
 
+    /// Store the edit recipe as `fb:Recipe` (TASK-04-010, edit-recipe spec
+    /// §1). An empty or whitespace-only JSON clears the field instead —
+    /// "no edits" must not leave an empty recipe packet behind. The recipe
+    /// is stored verbatim; validation is the caller's job.
+    pub fn set_recipe(&mut self, file_id: i64, recipe_json: &str) -> SyncResult<()> {
+        if recipe_json.trim().is_empty() {
+            return self.clear_recipe(file_id);
+        }
+        self.mutate_user_data(file_id, |sc| sc.set_recipe(recipe_json))
+    }
+
+    /// Remove `fb:Recipe` from the sidecar and clear the mirror. A photo
+    /// with no stored recipe is a no-op — clearing must never CREATE a
+    /// sidecar (an empty fb-less XMP is unparseable junk; TASK-04-010 e2e).
+    pub fn clear_recipe(&mut self, file_id: i64) -> SyncResult<()> {
+        if self.file_recipe(file_id)?.is_none() {
+            return Ok(());
+        }
+        self.mutate_user_data(file_id, |sc| sc.clear_recipe())
+    }
+
+    /// A photo's stored recipe from its sidecar (the source of truth, §5):
+    /// `None` when the photo has no `fb:Recipe`.
+    pub fn file_recipe(&self, file_id: i64) -> SyncResult<Option<String>> {
+        let path: String = self
+            .conn()
+            .query_row("SELECT path FROM files WHERE id = ?1", [file_id], |r| r.get(0))
+            .optional()?
+            .ok_or(SyncError::UnknownFile(file_id))?;
+        let sc = Sidecar::read(&sidecar_path(&path))?;
+        Ok(sc.recipe())
+    }
+
     /// Write-through: sidecar write succeeds first, catalog update second,
     /// both inside one logical transaction. Sidecar failure → error, catalog
     /// untouched.
@@ -577,6 +610,77 @@ mod tests {
     fn set_sidecar_mtime(sc: &std::path::Path, t: SystemTime) {
         let ft = filetime::FileTime::from_system_time(t);
         filetime::set_file_mtime(sc, ft).unwrap();
+    }
+
+    // ---- TDD: recipes (TASK-04-010) -------------------------------------
+
+    #[test]
+    fn set_recipe_writes_sidecar_and_flips_has_recipe_mirror() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut cat, file_id, _orig, sc) = catalog_with_photo(dir.path(), "IMG_0100.jpg");
+
+        let recipe = r#"{"spec":"fotobase.recipe","version":1,"ops":[{"type":"bw","params":{"amount":1.0}}]}"#;
+        cat.set_recipe(file_id, recipe).unwrap();
+
+        let side = Sidecar::read(&sc).unwrap();
+        assert_eq!(side.recipe().as_deref(), Some(recipe));
+        let has: bool = cat
+            .conn()
+            .query_row("SELECT has_recipe FROM files WHERE id = ?1", [file_id], |r| r.get(0))
+            .unwrap();
+        assert!(has);
+        // The sidecar is the source of truth: the recipe reads back verbatim.
+        assert_eq!(cat.file_recipe(file_id).unwrap().as_deref(), Some(recipe));
+    }
+
+    #[test]
+    fn empty_recipe_clears_the_field_instead_of_storing_an_empty_packet() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut cat, file_id, _orig, sc) = catalog_with_photo(dir.path(), "IMG_0101.jpg");
+
+        cat.set_recipe(file_id, r#"{"spec":"fotobase.recipe","version":1,"ops":[]}"#).unwrap();
+        cat.set_recipe(file_id, "   ").unwrap();
+
+        let side = Sidecar::read(&sc).unwrap();
+        assert!(side.recipe().is_none());
+        assert!(!side.has_recipe());
+        let has: bool = cat
+            .conn()
+            .query_row("SELECT has_recipe FROM files WHERE id = ?1", [file_id], |r| r.get(0))
+            .unwrap();
+        assert!(!has);
+    }
+
+    #[test]
+    fn replacing_a_recipe_preserves_the_rest_of_the_sidecar() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut cat, file_id, _orig, sc) = catalog_with_photo(dir.path(), "IMG_0102.jpg");
+        cat.set_rating(file_id, 4).unwrap();
+
+        cat.set_recipe(file_id, r#"{"spec":"fotobase.recipe","version":1,"ops":[]}"#).unwrap();
+        cat.set_recipe(file_id, r#"{"spec":"fotobase.recipe","version":1,"ops":[{"type":"sepia","params":{"amount":1.0}}]}"#).unwrap();
+
+        let side = Sidecar::read(&sc).unwrap();
+        assert_eq!(side.rating(), Some(4), "merge-on-write must not drop other fields");
+        assert!(side.recipe().unwrap().contains("sepia"));
+    }
+
+    #[test]
+    fn file_recipe_is_none_for_a_photo_without_recipe() {
+        let dir = tempfile::tempdir().unwrap();
+        let (cat, file_id, _orig, _sc) = catalog_with_photo(dir.path(), "IMG_0103.jpg");
+        assert_eq!(cat.file_recipe(file_id).unwrap(), None);
+    }
+
+    #[test]
+    fn clear_recipe_without_a_stored_recipe_never_creates_a_sidecar() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut cat, file_id, _orig, sc) = catalog_with_photo(dir.path(), "IMG_0104.jpg");
+
+        cat.clear_recipe(file_id).unwrap();
+
+        assert!(!sc.exists(), "clearing nothing must not write a sidecar");
+        assert_eq!(cat.file_recipe(file_id).unwrap(), None);
     }
 
     // ---- TDD: unit — sidecar wins on conflict ---------------------------
