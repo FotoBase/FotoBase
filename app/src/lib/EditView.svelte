@@ -67,14 +67,19 @@
   );
 
   // --- Load an existing recipe when the photo changes ------------------------
-
+  // Keyed on the photo's ID, not object identity: the shell refreshes the
+  // items array (library-changed events, hash backfill) while the edit view
+  // is open, and a reload must not reset the session mid-edit (TASK-04-010
+  // e2e: the reset loop re-saved the recipe on every refresh).
+  let loadedForId = $state<number | null>(null);
   let loadSeq = 0;
   $effect(() => {
-    const photo = current;
-    if (photo === null) return;
+    const id = current?.id ?? null;
+    if (id === null || loadedForId === id) return;
+    loadedForId = id;
     const seq = ++loadSeq;
     previewSrc = baseUri;
-    invoke<string | null>("get_recipe", { fileId: photo.id })
+    invoke<string | null>("get_recipe", { fileId: id })
       .then((raw) => {
         if (seq !== loadSeq) return; // photo moved on meanwhile
         let restored: EditState = EMPTY;
