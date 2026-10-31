@@ -72,6 +72,10 @@
   // is open, and a reload must not reset the session mid-edit (TASK-04-010
   // e2e: the reset loop re-saved the recipe on every refresh).
   let loadedForId = $state<number | null>(null);
+  // Whether the loaded photo carried a recipe: undoing back to "no edits"
+  // must then CLEAR the stored one, but a photo that never had a recipe
+  // must not get a (header-only, unparseable) sidecar written for it.
+  let loadedHadRecipe = $state(false);
   let loadSeq = 0;
   $effect(() => {
     const id = current?.id ?? null;
@@ -82,6 +86,7 @@
     invoke<string | null>("get_recipe", { fileId: id })
       .then((raw) => {
         if (seq !== loadSeq) return; // photo moved on meanwhile
+        loadedHadRecipe = raw !== null && raw.trim() !== "";
         let restored: EditState = EMPTY;
         if (raw) {
           try {
@@ -125,16 +130,30 @@
     const recipeJson = JSON.stringify(recipe);
     const seq = ++renderSeq;
     try {
-      // Persist the recipe and render share one debounced tick; the render
-      // result decides what the <img> shows.
-      invoke("set_recipe", { fileId: photo.id, recipe: recipeJson }).catch((e) => {
-        if (seq === renderSeq) renderError = String(e);
-      });
       if (isEmptyState(state)) {
-        // No edits: the plain original preview is the preview.
+        // No edits: the plain original preview is the preview. Only touch
+        // the sidecar when this session actually loaded a recipe — clearing
+        // a sidecar that was never written must not CREATE one (an empty
+        // fb-less XMP is unparseable junk).
         if (seq === renderSeq) previewSrc = baseUri;
+        if (loadedHadRecipe) {
+          invoke("set_recipe", { fileId: photo.id, recipe: recipeJson }).catch((e) => {
+            if (seq === renderSeq) renderError = String(e);
+          });
+          loadedHadRecipe = false;
+        }
         return;
       }
+      // Persist the recipe and render share one debounced tick; the render
+      // result decides what the <img> shows. Once a recipe is stored, a
+      // later undo-to-empty must clear it.
+      invoke("set_recipe", { fileId: photo.id, recipe: recipeJson })
+        .then(() => {
+          loadedHadRecipe = true;
+        })
+        .catch((e) => {
+          if (seq === renderSeq) renderError = String(e);
+        });
       const uri = await invoke<string>("render_edit_preview", {
         fileId: photo.id,
         recipe: recipeJson,

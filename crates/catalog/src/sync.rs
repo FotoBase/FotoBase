@@ -301,8 +301,13 @@ impl Catalog {
         self.mutate_user_data(file_id, |sc| sc.set_recipe(recipe_json))
     }
 
-    /// Remove `fb:Recipe` from the sidecar and clear the mirror.
+    /// Remove `fb:Recipe` from the sidecar and clear the mirror. A photo
+    /// with no stored recipe is a no-op — clearing must never CREATE a
+    /// sidecar (an empty fb-less XMP is unparseable junk; TASK-04-010 e2e).
     pub fn clear_recipe(&mut self, file_id: i64) -> SyncResult<()> {
+        if self.file_recipe(file_id)?.is_none() {
+            return Ok(());
+        }
         self.mutate_user_data(file_id, |sc| sc.clear_recipe())
     }
 
@@ -664,6 +669,17 @@ mod tests {
     fn file_recipe_is_none_for_a_photo_without_recipe() {
         let dir = tempfile::tempdir().unwrap();
         let (cat, file_id, _orig, _sc) = catalog_with_photo(dir.path(), "IMG_0103.jpg");
+        assert_eq!(cat.file_recipe(file_id).unwrap(), None);
+    }
+
+    #[test]
+    fn clear_recipe_without_a_stored_recipe_never_creates_a_sidecar() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut cat, file_id, _orig, sc) = catalog_with_photo(dir.path(), "IMG_0104.jpg");
+
+        cat.clear_recipe(file_id).unwrap();
+
+        assert!(!sc.exists(), "clearing nothing must not write a sidecar");
         assert_eq!(cat.file_recipe(file_id).unwrap(), None);
     }
 
