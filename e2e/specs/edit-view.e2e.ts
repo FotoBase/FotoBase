@@ -225,19 +225,17 @@ describe("edit view", () => {
     const fillSaved = (): boolean => sidecarText().includes("fill_light");
     const sliderDiagnostics = async (): Promise<string> => {
       const recipe = await invoke("get_recipe", {
-        fileId:
-          (await invoke("find_file_by_path", { path: `${lib.dir}/${SOLO}` })) !=
-          null
-            ? (
-                (await invoke("find_file_by_path", {
-                  path: `${lib.dir}/${SOLO}`,
-                })) as { id: number }
-              ).id
-            : -1,
+        fileId: await soloId(),
       }).catch((e) => `get_recipe failed: ${e}`);
-      return `slider=${await sliderState()} error=${await errorText()} recipe=${JSON.stringify(
-        recipe,
-      ).slice(0, 200)}`;
+      const sidecar = sidecarText();
+      return `slider=${await sliderState()} photo=${await (
+        await $('[data-testid="edit-view"]')
+      ).getAttribute(
+        "data-file-id",
+      )} error=${await errorText()} recipe=${JSON.stringify(recipe).slice(
+        0,
+        150,
+      )} sidecar(${sidecar.length})=${sidecar.slice(0, 400)}`;
     };
 
     try {
