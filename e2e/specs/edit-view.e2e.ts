@@ -286,6 +286,8 @@ describe("edit view", () => {
 
     // The recipe persisted through the sidecar write-through.
     await waitSidecarContains('"bw"');
+    // eslint-disable-next-line no-console
+    console.log("SIDECAR AFTER BW:", JSON.stringify(sidecarText()));
     await waitSidecarContains("fill_light");
     await waitSidecarContains("auto_contrast");
   });
