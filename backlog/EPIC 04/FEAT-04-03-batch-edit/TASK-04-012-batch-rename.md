@@ -1,6 +1,6 @@
 # task: implement pattern rename
 
-**Feature:** [FEAT-04-03-batch-edit](FEAT-04-03-batch-edit.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in progress (2026-11-02)
+**Feature:** [FEAT-04-03-batch-edit](FEAT-04-03-batch-edit.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-11-02)
 
 ## Description
 Rename selected files to a custom name with optional picture-date and picture-resolution suffixes (PLAN §2 File menu "Rename"; §6 P2b), producing collision-free names.
