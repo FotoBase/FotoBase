@@ -1,6 +1,6 @@
 # task: build export dialog
 
-**Feature:** [FEAT-04-06-export-save](FEAT-04-06-export-save.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-06-export-save](FEAT-04-06-export-save.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-11-02)
 
 ## Description
 Export dialog per the §2J/File-menu spec: original or custom resize (H/V pixel limit, slider + input), quality presets (Auto/Normal/Maximum/Minimum/Custom %), numbered filenames, optional text watermark, with edits baked in (PLAN §6 P2b Export).
@@ -22,4 +22,4 @@ Export dialog per the §2J/File-menu spec: original or custom resize (H/V pixel 
 - Integration: numbered filenames sequential and collision-free; watermark present in output bytes.
 
 ## Acceptance criteria
-- [ ] 04-015: Export dialog offers resize (H/V limit), quality presets, numbered filenames, text watermark; edits baked in.
+- [x] 04-015: Export dialog offers resize (H/V limit), quality presets, numbered filenames, text watermark; edits baked in.
