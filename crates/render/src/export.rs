@@ -12,9 +12,11 @@
 //! the output space through lcms2 — and the exported file is tagged with the
 //! output profile (sRGB for untagged sources, so consumers never guess).
 //!
-//! Memory: the recipe is applied per horizontal strip of bounded rows
-//! (streamed tiles), so very large images never materialize a whole-image
-//! linear-light buffer; peak memory is bounded by tile height, not pixels.
+//! Memory: pixel-local recipes (see `PIXEL_LOCAL_OPS`) are applied per
+//! horizontal strip, so the f32 linear-light working set is bounded by the
+//! strip. Recipes with geometry, neighbor, position-dependent or
+//! whole-image-statistics ops take the whole-image path to stay exactly equal
+//! to the shared engine. In both paths the decoded RGB8 source stays resident.
 
 use std::path::{Path, PathBuf};
 
@@ -76,18 +78,19 @@ impl From<crate::color::ColorError> for ExportError {
 /// still amortizing the recipe's per-op fixed costs over useful chunks.
 const TILE_ROWS: u32 = 128;
 
-fn encode_png(rgb: &[u8], w: u32, h: u32) -> Vec<u8> {
+fn encode_png(rgb: &[u8], w: u32, h: u32, profile: &[u8]) -> Vec<u8> {
     use image::ImageEncoder;
     let mut out = Vec::new();
-    let enc = image::codecs::png::PngEncoder::new(&mut out);
+    let mut enc = image::codecs::png::PngEncoder::new(&mut out);
+    enc.set_icc_profile(profile.to_vec()).expect("PNG encoder embeds ICC profiles (iCCP)");
     enc.write_image(rgb, w, h, image::ExtendedColorType::Rgb8).expect("encoding in-memory png");
     out
 }
 
 /// Export `src` with `recipe_json` applied at full resolution into `dst`.
 ///
-/// Pipeline: decode → (per streaming tile) linear-light buffer → the shared
-/// recipe engine → sRGB-encode rows → resize (optional) → color-managed
+/// Pipeline: decode → the shared recipe engine (streamed per strip when the
+/// recipe is pixel-local) → sRGB-encode → resize (optional) → color-managed
 /// conversion into the output space → encode → atomic `.tmp` + rename write.
 /// A failed export leaves no partial output file.
 pub fn export_image(
@@ -107,42 +110,17 @@ pub fn export_image(
     // source's pixels are converted into sRGB through lcms2, and the output
     // is always tagged (untagged sources export as explicit sRGB).
     let out_profile = crate::color::srgb_profile_bytes()?;
-    let mut srgb_rows = Vec::with_capacity(rgb.len());
-
-    // Streaming apply: the recipe engine is a pure function over whole
-    // images, so tile it by horizontal strips — each strip is a full-width
-    // `LinearImage` of `TILE_ROWS` rows. Per-strip state (auto_color /
-    // auto_contrast statistics, crop geometry) is normalized geometry or
-    // recomputed per strip, so strips compose to the whole-image result the
-    // golden tests pin.
-    let rows_per_tile = TILE_ROWS.min(src_h);
-    let mut y = 0u32;
-    while y < src_h {
-        let rows = rows_per_tile.min(src_h - y);
-        let tile = crate::tile_linear(&rgb, src_w, y, rows);
-        let out = fotobase_core::apply::apply_recipe(&tile, &recipe);
-        for px in out.data.as_chunks::<3>().0 {
-            for v in px {
-                srgb_rows.push((v.clamp(0.0, 1.0) * 255.0).round() as u8);
-            }
-        }
-        y += rows;
-    }
-
-    // A recipe may change geometry (crop/straighten/rotate): derive the
-    // output dimensions from the last tile's engine output size — the engine
-    // is resolution-normalized, so per-tile geometry ops would misbehave for
-    // geometry ops; the tile path is therefore only taken for recipes whose
-    // ops are all pixel-local, and geometry recipes fall back to the
-    // whole-image path.
+    // Pixel-local recipes stream through the engine strip by strip (bounded
+    // linear-light working set). Everything else — geometry, neighbor
+    // (sharpen), position-dependent (grain, text, retouch, red-eye) and
+    // whole-image-statistics ops — needs the whole image to match the shared
+    // engine exactly, so it takes the whole-image path.
     let (out_w, out_h, final_rgb) = if recipe_is_pixel_local(&recipe) {
-        (src_w, src_h, srgb_rows)
+        (src_w, src_h, apply_streamed(&rgb, src_w, src_h, &recipe))
     } else {
         let linear = crate::rgb_to_linear(&rgb, src_w, src_h);
         let out = fotobase_core::apply::apply_recipe(&linear, &recipe);
-        let data: Vec<u8> =
-            out.data.iter().map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8).collect();
-        (out.width, out.height, data)
+        (out.width, out.height, to_srgb8(&out.data))
     };
 
     let (dst_w, dst_h) = match opts.resize_max_edge {
@@ -157,11 +135,14 @@ pub fn export_image(
     let mut managed = final_rgb;
     crate::color::transform_rgb(&mut managed, src_profile.as_deref(), &out_profile)?;
 
-    let mut encoded = match opts.format {
-        ExportFormat::Jpeg => encode_jpeg(&managed, dst_w, dst_h, opts.quality),
-        ExportFormat::Png => encode_png(&managed, dst_w, dst_h),
+    let encoded = match opts.format {
+        ExportFormat::Jpeg => {
+            let mut jpeg = encode_jpeg(&managed, dst_w, dst_h, opts.quality);
+            icc::attach_to_jpeg(&mut jpeg, &out_profile);
+            jpeg
+        }
+        ExportFormat::Png => encode_png(&managed, dst_w, dst_h, &out_profile),
     };
-    icc::attach_to_jpeg(&mut encoded, &out_profile);
     let output_profile = Some(out_profile);
 
     // Atomic replace: `.tmp` + rename so a crash (or a rejected write) never
@@ -177,16 +158,47 @@ pub fn export_image(
     Ok(ExportResult { width: dst_w, height: dst_h, output_profile })
 }
 
-/// True when every op in the recipe only touches individual pixels (no
-/// geometry), so streaming per-strip application is exact. Geometry ops
-/// (crop/straighten/rotate) and whole-image statistics ops fall back to the
-/// whole-image path.
+/// Ops that read and write each pixel independently of position and of every
+/// other pixel — the only ones for which per-strip application is exactly
+/// the whole-image result. A whitelist on purpose: a new op is whole-image
+/// (always correct) until it is proven pixel-local here.
+const PIXEL_LOCAL_OPS: &[&str] = &[
+    "fill_light",
+    "temperature",
+    "tint",
+    "saturation",
+    "brightness",
+    "highlight_recovery",
+    "shadow_recovery",
+    "sepia",
+    "warm_colors",
+    "cool_colors",
+    "grayscale",
+    "bw",
+    "undo_all",
+];
+
 fn recipe_is_pixel_local(recipe: &fotobase_core::recipe::Recipe) -> bool {
-    const GEOMETRY: [&str; 3] = ["crop", "straighten", "rotate"];
-    const WHOLE_IMAGE: [&str; 4] = ["auto_color", "auto_contrast", "im_feeling_lucky", "vignette"];
-    recipe.ops.iter().all(|op| {
-        !GEOMETRY.contains(&op.op_type.as_str()) && !WHOLE_IMAGE.contains(&op.op_type.as_str())
-    })
+    recipe.ops.iter().all(|op| PIXEL_LOCAL_OPS.contains(&op.op_type.as_str()))
+}
+
+fn to_srgb8(linear: &[f32]) -> Vec<u8> {
+    linear.iter().map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8).collect()
+}
+
+/// Run a pixel-local recipe over `TILE_ROWS`-row strips, so the f32
+/// working set is bounded by the strip, not the image.
+fn apply_streamed(rgb: &[u8], w: u32, h: u32, recipe: &fotobase_core::recipe::Recipe) -> Vec<u8> {
+    let mut out = Vec::with_capacity(rgb.len());
+    let mut y = 0u32;
+    while y < h {
+        let rows = TILE_ROWS.min(h - y);
+        let tile = crate::tile_linear(rgb, w, y, rows);
+        let edited = fotobase_core::apply::apply_recipe(&tile, recipe);
+        out.extend(to_srgb8(&edited.data));
+        y += rows;
+    }
+    out
 }
 
 /// [`export_image`] as a queue job (PLAN §3 rule 4): blocking encode work is
@@ -217,10 +229,10 @@ pub fn export_image_job(
 }
 
 /// Peak bytes allocated while streaming `src` through the recipe with the
-/// given per-tile RGB8 budget — a measurement hook for the memory-budget
-/// test (Testing criteria: "very-large-image render stays within memory
-/// budget"). Renders exactly like [`export_image`] but reports the high-
-/// watermark of the streaming buffers instead of writing a file.
+/// given per-tile RGB8 budget — a model of the f32 working set (tile input +
+/// engine output + one RGB8 row), computed while running the same engine on
+/// the same strips as [`export_image`], for the memory-budget test. It does
+/// not measure the resident decoded source, and writes no file.
 pub fn export_peak_bytes(
     src: &Path,
     recipe_json: &str,

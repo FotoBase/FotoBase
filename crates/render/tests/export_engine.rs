@@ -281,3 +281,106 @@ fn export_png_is_supported() {
     assert_eq!(out.extension().unwrap(), "png");
     assert_eq!((r.width, r.height), (16, 16));
 }
+
+/// Gradient JPEG tall enough to span several 128-row strips.
+fn tall_jpeg(dir: &Path, name: &str) -> std::path::PathBuf {
+    gen_jpeg(dir, name, 40, 300)
+}
+
+fn shared_engine_pixels(src: &Path, recipe_json: &str) -> (Vec<u8>, u32, u32) {
+    let img = image::load_from_memory(&std::fs::read(src).unwrap()).unwrap().to_rgb8();
+    let (w, h) = (img.width(), img.height());
+    let linear = fotobase_core::buffer::LinearImage {
+        width: w,
+        height: h,
+        data: img.iter().map(|b| f32::from(*b) / 255.0).collect(),
+    };
+    let (recipe, _) = fotobase_core::recipe::parse(recipe_json).unwrap();
+    let out = fotobase_core::apply::apply_recipe(&linear, &recipe);
+    let px = out.data.iter().map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8).collect();
+    (px, out.width, out.height)
+}
+
+#[test]
+fn multi_strip_export_matches_the_whole_image_engine_for_every_op_class() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let src = tall_jpeg(&tmp.path().join("photos"), "tall.jpg");
+    // pixel-local, neighbor-dependent (sharpen), position-dependent (grain),
+    // geometry (crop): all must equal the whole-image engine result.
+    let recipes = [
+        r#"{"spec":"fotobase.recipe","version":1,"ops":[{"type":"bw","params":{"amount":1.0}}]}"#,
+        r#"{"spec":"fotobase.recipe","version":1,"ops":[{"type":"sharpen","params":{"amount":1.0}}]}"#,
+        r#"{"spec":"fotobase.recipe","version":1,"ops":[{"type":"film_grain","params":{"amount":0.8}}]}"#,
+        r#"{"spec":"fotobase.recipe","version":1,"ops":[{"type":"crop","params":{"x":0.1,"y":0.1,"w":0.5,"h":0.6}}]}"#,
+    ];
+    for (i, recipe) in recipes.iter().enumerate() {
+        let out = tmp.path().join("out").join(format!("t{i}.png"));
+        let r = export_image(
+            &src,
+            &out,
+            recipe,
+            &ExportOptions { format: ExportFormat::Png, quality: 90, resize_max_edge: None },
+        )
+        .unwrap();
+        let (expected, ew, eh) = shared_engine_pixels(&src, recipe);
+        assert_eq!((r.width, r.height), (ew, eh), "recipe {i}: geometry");
+        let (got, _, _) = decode_rgb(&out);
+        assert_eq!(got, expected, "recipe {i}: export must equal the shared engine exactly");
+    }
+}
+
+#[test]
+fn png_export_is_actually_tagged_with_the_reported_profile() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let src = gen_jpeg(&tmp.path().join("photos"), "tag.jpg", 16, 16);
+    let out = tmp.path().join("out").join("tag.png");
+    let r = export_image(
+        &src,
+        &out,
+        BW,
+        &ExportOptions { format: ExportFormat::Png, quality: 90, resize_max_edge: None },
+    )
+    .unwrap();
+    let embedded = fotobase_render::extract_icc(&std::fs::read(&out).unwrap());
+    assert!(embedded.is_some(), "PNG must carry an iCCP profile when output_profile is Some");
+    assert_eq!(embedded, r.output_profile, "reported profile must be the embedded one");
+}
+
+#[test]
+fn wide_gamut_source_pixels_are_converted_not_just_tagged() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let wide = fotobase_render::rgb_profile_bytes(
+        [0.3127, 0.3290, 1.0],
+        [[0.680, 0.320, 1.0], [0.265, 0.690, 1.0], [0.150, 0.060, 1.0]],
+        2.19921875,
+    )
+    .unwrap();
+    let mut jpeg = Vec::new();
+    {
+        use image::ImageEncoder as _;
+        let px: Vec<u8> = (0..32 * 32).flat_map(|_| [30u8, 220, 40]).collect();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 98)
+            .write_image(&px, 32, 32, image::ExtendedColorType::Rgb8)
+            .unwrap();
+    }
+    fotobase_render::icc::attach_to_jpeg(&mut jpeg, &wide);
+    let src = tmp.path().join("photos").join("wide.jpg");
+    std::fs::create_dir_all(src.parent().unwrap()).unwrap();
+    std::fs::write(&src, &jpeg).unwrap();
+
+    let none = r#"{"spec":"fotobase.recipe","version":1,"ops":[]}"#;
+    let out = tmp.path().join("out").join("wide.png");
+    export_image(
+        &src,
+        &out,
+        none,
+        &ExportOptions { format: ExportFormat::Png, quality: 90, resize_max_edge: None },
+    )
+    .unwrap();
+    let (raw, _, _) = shared_engine_pixels(&src, none);
+    let (got, _, _) = decode_rgb(&out);
+    assert!(
+        rms(&raw, &got) > 3.0,
+        "wide-gamut green must be converted into sRGB, not passed through"
+    );
+}
