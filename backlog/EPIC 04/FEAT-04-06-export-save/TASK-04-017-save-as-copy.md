@@ -20,4 +20,4 @@
 - Unit: destination collision → user-prompted or auto-suffixed name, never overwrite.
 
 ## Acceptance criteria
-- [ ] 04-017: "Save as…" and "Save a copy" produce new files and never touch the original (checksum-verified).
+- [x] 04-017: "Save as…" and "Save a copy" produce new files and never touch the original (checksum-verified).

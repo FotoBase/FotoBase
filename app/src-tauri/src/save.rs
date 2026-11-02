@@ -29,7 +29,6 @@ use std::path::{Path, PathBuf};
 
 use fotobase_catalog::{Catalog, ORIGINALS_DIR};
 use fotobase_render::{export_image, ExportFormat, ExportOptions};
-
 /// JPEG quality of a Save: Maximum-ish per the §2J preset table — the saved
 /// file is the user's only copy of the edited pixels.
 pub const SAVE_JPEG_QUALITY: u8 = 95;
@@ -256,4 +255,163 @@ fn archived_row_id(cat: &Catalog, file_id: i64) -> Option<i64> {
             r.get(0)
         })
         .ok()
+}
+
+// ---- Save as… / Save a copy (TASK-04-017, PLAN §2F, §6 P2b) ----------------
+//
+// Both render the edited pixels into a *new* file and never touch the
+// original — the original's path is only ever read here. "Save as…" takes
+// an explicit destination; "Save a copy" defaults to a sibling
+// `name (copy).ext` next to the photo. A destination that already exists is
+// never overwritten: the write lands on an auto-suffixed name instead.
+
+/// Result of a Save as… / Save a copy: the new file's catalog row.
+#[derive(Debug, serde::Serialize)]
+pub struct SavedCopy {
+    pub file_id: i64,
+    pub path: PathBuf,
+}
+
+/// `path` if free, else the first free `stem (2).ext`, `stem (3).ext`, …
+/// in the same folder. Never returns an existing path.
+fn unique_destination(path: &Path) -> PathBuf {
+    if !path.exists() {
+        return path.to_path_buf();
+    }
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    for n in 2u32.. {
+        let name =
+            if ext.is_empty() { format!("{stem} ({n})") } else { format!("{stem} ({n}).{ext}") };
+        let candidate = path.with_file_name(name);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!("an infinitely large disk has a free name")
+}
+
+/// The default Save-a-copy destination for `photo`: a sibling
+/// `name (copy).ext`, or `name (copy 2).ext`, … when taken.
+fn copy_destination(photo: &Path) -> PathBuf {
+    let stem = photo.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+    let ext = photo.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let with_copy = |n: Option<u32>| {
+        let suffix = match n {
+            None => "copy".to_string(),
+            Some(n) => format!("copy {n}"),
+        };
+        if ext.is_empty() {
+            photo.with_file_name(format!("{stem} ({suffix})"))
+        } else {
+            photo.with_file_name(format!("{stem} ({suffix}).{ext}"))
+        }
+    };
+    let first = with_copy(None);
+    if !first.exists() {
+        return first;
+    }
+    for n in 2u32.. {
+        let candidate = with_copy(Some(n));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!("an infinitely large disk has a free name")
+}
+
+/// "Save as…": render the photo's current (edited) pixels to `destination`.
+/// The original is never touched; a colliding destination is auto-suffixed,
+/// never overwritten.
+pub fn save_as_photo(
+    cat: &mut Catalog,
+    file_id: i64,
+    destination: &Path,
+) -> Result<SavedCopy, SaveError> {
+    save_edited_copy(cat, file_id, unique_destination(destination))
+}
+
+/// "Save a copy": duplicate the current (edited) picture — next to the
+/// original by default, or at the chosen location. Same never-overwrite
+/// rule as Save as….
+pub fn save_copy_photo(
+    cat: &mut Catalog,
+    file_id: i64,
+    destination: Option<&Path>,
+) -> Result<SavedCopy, SaveError> {
+    let dest = match destination {
+        Some(dest) => unique_copy_destination(dest),
+        None => copy_destination(&file_path(cat, file_id)?),
+    };
+    save_edited_copy(cat, file_id, dest)
+}
+
+/// Never-overwrite resolution for an explicit Save-a-copy destination:
+/// `stem (copy 2).ext`, … after the plain name is taken.
+fn unique_copy_destination(path: &Path) -> PathBuf {
+    if !path.exists() {
+        return path.to_path_buf();
+    }
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    for n in 2u32.. {
+        let name = if ext.is_empty() {
+            format!("{stem} (copy {n})")
+        } else {
+            format!("{stem} (copy {n}).{ext}")
+        };
+        let candidate = path.with_file_name(name);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!("an infinitely large disk has a free name")
+}
+
+/// The shared body: write the edited pixels (or a byte copy when there is
+/// no recipe) to the already-resolved, never-colliding destination,
+/// register the new file in the catalog, and give it its own sidecar
+/// carrying the recipe (sidecar merge-on-write; ADR-0003 — the sidecar is
+/// the source of truth).
+fn save_edited_copy(
+    cat: &mut Catalog,
+    file_id: i64,
+    dest: PathBuf,
+) -> Result<SavedCopy, SaveError> {
+    let photo_path = file_path(cat, file_id)?;
+    let recipe = cat.file_recipe(file_id)?;
+
+    // A photo that was §F-Saved renders from its archived original, so the
+    // recipe is never applied to already-edited pixels twice.
+    let render_src = {
+        let archived = archived_path(&photo_path);
+        if archived.exists() {
+            archived
+        } else {
+            photo_path.clone()
+        }
+    };
+
+    if let Some(recipe) = &recipe {
+        // Rendered pixels need a container the export engine supports.
+        // Refuse before touching anything — a RAW destination must never
+        // receive rendered pixels.
+        let Some(format) = save_format(&dest) else {
+            return Err(SaveError::UnsupportedFormat(
+                dest.extension().and_then(|e| e.to_str()).unwrap_or("").to_string(),
+            ));
+        };
+        let opts = ExportOptions { format, quality: SAVE_JPEG_QUALITY, resize_max_edge: None };
+        export_image(&render_src, &dest, recipe, &opts)?;
+    } else {
+        // No edits: the copy is the original bytes, verbatim.
+        std::fs::copy(&render_src, &dest)?;
+    }
+
+    let new_id = cat.register_file(&dest, "image")?;
+    if let Some(recipe) = &recipe {
+        cat.set_recipe(new_id, recipe)?;
+    }
+
+    Ok(SavedCopy { file_id: new_id, path: dest })
 }

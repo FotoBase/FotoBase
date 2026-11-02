@@ -17,6 +17,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-updater = "2"
+# Save as… (TASK-04-017): the OS save dialog that picks the destination.
+tauri-plugin-dialog = "2"
 # Direct dep: tauri::generate_context! expands to `::serde_json` paths.
 serde_json = "1"
 # Settings (TASK-01-022) serialize to settings.json over IPC.

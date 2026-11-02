@@ -20,6 +20,14 @@ vi.mock("@tauri-apps/api/core", () => {
   const invoke = vi.fn();
   return { invoke, __invoke: invoke };
 });
+vi.mock("@tauri-apps/plugin-dialog", () => {
+  const save = vi.fn();
+  return { save, __save: save };
+});
+import * as pluginDialog from "@tauri-apps/plugin-dialog";
+const saveDialogMock = (
+  pluginDialog as unknown as { __save: ReturnType<typeof vi.fn> }
+).__save;
 import * as tauriCore from "@tauri-apps/api/core";
 const invokeMock = (
   tauriCore as unknown as { __invoke: ReturnType<typeof vi.fn> }
@@ -50,6 +58,8 @@ const settleMicro = async (): Promise<void> => {
 beforeEach(() => {
   invokeMock.mockReset();
   invokeMock.mockResolvedValue(null);
+  saveDialogMock.mockReset();
+  saveDialogMock.mockResolvedValue(null);
 });
 
 afterEach(cleanup);
@@ -301,5 +311,68 @@ describe("EditView save & revert", () => {
     expect(
       (screen.getByTestId("edit-save") as HTMLButtonElement).disabled,
     ).toBe(true);
+  });
+});
+
+// TASK-04-017: "Save as…" renders the edited pixels into a new file at a
+// chosen location; "Save a copy" duplicates the current picture next to the
+// original. The component's job is wiring the destination dialog and the
+// two commands — the never-touch-the-original guarantees are the backend
+// integration tests' job.
+describe("EditView save as… & save a copy", () => {
+  async function makeAnEdit(): Promise<void> {
+    vi.useFakeTimers();
+    render(EditView, props());
+    await settleMicro();
+    fireEvent.click(screen.getByTestId("edit-tab-effects"));
+    await settleMicro();
+    fireEvent.click(screen.getByRole("button", { name: "B&W" }));
+    await settleMicro();
+    invokeMock.mockClear();
+    vi.useRealTimers();
+    await settleMicro();
+  }
+
+  it("save a copy invokes save_copy_photo without a destination", async () => {
+    await makeAnEdit();
+    fireEvent.click(screen.getByTestId("edit-save-copy"));
+    await settle();
+    expect(invokeMock).toHaveBeenCalledWith("save_copy_photo", {
+      fileId: 1,
+      destination: null,
+    });
+  });
+
+  it("save as… asks for a location and invokes save_as_photo with it", async () => {
+    await makeAnEdit();
+    saveDialogMock.mockResolvedValue("/chosen/dir/edited.jpg");
+    fireEvent.click(screen.getByTestId("edit-save-as"));
+    await settle();
+    expect(saveDialogMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith("save_as_photo", {
+      fileId: 1,
+      destination: "/chosen/dir/edited.jpg",
+    });
+  });
+
+  it("cancelling the save-as dialog invokes nothing", async () => {
+    await makeAnEdit();
+    saveDialogMock.mockResolvedValue(null);
+    fireEvent.click(screen.getByTestId("edit-save-as"));
+    await settle();
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("a save-as failure is surfaced, not swallowed", async () => {
+    await makeAnEdit();
+    saveDialogMock.mockResolvedValue("/chosen/dir/edited.jpg");
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "save_as_photo" ? Promise.reject("denied") : Promise.resolve(null),
+    );
+    fireEvent.click(screen.getByTestId("edit-save-as"));
+    await settle();
+    expect(
+      (screen.getByTestId("edit-save-error") as HTMLElement).textContent,
+    ).toContain("denied");
   });
 });
