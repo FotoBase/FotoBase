@@ -72,6 +72,11 @@ pub fn sidecar_path(original: &str) -> PathBuf {
     PathBuf::from(format!("{original}.xmp"))
 }
 
+/// Name of the sibling folder "Save" (TASK-04-016, PLAN §2F) archives the
+/// untouched original into. The scanner never walks it: the archived bytes
+/// are cataloged by Save itself, hidden, as the saved photo's stack member.
+pub const ORIGINALS_DIR: &str = ".originals";
+
 #[derive(Debug, Clone, PartialEq)]
 struct UserData {
     rating: Option<i64>,

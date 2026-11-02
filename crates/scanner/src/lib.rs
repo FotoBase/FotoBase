@@ -368,6 +368,14 @@ fn walk_dir(
         let path = entry.path();
         let Ok(ft) = entry.file_type() else { continue };
         if ft.is_dir() {
+            // `.originals/` (TASK-04-016) holds the untouched originals Save
+            // archived — app-managed backups, cataloged by Save itself, never
+            // user photos. The walk skips them so a rescan can't re-add the
+            // archived bytes as a duplicate photo or delete their rows as
+            // vanished files.
+            if path.file_name().is_some_and(|n| n == fotobase_catalog::ORIGINALS_DIR) {
+                continue;
+            }
             subdirs.push(path);
             continue;
         }
@@ -410,12 +418,14 @@ fn existing_files(catalog: &Catalog, root_str: &str) -> Result<HashMap<String, (
     // hardcoded `LIKE ?1 || '/%'` would never match subdirectories there and
     // every rescan would re-add the whole tree.
     let sep = std::path::MAIN_SEPARATOR.to_string();
+    let originals = format!("{sep}{}{sep}", fotobase_catalog::ORIGINALS_DIR);
     let mut stmt = catalog.conn().prepare(
         "SELECT f.path, f.size, f.mtime FROM files f
          JOIN folders d ON d.id = f.folder_id
-         WHERE d.path = ?1 OR d.path LIKE ?1 || ?2 || '%'",
+         WHERE (d.path = ?1 OR d.path LIKE ?1 || ?2 || '%')
+           AND instr(f.path, ?3) = 0",
     )?;
-    let rows = stmt.query_map(rusqlite::params![root_str, sep], |r| {
+    let rows = stmt.query_map(rusqlite::params![root_str, sep, originals], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, f64>(2)?))
     })?;
     let mut map = HashMap::new();

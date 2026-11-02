@@ -29,7 +29,7 @@ pub use portable::{ExportFormat, ExportReport, ExportSections, PortableExport};
 pub use query::{FileQuery, FileSort};
 pub use relocate::BatchFile;
 pub use stacks::{StackKind, StackSuggestion, DEFAULT_PAIR_WINDOW_SECS};
-pub use sync::{sidecar_path, SyncError, SyncStats};
+pub use sync::{sidecar_path, SyncError, SyncStats, ORIGINALS_DIR};
 pub use trash::{TrashAction, TrashEntry, UndoReport, DEFAULT_TRASH_WINDOW_DAYS};
 
 use std::path::{Path, PathBuf};
@@ -953,6 +953,44 @@ impl Catalog {
     pub fn remove_file(&mut self, file_id: i64) -> Result<bool> {
         let removed = self.conn.execute("DELETE FROM files WHERE id = ?1", [file_id])?;
         Ok(removed > 0)
+    }
+
+    /// Catalog one on-disk media file (TASK-04-016): seeds the folder row,
+    /// upserts the `files` row from the file's metadata, and returns the id.
+    /// Used by Save for the archived original in `.originals/`, which the
+    /// scanner deliberately never walks.
+    pub fn register_file(&mut self, path: &Path, media_type: &str) -> Result<i64> {
+        let dir = path.parent().ok_or_else(|| {
+            CatalogError::InvalidQuery(format!("{} has no parent folder", path.display()))
+        })?;
+        let folder_id = self.seed_folder(dir.to_string_lossy().as_ref())?;
+        let meta = std::fs::metadata(path)?;
+        self.conn.execute(
+            "INSERT INTO files(folder_id, path, filename, size, mtime, media_type)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(path) DO UPDATE SET
+                folder_id = excluded.folder_id,
+                filename = excluded.filename,
+                size = excluded.size,
+                mtime = excluded.mtime,
+                media_type = excluded.media_type",
+            rusqlite::params![
+                folder_id,
+                path.to_string_lossy(),
+                path.file_name().and_then(|n| n.to_str()).unwrap_or_default(),
+                meta.len() as i64,
+                meta.modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map_or(0.0, |d| d.as_secs_f64()),
+                media_type
+            ],
+        )?;
+        Ok(self.conn.query_row(
+            "SELECT id FROM files WHERE path = ?1",
+            [path.to_string_lossy().as_ref()],
+            |r| r.get(0),
+        )?)
     }
 
     /// The grid's items restricted to the selected folders (TASK-01-015):

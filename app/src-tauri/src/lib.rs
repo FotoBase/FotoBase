@@ -29,6 +29,7 @@ pub mod preview;
 pub mod rating;
 pub mod rebuild;
 pub mod rebuild_harness;
+pub mod save;
 pub mod settings;
 pub mod stream;
 pub mod tag_commands;
@@ -1310,6 +1311,48 @@ fn set_recipe(
     })
 }
 
+/// Save (TASK-04-016, PLAN §2F): the one path that modifies an original.
+/// The untouched original is archived into the sibling `.originals/`
+/// folder, the recipe renders at full resolution into the original path
+/// (atomic write), and the saved file is recorded as a stacked version.
+#[tauri::command]
+fn save_photo(
+    file_id: i64,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::save::SavedPhoto, String> {
+    let saved = with_catalog_sync(&state, |cat| {
+        crate::save::save_photo(cat, file_id).map_err(|e| {
+            fotobase_catalog::SyncError::Catalog(fotobase_catalog::CatalogError::Corrupted(
+                e.to_string(),
+            ))
+        })
+    })?;
+    let _ = app.emit("library-changed", ());
+    Ok(saved)
+}
+
+/// Revert (TASK-04-016): restore the archived original byte-identical,
+/// clear the recipe and the save's stack record.
+#[tauri::command]
+fn revert_photo(
+    file_id: i64,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    with_catalog_sync(&state, |cat| {
+        crate::save::revert_photo(cat, file_id)
+            .map_err(|e| {
+                fotobase_catalog::SyncError::Catalog(fotobase_catalog::CatalogError::Corrupted(
+                    e.to_string(),
+                ))
+            })
+            .and(Ok(()))
+    })?;
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
 /// Render (or fetch from cache) the photo's edited preview at screen
 /// resolution in the bounded job queue (visible-first priority). Returns
 /// the `preview://` URI the edit view's `<img>` uses — no image bytes over
@@ -2143,6 +2186,8 @@ pub fn run() {
             neutral_balance,
             get_recipe,
             set_recipe,
+            save_photo,
+            revert_photo,
             render_edit_preview,
             quit_from_tray,
             close_main_window,

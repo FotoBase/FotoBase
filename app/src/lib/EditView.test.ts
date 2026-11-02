@@ -222,3 +222,84 @@ describe("EditView", () => {
     vi.useRealTimers();
   });
 });
+
+// TASK-04-016: Save writes the edited pixels to the original path (the
+// backend archives the untouched original into `.originals/`); Revert
+// restores it. The component's job is wiring the two commands and keeping
+// its session state honest.
+describe("EditView save & revert", () => {
+  it("save is disabled while there are no edits", () => {
+    render(EditView, props());
+    expect(
+      (screen.getByTestId("edit-save") as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it("an edit enables Save, which invokes save_photo for the photo", async () => {
+    vi.useFakeTimers();
+    render(EditView, props());
+    await settleMicro();
+    fireEvent.click(screen.getByTestId("edit-tab-effects"));
+    await settleMicro();
+    fireEvent.click(screen.getByRole("button", { name: "B&W" }));
+    await settleMicro();
+    invokeMock.mockClear();
+    vi.useRealTimers();
+    await settleMicro();
+
+    const save = screen.getByTestId("edit-save") as HTMLButtonElement;
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    await settle();
+    expect(invokeMock).toHaveBeenCalledWith("save_photo", { fileId: 1 });
+    expect(screen.getByTestId("edit-save").textContent).toBe("Saved");
+  });
+
+  it("a save failure is surfaced, not swallowed", async () => {
+    vi.useFakeTimers();
+    render(EditView, props());
+    await settleMicro();
+    fireEvent.click(screen.getByTestId("edit-tab-effects"));
+    await settleMicro();
+    fireEvent.click(screen.getByRole("button", { name: "B&W" }));
+    await settleMicro();
+    invokeMock.mockClear();
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "save_photo" ? Promise.reject("denied") : Promise.resolve(null),
+    );
+    vi.useRealTimers();
+    await settleMicro();
+
+    fireEvent.click(screen.getByTestId("edit-save"));
+    await settle();
+    expect(
+      (screen.getByTestId("edit-save-error") as HTMLElement).textContent,
+    ).toContain("denied");
+  });
+
+  it("revert invokes revert_photo and resets the session to no edits", async () => {
+    invokeMock.mockImplementation((_cmd: string, args: { fileId: number }) =>
+      _cmd === "get_recipe"
+        ? Promise.resolve(
+            JSON.stringify({
+              spec: "fotobase.recipe",
+              version: 1,
+              ops: [{ type: "bw", params: { amount: 1 } }],
+            }),
+          )
+        : Promise.resolve(null),
+    );
+    render(EditView, props());
+    await settle();
+    invokeMock.mockClear();
+
+    fireEvent.click(screen.getByTestId("edit-revert"));
+    await settle();
+    expect(invokeMock).toHaveBeenCalledWith("revert_photo", { fileId: 1 });
+    // The session is clean again: Save is disabled (no edits) and the
+    // stored recipe was cleared.
+    expect(
+      (screen.getByTestId("edit-save") as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+});

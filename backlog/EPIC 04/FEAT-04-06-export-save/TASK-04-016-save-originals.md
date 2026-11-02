@@ -1,6 +1,6 @@
 # task: implement save with originals backup
 
-**Feature:** [FEAT-04-06-export-save](FEAT-04-06-export-save.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-06-export-save](FEAT-04-06-export-save.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-11-02)
 
 ## Description
 Explicit "Save" per the §F spec: write edited pixels to the original path, move the untouched original to a sibling `.originals/` folder, record the saved file as a stacked version; Revert restores from `.originals/` (PLAN §2F).
@@ -22,5 +22,5 @@ Explicit "Save" per the §F spec: write edited pixels to the original path, move
 - Integration: saved file appears as stacked version in the grid.
 
 ## Acceptance criteria
-- [ ] 04-016: Save writes edited pixels to original path, original → `.originals/`, recorded as stacked version.
-- [ ] 04-016: Revert restores the original byte-identical.
+- [x] 04-016: Save writes edited pixels to original path, original → `.originals/`, recorded as stacked version.
+- [x] 04-016: Revert restores the original byte-identical.
