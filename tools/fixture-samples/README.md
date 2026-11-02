@@ -14,3 +14,12 @@ and committed (a few KB). Do not regenerate per CI run; do not grow these.
     sips -s format avif -s formatOptions low sample-1.heic --out sample-1.avif
 
 Same rules apply: committed once, a few KB, never regenerated in CI.
+
+`sample-1.jxl` (TASK-04-014) is a 64×48 JPEG XL, produced once with
+pillow-jxl-plugin (libjxl encoder bindings; no `cjxl` system dependency in
+CI — jxl-oxide is decode-only so no Rust encoder exists):
+
+    python3 -c "from PIL import Image; import pillow_jxl; \
+Image.new('RGB',(64,48)).save('sample-1.jxl', quality=90)"
+
+Same rules apply: committed once, a few KB, never regenerated in CI.

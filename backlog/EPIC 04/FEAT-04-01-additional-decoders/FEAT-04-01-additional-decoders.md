@@ -9,7 +9,7 @@
 - JPEG XL decodes for thumbnails and full export; both decoders feed the same render/job pipelines without special cases.
 
 - [x] `04-013` (L) RAW decode via LibRaw bindings; embedded-JPEG-preview fallback for unsupported cameras.
-- [ ] `04-014` (M) JPEG XL via jxl-oxide.
+- [x] `04-014` (M) JPEG XL via jxl-oxide.
 
 ## Tasks
 

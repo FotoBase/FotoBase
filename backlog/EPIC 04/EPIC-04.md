@@ -31,7 +31,7 @@
 ## feat: additional decoders
 
 - [x] `04-013` (L) RAW decode via LibRaw bindings; embedded-JPEG-preview fallback for unsupported cameras.
-- [ ] `04-014` (M) JPEG XL via jxl-oxide.
+- [x] `04-014` (M) JPEG XL via jxl-oxide.
 
 ## feat: export & save
 
