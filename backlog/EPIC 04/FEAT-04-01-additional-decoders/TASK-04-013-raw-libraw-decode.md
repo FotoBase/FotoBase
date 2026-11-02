@@ -1,6 +1,6 @@
 # task: implement raw decoding with libraw
 
-**Feature:** [FEAT-04-01-additional-decoders](FEAT-04-01-additional-decoders.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-01-additional-decoders](FEAT-04-01-additional-decoders.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-11-02)
 
 ## Description
 Decode camera RAW files via LibRaw bindings in the `render` crate, with an embedded-JPEG-preview fallback for bodies LibRaw can't decode (PLAN §4, §10 risk row "LibRaw coverage"). RAWs feed the same thumbnail/preview/export pipelines as JPEG — no special cases.
@@ -23,6 +23,6 @@ Decode camera RAW files via LibRaw bindings in the `render` crate, with an embed
 - E2e: RAW+JPEG pair from fixture set stacks and exports (with FEAT-04-06 export).
 
 ## Acceptance criteria
-- [ ] 04-013: RAW files from each major vendor decode via LibRaw in thumbnail, preview, and export paths.
-- [ ] 04-013: Unsupported bodies fall back to embedded JPEG preview; no hard failures.
-- [ ] 04-013: RAW+JPEG pair stacks and exports correctly per vendor fixture.
+- [x] 04-013: RAW files from each major vendor decode via LibRaw in thumbnail, preview, and export paths.
+- [x] 04-013: Unsupported bodies fall back to embedded JPEG preview; no hard failures.
+- [x] 04-013: RAW+JPEG pair stacks and exports correctly per vendor fixture.

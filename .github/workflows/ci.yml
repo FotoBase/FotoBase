@@ -51,13 +51,15 @@ jobs:
       - uses: actions/checkout@v4
 
       # TASK-01-012: libde265 (HEIC/HEVC) + dav1d (AVIF/AV1) for the embedded
-      # libheif build in fotobase-render. Bottles, so this is fast.
-      - name: Install HEIC/AVIF codec deps
+      # libheif build in fotobase-render. TASK-04-013: libraw for the RAW
+      # decode path in the same crate (pkg-config `libraw_r`). Bottles, so
+      # this is fast.
+      - name: Install HEIC/AVIF codec deps + LibRaw
         id: codec-deps
         if: runner.os == 'macOS'
         run: |
-          brew install libde265 dav1d
-          echo "key=$(brew list --versions libde265 dav1d | tr ' /\n' '--_')" >> "$GITHUB_OUTPUT"
+          brew install libde265 dav1d libraw
+          echo "key=$(brew list --versions libde265 dav1d libraw | tr ' /\n' '--_')" >> "$GITHUB_OUTPUT"
 
       - name: Install Linux system deps (Tauri/WebKitGTK build deps)
         if: runner.os == 'Linux'
@@ -66,7 +68,8 @@ jobs:
         # links against. AVIF goes through libaom here because ubuntu-22.04
         # ships dav1d 0.9, whose API is incompatible with the dav1d plugin
         # of embedded libheif 1.23 (needs dav1d >= 1.0); macOS gets dav1d
-        # via brew, which is new enough.
+        # via brew, which is new enough. libraw-dev: RAW decode via LibRaw
+        # (TASK-04-013, pkg-config `libraw_r`).
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -80,7 +83,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libde265-dev \
-            libaom-dev
+            libaom-dev \
+            libraw-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:
