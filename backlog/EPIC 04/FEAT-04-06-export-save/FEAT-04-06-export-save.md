@@ -12,11 +12,11 @@
 - [ ] `04-015` (L) Export dialog: original or custom resize (H/V pixel limit, slider + input), quality presets (Auto/Normal/Maximum/Minimum/Custom %), numbered filenames, text watermark; edits baked in.
 - [ ] `04-016` (M) "Save" per §F spec: write edited pixels to original path, original → sibling `.originals/`, record as stacked version; Revert restores from `.originals/`.
 - [ ] `04-017` (M) "Save as…" and "Save a copy" (never touch the original).
-- [ ] `04-018` (M) Export engine runs recipe at full resolution (shared with 04-001); color-managed output.
+- [x] `04-018` (M) Export engine runs recipe at full resolution (shared with 04-001); color-managed output.
 
 ## Tasks
 
 - [ ] [TASK-04-015-export-dialog.md](TASK-04-015-export-dialog.md) — build export dialog
 - [ ] [TASK-04-016-save-originals.md](TASK-04-016-save-originals.md) — implement save with originals backup
 - [ ] [TASK-04-017-save-as-copy.md](TASK-04-017-save-as-copy.md) — implement save-as and save-a-copy
-- [ ] [TASK-04-018-fullres-export-engine.md](TASK-04-018-fullres-export-engine.md) — build full-resolution color-managed export engine
+- [x] [TASK-04-018-fullres-export-engine.md](TASK-04-018-fullres-export-engine.md) — build full-resolution color-managed export engine
