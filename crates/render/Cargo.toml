@@ -40,6 +40,8 @@ lcms2 = "6"
 miniz_oxide = "0.8"
 # TASK-04-014: JPEG XL via jxl-oxide (PLAN §4: pure Rust decoder).
 jxl-oxide = { version = "0.11", optional = true }
+# TASK-04-019: perceptual hashing for the near-duplicate finder.
+image_hasher = "3.1"
 
 # libheif-rs builds an embedded libheif (static) on non-Windows targets, so
 # decode needs no system libheif — only the codec plugins it links against

@@ -42,4 +42,4 @@
 
 ## feat: duplicates
 
-- [ ] `04-019` (M) Near-duplicate finder: perceptual hash (`image_hasher`) across catalog; review UI with keep/suggest-delete.
+- [x] `04-019` (M) Near-duplicate finder: perceptual hash (`image_hasher`) across catalog; review UI with keep/suggest-delete.

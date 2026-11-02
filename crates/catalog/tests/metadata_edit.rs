@@ -271,6 +271,7 @@ fn migrating_an_older_catalog_makes_the_next_rebuild_reread_sidecars() {
          ALTER TABLE files DROP COLUMN stack_id;
          ALTER TABLE files DROP COLUMN stack_role;
          ALTER TABLE files DROP COLUMN has_recipe;
+         ALTER TABLE files DROP COLUMN phash;
          ALTER TABLE metadata DROP COLUMN artist;
          ALTER TABLE metadata DROP COLUMN copyright;",
     )

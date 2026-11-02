@@ -60,6 +60,8 @@ pub mod color;
 /// Full-resolution color-managed export (TASK-04-018).
 pub mod export;
 pub mod icc;
+/// Near-duplicate perceptual hashing (TASK-04-019).
+pub mod phash;
 /// LibRaw FFI (TASK-04-013) — isolated crate boundary for the LGPL/CDDL
 /// library, per the task spec ("own bindings", "isolated crate boundary").
 #[cfg(all(feature = "raw", not(target_os = "windows")))]
@@ -73,6 +75,7 @@ pub use export::{
     ExportResult,
 };
 pub use icc::extract_icc;
+pub use phash::{perceptual_hash, phash_job, PerceptualHash};
 
 /// Build a [`fotobase_core::buffer::LinearImage`] from packed RGB8 pixels.
 pub(crate) fn rgb_to_linear(rgb: &[u8], w: u32, h: u32) -> fotobase_core::buffer::LinearImage {

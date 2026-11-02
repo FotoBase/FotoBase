@@ -22,6 +22,7 @@
   import QuickTags from "./lib/QuickTags.svelte";
   import StackPicker from "./lib/StackPicker.svelte";
   import StackSuggestionsDialog from "./lib/StackSuggestionsDialog.svelte";
+  import DuplicateFinderDialog from "./lib/DuplicateFinderDialog.svelte";
   import SearchBar from "./lib/SearchBar.svelte";
   import FilterBar from "./lib/FilterBar.svelte";
   import { cutoffDate } from "./lib/filters";
@@ -74,6 +75,8 @@
   // Stacking (TASK-03-021): suggested RAW+JPEG pairs / edited versions, and
   // the picker a stack badge opens.
   let stackSuggestionsOpen = $state(false);
+  // Near-duplicate finder (TASK-04-019): opened from the toolbar.
+  let duplicateFinderOpen = $state(false);
   let stackPicker = $state<{ open: boolean; stackId: string; x: number; y: number }>({
     open: false,
     stackId: "",
@@ -829,6 +832,13 @@
   >
     {t("app.stacks")}
   </button>
+  <button
+    type="button"
+    onclick={() => (duplicateFinderOpen = true)}
+    data-testid="open-duplicate-finder"
+  >
+    {t("app.duplicates")}
+  </button>
   {#if settings}
     <OptionsDialog
       bind:open={optionsOpen}
@@ -855,6 +865,7 @@
     onmigrated={() => void refreshLibrary()}
   />
   <StackSuggestionsDialog bind:open={stackSuggestionsOpen} onapplied={() => void refreshView()} />
+  <DuplicateFinderDialog bind:open={duplicateFinderOpen} onapplied={() => void refreshView()} />
   <StackPicker
     bind:open={stackPicker.open}
     stackId={stackPicker.stackId}
