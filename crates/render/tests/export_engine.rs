@@ -66,7 +66,12 @@ fn export_renders_the_recipe_at_full_resolution() {
         &src,
         &out,
         BW,
-        &ExportOptions { format: ExportFormat::Jpeg, quality: 92, resize_max_edge: None },
+        &ExportOptions {
+            format: ExportFormat::Jpeg,
+            quality: 92,
+            resize_max_edge: None,
+            ..ExportOptions::default()
+        },
     )
     .unwrap();
 
@@ -87,7 +92,12 @@ fn export_matches_the_preview_within_tolerance() {
         &src,
         &out,
         BW,
-        &ExportOptions { format: ExportFormat::Jpeg, quality: 95, resize_max_edge: None },
+        &ExportOptions {
+            format: ExportFormat::Jpeg,
+            quality: 95,
+            resize_max_edge: None,
+            ..ExportOptions::default()
+        },
     )
     .unwrap();
 
@@ -145,7 +155,12 @@ fn export_honors_the_embedded_profile_and_tags_the_output() {
         &src,
         &out,
         BW,
-        &ExportOptions { format: ExportFormat::Jpeg, quality: 92, resize_max_edge: None },
+        &ExportOptions {
+            format: ExportFormat::Jpeg,
+            quality: 92,
+            resize_max_edge: None,
+            ..ExportOptions::default()
+        },
     )
     .unwrap();
 
@@ -161,7 +176,12 @@ fn export_honors_the_embedded_profile_and_tags_the_output() {
         &plain,
         &out2,
         BW,
-        &ExportOptions { format: ExportFormat::Jpeg, quality: 92, resize_max_edge: None },
+        &ExportOptions {
+            format: ExportFormat::Jpeg,
+            quality: 92,
+            resize_max_edge: None,
+            ..ExportOptions::default()
+        },
     )
     .unwrap();
     assert!(r2.output_profile.is_some(), "untagged source exports as tagged sRGB");
@@ -178,7 +198,12 @@ async fn export_runs_as_a_queue_job() {
         src.clone(),
         out.clone(),
         BW.to_string(),
-        ExportOptions { format: ExportFormat::Jpeg, quality: 90, resize_max_edge: None },
+        ExportOptions {
+            format: ExportFormat::Jpeg,
+            quality: 90,
+            resize_max_edge: None,
+            ..ExportOptions::default()
+        },
     );
     let queue = fotobase_jobs::Queue::new(2);
     let handle = queue.enqueue("test-key", fotobase_jobs::Priority::Visible, job).await.unwrap();
@@ -197,7 +222,12 @@ fn export_resizes_when_asked_but_never_upscales() {
         &src,
         &out,
         BW,
-        &ExportOptions { format: ExportFormat::Jpeg, quality: 90, resize_max_edge: Some(16) },
+        &ExportOptions {
+            format: ExportFormat::Jpeg,
+            quality: 90,
+            resize_max_edge: Some(16),
+            ..ExportOptions::default()
+        },
     )
     .unwrap();
     assert_eq!((r.width, r.height), (16, 12));
@@ -208,7 +238,12 @@ fn export_resizes_when_asked_but_never_upscales() {
         &src,
         &out2,
         BW,
-        &ExportOptions { format: ExportFormat::Jpeg, quality: 90, resize_max_edge: Some(4096) },
+        &ExportOptions {
+            format: ExportFormat::Jpeg,
+            quality: 90,
+            resize_max_edge: Some(4096),
+            ..ExportOptions::default()
+        },
     )
     .unwrap();
     assert_eq!((r2.width, r2.height), (32, 24));
@@ -226,7 +261,12 @@ fn export_never_touches_the_original_and_rejects_bad_recipes() {
             &src,
             &out,
             "{not json",
-            &ExportOptions { format: ExportFormat::Jpeg, quality: 90, resize_max_edge: None },
+            &ExportOptions {
+                format: ExportFormat::Jpeg,
+                quality: 90,
+                resize_max_edge: None,
+                ..ExportOptions::default()
+            },
         )
         .is_err(),
         "malformed recipe must fail loudly, not export the original"
@@ -249,7 +289,12 @@ fn large_image_render_stays_within_the_memory_budget() {
     let peak = fotobase_render::export_peak_bytes(
         &src,
         BW,
-        &ExportOptions { format: ExportFormat::Jpeg, quality: 90, resize_max_edge: None },
+        &ExportOptions {
+            format: ExportFormat::Jpeg,
+            quality: 90,
+            resize_max_edge: None,
+            ..ExportOptions::default()
+        },
         256 * 256, // tile budget: one tile's worth of RGB8 pixels
     )
     .unwrap();
@@ -275,7 +320,12 @@ fn export_png_is_supported() {
         &src,
         &out,
         BW,
-        &ExportOptions { format: ExportFormat::Png, quality: 90, resize_max_edge: None },
+        &ExportOptions {
+            format: ExportFormat::Png,
+            quality: 90,
+            resize_max_edge: None,
+            ..ExportOptions::default()
+        },
     )
     .unwrap();
     assert_eq!(out.extension().unwrap(), "png");
@@ -319,7 +369,12 @@ fn multi_strip_export_matches_the_whole_image_engine_for_every_op_class() {
             &src,
             &out,
             recipe,
-            &ExportOptions { format: ExportFormat::Png, quality: 90, resize_max_edge: None },
+            &ExportOptions {
+                format: ExportFormat::Png,
+                quality: 90,
+                resize_max_edge: None,
+                ..ExportOptions::default()
+            },
         )
         .unwrap();
         let (expected, ew, eh) = shared_engine_pixels(&src, recipe);
@@ -338,7 +393,12 @@ fn png_export_is_actually_tagged_with_the_reported_profile() {
         &src,
         &out,
         BW,
-        &ExportOptions { format: ExportFormat::Png, quality: 90, resize_max_edge: None },
+        &ExportOptions {
+            format: ExportFormat::Png,
+            quality: 90,
+            resize_max_edge: None,
+            ..ExportOptions::default()
+        },
     )
     .unwrap();
     let embedded = fotobase_render::extract_icc(&std::fs::read(&out).unwrap());
@@ -374,7 +434,12 @@ fn wide_gamut_source_pixels_are_converted_not_just_tagged() {
         &src,
         &out,
         none,
-        &ExportOptions { format: ExportFormat::Png, quality: 90, resize_max_edge: None },
+        &ExportOptions {
+            format: ExportFormat::Png,
+            quality: 90,
+            resize_max_edge: None,
+            ..ExportOptions::default()
+        },
     )
     .unwrap();
     let (raw, _, _) = shared_engine_pixels(&src, none);
@@ -382,5 +447,123 @@ fn wide_gamut_source_pixels_are_converted_not_just_tagged() {
     assert!(
         rms(&raw, &got) > 3.0,
         "wide-gamut green must be converted into sRGB, not passed through"
+    );
+}
+
+// TASK-04-015: the export dialog's horizontal/vertical pixel limits — the
+// output fits inside the limit box (the tighter limit wins), never upscaled.
+#[test]
+fn export_honors_horizontal_and_vertical_resize_limits() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let landscape = gen_jpeg(&tmp.path().join("photos"), "land.jpg", 64, 32);
+    let portrait = gen_jpeg(&tmp.path().join("photos"), "port.jpg", 32, 64);
+
+    // Landscape limited by width.
+    let r = export_image(
+        &landscape,
+        &tmp.path().join("out").join("1.jpg"),
+        BW,
+        &ExportOptions { resize_max_width: Some(32), ..ExportOptions::default() },
+    )
+    .unwrap();
+    assert_eq!((r.width, r.height), (32, 16));
+
+    // Landscape limited by height (tighter than the width limit would be).
+    let r = export_image(
+        &landscape,
+        &tmp.path().join("out").join("2.jpg"),
+        BW,
+        &ExportOptions { resize_max_height: Some(16), ..ExportOptions::default() },
+    )
+    .unwrap();
+    assert_eq!((r.width, r.height), (32, 16));
+
+    // Landscape limited in both directions: the tighter limit wins.
+    let r = export_image(
+        &landscape,
+        &tmp.path().join("out").join("3.jpg"),
+        BW,
+        &ExportOptions {
+            resize_max_width: Some(32),
+            resize_max_height: Some(8),
+            ..ExportOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!((r.width, r.height), (16, 8));
+
+    // Portrait limited by height.
+    let r = export_image(
+        &portrait,
+        &tmp.path().join("out").join("4.jpg"),
+        BW,
+        &ExportOptions { resize_max_height: Some(32), ..ExportOptions::default() },
+    )
+    .unwrap();
+    assert_eq!((r.width, r.height), (16, 32));
+
+    // Portrait limited by width.
+    let r = export_image(
+        &portrait,
+        &tmp.path().join("out").join("5.jpg"),
+        BW,
+        &ExportOptions { resize_max_width: Some(16), ..ExportOptions::default() },
+    )
+    .unwrap();
+    assert_eq!((r.width, r.height), (16, 32));
+
+    // Limits larger than the source: never upscaled.
+    let r = export_image(
+        &landscape,
+        &tmp.path().join("out").join("6.jpg"),
+        BW,
+        &ExportOptions {
+            resize_max_width: Some(4096),
+            resize_max_height: Some(4096),
+            ..ExportOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!((r.width, r.height), (64, 32));
+}
+
+// TASK-04-015: the watermark is stamped onto the output pixels at export
+// time — absent without it, present (and different) with it, confined to
+// its anchored region so the photo itself is otherwise unchanged.
+#[test]
+fn export_stamps_the_watermark_onto_the_output_pixels() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let src = gen_jpeg(&tmp.path().join("photos"), "w.jpg", 64, 32);
+
+    let plain = tmp.path().join("out").join("plain.jpg");
+    let plain_r = export_image(&src, &plain, BW, &ExportOptions::default()).unwrap();
+    let stamped = tmp.path().join("out").join("stamped.jpg");
+    let stamped_r = export_image(
+        &src,
+        &stamped,
+        BW,
+        &ExportOptions { watermark: Some("FOTOBASE".into()), ..ExportOptions::default() },
+    )
+    .unwrap();
+
+    assert_eq!((plain_r.width, plain_r.height), (stamped_r.width, stamped_r.height));
+    let (plain_px, pw, ph) = decode_rgb(&plain);
+    let (stamped_px, sw, sh) = decode_rgb(&stamped);
+    assert_eq!((pw, ph), (sw, sh));
+
+    let changed: Vec<usize> = plain_px
+        .iter()
+        .zip(stamped_px.iter())
+        .enumerate()
+        .filter(|(_, (a, b))| a.abs_diff(**b) > 24)
+        .map(|(i, _)| i / 3)
+        .collect();
+    assert!(!changed.is_empty(), "watermark must change some pixels");
+
+    let (w, h) = (pw as usize, ph as usize);
+    let region = |px: usize| (px % w) < w / 2 && (px / w) >= h - h / 5;
+    assert!(
+        changed.iter().all(|&px| region(px)),
+        "watermark pixels must stay in the bottom-left band"
     );
 }

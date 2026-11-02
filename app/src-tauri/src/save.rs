@@ -119,7 +119,12 @@ pub fn save_photo(cat: &mut Catalog, file_id: i64) -> Result<SavedPhoto, SaveErr
     // 2. Render into the original path (atomic inside the export engine).
     //    A failure here is recoverable: the original sits untouched in
     //    `.originals/`.
-    let opts = ExportOptions { format, quality: SAVE_JPEG_QUALITY, resize_max_edge: None };
+    let opts = ExportOptions {
+        format,
+        quality: SAVE_JPEG_QUALITY,
+        resize_max_edge: None,
+        ..ExportOptions::default()
+    };
     if let Err(e) = export_image(&render_src, &path, &recipe, &opts) {
         if !archived.exists() || path.exists() {
             // Best effort: put the original back so the photo is exactly
@@ -401,7 +406,12 @@ fn save_edited_copy(
                 dest.extension().and_then(|e| e.to_str()).unwrap_or("").to_string(),
             ));
         };
-        let opts = ExportOptions { format, quality: SAVE_JPEG_QUALITY, resize_max_edge: None };
+        let opts = ExportOptions {
+            format,
+            quality: SAVE_JPEG_QUALITY,
+            resize_max_edge: None,
+            ..ExportOptions::default()
+        };
         export_image(&render_src, &dest, recipe, &opts)?;
     } else {
         // No edits: the copy is the original bytes, verbatim.

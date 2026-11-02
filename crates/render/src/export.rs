@@ -33,8 +33,8 @@ pub enum ExportFormat {
     Png,
 }
 
-/// Export parameters (TASK-04-018; resize/quality presets are wired to the
-/// dialog by TASK-04-015).
+/// Export parameters (TASK-04-015: resize H/V limits, quality, watermark;
+/// TASK-04-018 established the engine).
 #[derive(Debug, Clone)]
 pub struct ExportOptions {
     pub format: ExportFormat,
@@ -43,6 +43,27 @@ pub struct ExportOptions {
     /// Longest-edge pixel limit; `None` exports at full resolution and the
     /// source size is never upscaled either way.
     pub resize_max_edge: Option<u32>,
+    /// Horizontal pixel limit (TASK-04-015 §2J): the output fits inside the
+    /// limit box (never upscaled). `None` = unlimited.
+    pub resize_max_width: Option<u32>,
+    /// Vertical pixel limit (TASK-04-015 §2J). `None` = unlimited.
+    pub resize_max_height: Option<u32>,
+    /// Watermark text stamped onto the output pixels at export time
+    /// (TASK-04-015 — not a recipe op). `None`/empty = no watermark.
+    pub watermark: Option<String>,
+}
+
+impl Default for ExportOptions {
+    fn default() -> Self {
+        Self {
+            format: ExportFormat::Jpeg,
+            quality: 90,
+            resize_max_edge: None,
+            resize_max_width: None,
+            resize_max_height: None,
+            watermark: None,
+        }
+    }
 }
 
 /// Result of a successful export.
@@ -123,11 +144,30 @@ pub fn export_image(
         (out.width, out.height, to_srgb8(&out.data))
     };
 
-    let (dst_w, dst_h) = match opts.resize_max_edge {
-        Some(max_edge) => fit(out_w, out_h, max_edge),
-        None => (out_w, out_h),
-    };
-    let final_rgb = resize(&final_rgb, out_w, out_h, dst_w, dst_h);
+    // §2J resize: the output fits inside the horizontal/vertical limit box
+    // (the tighter of the two limits wins), never upscaled. The legacy
+    // longest-edge limit still applies on top for existing callers.
+    let (mut dst_w, mut dst_h) = (out_w, out_h);
+    let sw = opts.resize_max_width.map_or(1.0, |m| m as f64 / out_w as f64);
+    let sh = opts.resize_max_height.map_or(1.0, |m| m as f64 / out_h as f64);
+    let s = sw.min(sh).min(1.0);
+    if s < 1.0 {
+        dst_w = ((out_w as f64 * s).round() as u32).max(1);
+        dst_h = ((out_h as f64 * s).round() as u32).max(1);
+    }
+    if let Some(max_edge) = opts.resize_max_edge {
+        let (w, h) = fit(dst_w, dst_h, max_edge);
+        dst_w = w;
+        dst_h = h;
+    }
+    let mut final_rgb = resize(&final_rgb, out_w, out_h, dst_w, dst_h);
+
+    // Watermark (TASK-04-015): stamped onto the *output* pixels after the
+    // resize, so it keeps a constant relative size regardless of the export
+    // resolution. Not a recipe op — it must never appear in previews.
+    if let Some(text) = opts.watermark.as_deref().filter(|t| !t.is_empty()) {
+        fotobase_core::apply::stamp_text(&mut final_rgb, dst_w, dst_h, text);
+    }
 
     // Color-managed conversion: source profile → output (sRGB). Untagged
     // sources are already sRGB-decoded pixels, so the transform is identity

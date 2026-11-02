@@ -912,6 +912,49 @@ fn text(img: &LinearImage, op: &Op) -> LinearImage {
     out
 }
 
+/// Stamp text directly onto sRGB8 output pixels (TASK-04-015): the export
+/// watermark is not a recipe op, it is applied at export time to the final
+/// output buffer. Same glyph rasterizer as the recipe `text` op, so export
+/// and recipe text look identical. White, anchored to the bottom-left of
+/// the image with a small margin, cell height = 1/25 of the image height
+/// (min 3 px, like the recipe op).
+pub fn stamp_text(rgb: &mut [u8], w: u32, h: u32, s: &str) {
+    if s.is_empty() || w == 0 || h == 0 {
+        return;
+    }
+    let cell = (h as f64 / 25.0).max(3.0);
+    let advance = cell * 6.0 / 7.0;
+    let width_px = advance * s.chars().count() as f64;
+    let height_px = cell;
+    let margin = cell / 2.0;
+    // Anchor above the bottom margin; glyphs grow downward from the top of
+    // the cell.
+    let ox = margin;
+    let oy = (h as f64 - margin - height_px).max(0.0);
+    for py in 0..h {
+        for px in 0..w {
+            let fx = px as f64 + 0.5 - ox;
+            let fy = py as f64 + 0.5 - oy;
+            if fx < 0.0 || fy < 0.0 || fx >= width_px || fy >= height_px {
+                continue;
+            }
+            let char_idx = (fx / advance) as usize;
+            let Some(bits) = s.chars().nth(char_idx).and_then(glyph) else { continue };
+            let col = ((fx - char_idx as f64 * advance) / (cell / 7.0)) as usize;
+            let row = (fy / (cell / 7.0)) as usize;
+            if col >= 5 || row >= 7 || bits[col] & (1 << row) == 0 {
+                continue;
+            }
+            let i = ((py as usize * w as usize) + px as usize) * 3;
+            // White text, blended so Anti-alias-free stamping stays readable
+            // on both dark and light photos.
+            rgb[i] = rgb[i].saturating_mul(64).saturating_add(191);
+            rgb[i + 1] = rgb[i + 1].saturating_mul(64).saturating_add(191);
+            rgb[i + 2] = rgb[i + 2].saturating_mul(64).saturating_add(191);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1000,6 +1043,30 @@ mod tests {
         let b = text(&i, &o);
         assert_eq!(a.data, b.data);
         assert!(a.data.iter().any(|&v| v != 0.0) && a.data != i.data);
+    }
+
+    // TASK-04-015: the export watermark stamps the same glyphs onto an
+    // sRGB8 buffer in place — deterministic, confined to its region.
+    #[test]
+    fn stamp_text_marks_the_bottom_left_region_deterministically() {
+        let mut a = vec![40u8; 64 * 64 * 3];
+        let mut b = vec![40u8; 64 * 64 * 3];
+        stamp_text(&mut a, 64, 64, "AB");
+        stamp_text(&mut b, 64, 64, "AB");
+        assert_eq!(a, b, "stamping is deterministic");
+        assert!(a.iter().any(|&v| v > 200), "glyph pixels are brightened");
+        // Top-left quadrant untouched: the stamp lives in the bottom-left.
+        let untouched = a[..(32 * 32 * 3)] == b[..(32 * 32 * 3)];
+        assert!(untouched, "stamp must stay in its anchored region");
+    }
+
+    #[test]
+    fn stamp_text_ignores_empty_text_and_empty_images() {
+        let mut rgb = vec![40u8; 4 * 4 * 3];
+        let before = rgb.clone();
+        stamp_text(&mut rgb, 4, 4, "");
+        assert_eq!(rgb, before);
+        stamp_text(&mut rgb, 0, 0, "AB");
     }
 
     #[test]

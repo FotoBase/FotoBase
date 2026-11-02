@@ -234,6 +234,7 @@ fn resaving_renders_from_the_archived_original_not_the_saved_pixels() {
             format: fotobase_render::ExportFormat::Jpeg,
             quality: fotobase_lib::save::SAVE_JPEG_QUALITY,
             resize_max_edge: None,
+            ..fotobase_render::ExportOptions::default()
         },
     )
     .unwrap();

@@ -21,6 +21,7 @@ pub mod datetime_commands;
 pub mod display_profile;
 pub mod edit;
 pub mod emit_pacer;
+pub mod export_dialog;
 pub mod file_menu;
 pub mod folder_manager;
 pub mod import;
@@ -62,6 +63,9 @@ const DATETIME_QUEUE_CAPACITY: usize = 4;
 /// Capacity of the portable-export queue (TASK-03-023): bounded, per PLAN
 /// §3 rule 4; exports are cheap reads, the single worker serializes them.
 const EXPORT_QUEUE_CAPACITY: usize = 2;
+/// Capacity of the photo-export queue (TASK-04-015): one batch at a time,
+/// the single worker serializes them (PLAN §3 rule 4).
+const PHOTO_EXPORT_QUEUE_CAPACITY: usize = 1;
 
 /// Capacity of the edit-preview render queue (TASK-04-010): bounded, per
 /// PLAN §3 rule 4; renders coalesce on (content hash, recipe id), so a
@@ -121,6 +125,9 @@ struct AppState {
     datetime_jobs: fotobase_jobs::Queue<fotobase_catalog::AdjustReport>,
     /// Bounded queue for portable user-data exports (TASK-03-023).
     exports: fotobase_jobs::Queue<fotobase_catalog::ExportReport>,
+    /// Bounded queue for export-dialog batches (TASK-04-015); one batch at
+    /// a time, per-photo progress emitted as `photo-export-progress`.
+    photo_exports: fotobase_jobs::Queue<export_dialog::ExportBatch>,
     /// Bounded queue for edit-view preview renders (TASK-04-010).
     edits:
         fotobase_jobs::Queue<Result<fotobase_render::RecipePreview, fotobase_render::RenderError>>,
@@ -932,6 +939,67 @@ fn cancel_batch_edit(state: tauri::State<'_, AppState>) {
         .and_then(|guard| guard.clone());
     if let Some(token) = token {
         token.cancel();
+    }
+}
+
+/// Export dialog (TASK-04-015, PLAN §2J): one bounded-queue batch that
+/// renders each photo through the shared full-res export engine — resize
+/// limits, quality, watermark baked in — into `dest`, emitting
+/// `photo-export-progress` {done,total} after every photo. Ids arrive in
+/// the current grid sort order; the backend preserves it.
+#[tauri::command]
+async fn export_photos(
+    ids: Vec<i64>,
+    dest: String,
+    request: export_dialog::ExportRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<export_dialog::ExportBatch, String> {
+    if ids.is_empty() {
+        return Err("no photos to export".into());
+    }
+    let queue = state.photo_exports.clone();
+    let catalog_path = state.catalog_path();
+    let app = state.app_handle.clone();
+    let seq = EXPORT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let handle = queue
+        .try_enqueue(
+            format!("photo-export-{seq}"),
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |_ctx| {
+                let (dest, catalog_path, app, ids, request) =
+                    (dest.clone(), catalog_path.clone(), app.clone(), ids.clone(), request.clone());
+                async move {
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        let dest = std::path::PathBuf::from(&dest);
+                        let cat = Catalog::open(&catalog_path).map_err(|e| e.to_string())?;
+                        export_dialog::export_photos(
+                            &cat,
+                            &ids,
+                            &dest,
+                            &request,
+                            &mut |done, total| {
+                                let _ = app.emit(
+                                    "photo-export-progress",
+                                    serde_json::json!({ "done": done, "total": total }),
+                                );
+                            },
+                        )
+                        .map_err(|e| e.to_string())
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(batch)) => fotobase_jobs::Outcome::Done(batch),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("export task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue export: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(batch) => Ok(batch.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("export cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
     }
 }
 
@@ -2097,6 +2165,9 @@ pub fn run() {
             let exports = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(EXPORT_QUEUE_CAPACITY)
             });
+            let photo_exports = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(PHOTO_EXPORT_QUEUE_CAPACITY)
+            });
             let edits = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(EDIT_QUEUE_CAPACITY)
             });
@@ -2131,6 +2202,7 @@ pub fn run() {
                 imports,
                 datetime_jobs,
                 exports,
+                photo_exports,
                 edits,
                 batch_edits,
                 batch_edit_cancel: Mutex::new(None),
@@ -2280,6 +2352,7 @@ pub fn run() {
             preview_datetime_adjustment,
             adjust_datetime,
             export_user_data,
+            export_photos,
             preview_batch_rename,
             batch_rename,
             preview_batch_move,
