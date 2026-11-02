@@ -134,7 +134,7 @@ pub struct ScanOptions {
 /// ignored; media_type is `image` or `video` per the catalog schema.
 const IMAGE_EXTS: &[&str] = &[
     "jpg", "jpeg", "png", "gif", "tif", "tiff", "webp", "heic", "heif", "avif", "bmp", "dng",
-    "cr2", "cr3", "nef", "arw", "raf", "orf", "rw2",
+    "cr2", "cr3", "nef", "arw", "raf", "orf", "rw2", "jxl",
 ];
 const VIDEO_EXTS: &[&str] = &["mp4", "mov", "m4v", "avi", "mkv", "webm", "mts"];
 

@@ -30,6 +30,18 @@ pub const HEIF_AVAILABLE: bool = cfg!(all(feature = "heif", not(target_os = "win
 /// link (Windows, until a CI/packaging leg lands).
 pub const RAW_AVAILABLE: bool = cfg!(all(feature = "raw", not(target_os = "windows")));
 
+/// Whether the jxl-oxide-backed JPEG XL decode path is compiled in
+/// (TASK-04-014). Pure Rust, so this is true wherever the `jxl` feature is
+/// on (default) — including Windows.
+pub const JXL_AVAILABLE: bool = cfg!(feature = "jxl");
+
+/// File extensions routed to the JPEG XL decoder before the generic sniffers
+/// (TASK-04-014). The sniff table recognizes both JXL containers (raw
+/// codestream `FF 0A` and ISOBMFF with the `jxl ` brand), but the extension
+/// check keeps corrupt RAW-adjacent bytes from being misread and mirrors
+/// RAW_EXTS behavior. Mirrors the scanner's IMAGE_EXTS.
+const JXL_EXTS: &[&str] = &["jxl"];
+
 /// File extensions routed to the LibRaw decoder before the generic sniffers
 /// (TASK-04-013). TIFF-based RAWs (cr2/dng/nef/arw/orf/rw2) share the plain
 /// TIFF magic, and CR3 shares the ISOBMFF `ftyp` with HEIC, so the extension
@@ -118,6 +130,9 @@ enum Sniffed {
     Heif,
     /// Recognized but deferred: PSD thumbnails land with P2 (RAW/JXL).
     Unsupported(&'static str),
+    /// JPEG XL container (raw codestream or ISOBMFF with the `jxl ` brand);
+    /// decoded through jxl-oxide when the `jxl` feature is compiled in.
+    Jxl,
     /// No magic we know — treated as a decode failure, not a format gap.
     Unknown,
 }
@@ -142,6 +157,10 @@ fn sniff(b: &[u8]) -> Sniffed {
         Sniffed::Heif
     } else if b.starts_with(b"8BPS") {
         Sniffed::Unsupported("PSD")
+    } else if b.starts_with(&[0xFF, 0x0A])
+        || (b.len() > 12 && &b[4..8] == b"ftyp" && &b[8..12] == b"jxl ")
+    {
+        Sniffed::Jxl
     } else {
         Sniffed::Unknown
     }
@@ -232,6 +251,18 @@ fn decode(bytes: &[u8], src: &Path) -> Result<(Vec<u8>, u32, u32), RenderError> 
             };
         }
     }
+    // JPEG XL (TASK-04-014): extension decides before the sniffers, because
+    // the ISOBMFF container shares `ftyp` with HEIC and RAW families.
+    {
+        let ext =
+            src.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        if JXL_EXTS.contains(&ext.as_str()) {
+            return match jxl::decode_jxl(bytes) {
+                Ok(out) => Ok(out),
+                Err(detail) => Err(RenderError::Decode { path: src.to_path_buf(), detail }),
+            };
+        }
+    }
     match sniff(bytes) {
         Sniffed::Jpeg => match zune_jpeg_decode(bytes) {
             Ok(out) => Ok(out),
@@ -249,6 +280,10 @@ fn decode(bytes: &[u8], src: &Path) -> Result<(Vec<u8>, u32, u32), RenderError> 
             }
         }
         Sniffed::Heif => match heif::decode_heif(bytes) {
+            Ok(out) => Ok(out),
+            Err(detail) => Err(RenderError::Decode { path: src.to_path_buf(), detail }),
+        },
+        Sniffed::Jxl => match jxl::decode_jxl(bytes) {
             Ok(out) => Ok(out),
             Err(detail) => Err(RenderError::Decode { path: src.to_path_buf(), detail }),
         },
@@ -348,6 +383,74 @@ mod heif {
 mod heif {
     pub(super) fn decode_heif(_bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
         Err("HEIC/AVIF support is not compiled in for this platform".into())
+    }
+}
+
+/// JPEG XL decode through jxl-oxide (TASK-04-014, PLAN §4: pure Rust
+/// decoder). Pure Rust means the default feature compiles on all three
+/// OSes; the stub exists only for `--no-default-features` builds.
+#[cfg(feature = "jxl")]
+mod jxl {
+    /// Decode the first frame of a JXL container into packed RGB8.
+    ///
+    /// jxl-oxide renders f32 samples; we quantize to 8-bit here so the
+    /// output feeds the same packed-RGB8 contract as every other decoder.
+    /// Alpha and extra channels are dropped (thumbnail/preview/export are
+    /// RGB pipelines); grayscale is replicated to RGB.
+    pub(super) fn decode_jxl(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
+        let image = jxl_oxide::JxlImage::read_with_defaults(std::io::Cursor::new(bytes))
+            .map_err(|e| format!("jxl: {e}"))?;
+        let (w, h) = (image.width(), image.height());
+        if w == 0 || h == 0 {
+            return Err("jxl: empty image".into());
+        }
+        let render = image.render_frame(0).map_err(|e| format!("jxl: {e}"))?;
+        let buf = render.image_all_channels();
+        let channels = buf.channels();
+        if channels == 0 {
+            return Err("jxl: no channels in rendered frame".into());
+        }
+        let data = buf.buf();
+        if data.len() < w as usize * h as usize * channels {
+            return Err(format!(
+                "jxl: frame buffer {} bytes shorter than {}×{}×{channels}",
+                data.len(),
+                w,
+                h
+            ));
+        }
+        let mut rgb = Vec::with_capacity(w as usize * h as usize * 3);
+        for px in data.chunks_exact(channels) {
+            match channels {
+                1 => {
+                    let g = f32_to_u8(px[0]);
+                    rgb.extend_from_slice(&[g, g, g]);
+                }
+                n if n >= 3 => {
+                    rgb.push(f32_to_u8(px[0]));
+                    rgb.push(f32_to_u8(px[1]));
+                    rgb.push(f32_to_u8(px[2]));
+                }
+                2 => {
+                    // Gray + alpha.
+                    let g = f32_to_u8(px[0]);
+                    rgb.extend_from_slice(&[g, g, g]);
+                }
+                _ => unreachable!("channels >= 1 handled above"),
+            }
+        }
+        Ok((rgb, w, h))
+    }
+
+    fn f32_to_u8(v: f32) -> u8 {
+        (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
+    }
+}
+
+#[cfg(not(feature = "jxl"))]
+mod jxl {
+    pub(super) fn decode_jxl(_bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
+        Err("JPEG XL support is not compiled in for this build".into())
     }
 }
 

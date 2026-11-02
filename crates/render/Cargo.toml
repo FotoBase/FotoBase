@@ -10,12 +10,15 @@ description = "Decode, recipe ops, thumbnail pipeline"
 # HEIC/AVIF via libheif-rs (PLAN §4). Default-on; on Windows the dependency
 # is target-gated out until a vcpkg-based CI/packaging leg lands (recorded in
 # TASK-01-012) — the dispatch table then reports HEIC/AVIF as unsupported.
-default = ["heif", "raw"]
+default = ["heif", "raw", "jxl"]
 heif = ["dep:libheif-rs"]
 # TASK-04-013: RAW decode via LibRaw (own FFI bindings in src/raw.rs). The
 # feature is target-gated off on Windows until a CI/packaging leg lands —
 # same pattern as `heif` above.
 raw = []
+# TASK-04-014: JPEG XL decode via jxl-oxide. Pure Rust, so the feature is
+# default-on on all three OSes (no platform gating, unlike heif/raw).
+jxl = ["dep:jxl-oxide"]
 
 [dependencies]
 fotobase-jobs = { path = "../jobs" }
@@ -35,6 +38,8 @@ lcms2 = "6"
 # PNG iCCP inflation (TASK-02-001); already in the tree via the png backend
 # of `image`, declared explicitly because icc.rs calls it directly.
 miniz_oxide = "0.8"
+# TASK-04-014: JPEG XL via jxl-oxide (PLAN §4: pure Rust decoder).
+jxl-oxide = { version = "0.11", optional = true }
 
 # libheif-rs builds an embedded libheif (static) on non-Windows targets, so
 # decode needs no system libheif — only the codec plugins it links against
@@ -43,6 +48,8 @@ miniz_oxide = "0.8"
 libheif-rs = { version = "3", default-features = false, features = ["embedded-libheif", "v1_17"], optional = true }
 
 [dev-dependencies]
+# TASK-04-014: the JXL integration tests decode real pixels via `image`.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 # TASK-04-004: golden-image harness for recipe ops lives here per the task
 # spec ("crates/render or a test-support crate"); the recipe engine itself
 # is fotobase-core, so it is a dev-dependency for the test only.
