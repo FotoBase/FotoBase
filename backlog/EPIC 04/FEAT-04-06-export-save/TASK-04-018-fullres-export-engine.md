@@ -1,6 +1,6 @@
 # task: build full-resolution color-managed export engine
 
-**Feature:** [FEAT-04-06-export-save](FEAT-04-06-export-save.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-06-export-save](FEAT-04-06-export-save.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-11-02)
 
 ## Description
 The export engine that runs the recipe at full resolution — the same engine shared with the preview path from 04-001 — with color-managed output (PLAN §3 rule 5; §6 P2b; §9 Render fidelity).
@@ -20,5 +20,5 @@ The export engine that runs the recipe at full resolution — the same engine sh
 - Unit: very-large-image render stays within memory budget (streamed tiles).
 
 ## Acceptance criteria
-- [ ] 04-018: Export engine runs the recipe at full resolution, shared with the preview code path.
-- [ ] 04-018: Exported output is color-managed and matches golden images.
+- [x] 04-018: Export engine runs the recipe at full resolution, shared with the preview code path.
+- [x] 04-018: Exported output is color-managed and matches golden images.

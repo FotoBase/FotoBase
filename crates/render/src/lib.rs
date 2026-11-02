@@ -57,6 +57,8 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 pub mod color;
+/// Full-resolution color-managed export (TASK-04-018).
+pub mod export;
 pub mod icc;
 /// LibRaw FFI (TASK-04-013) — isolated crate boundary for the LGPL/CDDL
 /// library, per the task spec ("own bindings", "isolated crate boundary").
@@ -66,7 +68,38 @@ pub mod raw;
 pub use color::{
     rgb_profile_bytes, srgb_profile_bytes, thumb_profile_tag, transform_rgb, ColorError,
 };
+pub use export::{
+    export_image, export_image_job, export_peak_bytes, ExportError, ExportFormat, ExportOptions,
+    ExportResult,
+};
 pub use icc::extract_icc;
+
+/// Build a [`fotobase_core::buffer::LinearImage`] from packed RGB8 pixels.
+pub(crate) fn rgb_to_linear(rgb: &[u8], w: u32, h: u32) -> fotobase_core::buffer::LinearImage {
+    fotobase_core::buffer::LinearImage {
+        width: w,
+        height: h,
+        data: rgb.iter().map(|b| f32::from(*b) / 255.0).collect(),
+    }
+}
+
+/// Extract rows `y..y+rows` of packed RGB8 `rgb` (width `w`) as a
+/// full-width [`fotobase_core::buffer::LinearImage`] strip — the streaming
+/// tile of the export path.
+pub(crate) fn tile_linear(
+    rgb: &[u8],
+    w: u32,
+    y: u32,
+    rows: u32,
+) -> fotobase_core::buffer::LinearImage {
+    let start = y as usize * w as usize * 3;
+    let len = rows as usize * w as usize * 3;
+    fotobase_core::buffer::LinearImage {
+        width: w,
+        height: rows,
+        data: rgb[start..start + len].iter().map(|b| f32::from(*b) / 255.0).collect(),
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum RenderError {
@@ -487,6 +520,8 @@ fn encode_jpeg(rgb: &[u8], w: u32, h: u32, quality: u8) -> Vec<u8> {
     enc.write_image(rgb, w, h, image::ExtendedColorType::Rgb8).expect("encoding in-memory jpeg");
     out
 }
+
+pub(crate) use decode as decode_raw;
 
 /// [`thumbnail`] as a queue job (PLAN §3 rule 4): cooperative cancellation
 /// before the decode starts; errors are results, not queue failures, so one
