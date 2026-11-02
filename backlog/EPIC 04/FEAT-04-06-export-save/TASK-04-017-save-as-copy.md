@@ -1,6 +1,6 @@
 # task: implement save-as and save-a-copy
 
-**Feature:** [FEAT-04-06-export-save](FEAT-04-06-export-save.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-06-export-save](FEAT-04-06-export-save.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in progress (2026-11-02)
 
 ## Description
 "Save as…" (edited picture as a new file at a chosen location) and "Save a copy" (duplicate the current picture), both never touching the original (PLAN §2F, §6 P2b; §2 File menu).
