@@ -105,6 +105,38 @@ describe("stateFromRecipe", () => {
     });
     expect(restored.effects).toEqual({ bw: 0.8 });
   });
+
+  it("keeps ops no tab owns so a save re-emits them (batch edits survive)", () => {
+    // A recipe the batch flow (TASK-04-011) wrote: rotate + a text overlay.
+    const batched = {
+      spec: "fotobase.recipe",
+      version: 1,
+      ops: [
+        { type: "rotate", params: { angle: 90 } },
+        { type: "text", params: { text: "Caption", x: 0.05, y: 0.05 } },
+        { type: "film_grain", params: { amount: 0.5, seed: 3 } },
+      ],
+    };
+    const restored = stateFromRecipe(batched);
+    expect(restored.extra).toEqual(batched.ops);
+    expect(isEmptyState(restored)).toBe(false);
+
+    // Saving from the edit view must not silently drop those edits.
+    expect(recipeFromState(restored).ops).toEqual(batched.ops);
+  });
+
+  it("extra ops ride along with tab edits in canonical order (tabs first)", () => {
+    const state: EditState = {
+      ...stateFromRecipe({
+        ops: [{ type: "rotate", params: { angle: 90 } }],
+      }),
+      effects: { bw: 1 },
+    };
+    expect(opsFromEditState(state)).toEqual([
+      { type: "bw", params: { amount: 1 } },
+      { type: "rotate", params: { angle: 90 } },
+    ]);
+  });
 });
 
 describe("isEmptyState", () => {

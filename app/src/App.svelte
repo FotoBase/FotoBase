@@ -7,6 +7,7 @@
   import AlbumDialog from "./lib/AlbumDialog.svelte";
   import AlbumList from "./lib/AlbumList.svelte";
   import BatchDialog from "./lib/BatchDialog.svelte";
+  import BatchEditDialog from "./lib/BatchEditDialog.svelte";
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import DateTimeDialog from "./lib/DateTimeDialog.svelte";
@@ -108,6 +109,9 @@
     mode: "rename",
     ids: [],
   });
+  // Batch edit (TASK-04-011): one §2E op applied to a multi-selection; the
+  // dialog owns progress + cancellation, the shell only refreshes after.
+  let batchEditDialog = $state<{ open: boolean; ids: number[] }>({ open: false, ids: [] });
   // Date/time adjustment (TASK-03-019): opened from the photo menu, acts on
   // the right-clicked photo or the whole selection it belongs to.
   let dateTimeDialog = $state<{ open: boolean; ids: number[] }>({ open: false, ids: [] });
@@ -512,6 +516,7 @@
     { id: "delete-from-disk", label: t("menu.deleteFromDisk") },
     { id: "add-to-album", label: t("menu.addToAlbum"), disabled: albums.length === 0 },
     { id: "adjust-date-time", label: t("menu.adjustDateTime") },
+    { id: "batch-edit", label: t("menu.batchEdit") },
     {
       id: "stack-photos",
       label: t("menu.stackPhotos"),
@@ -592,6 +597,8 @@
       };
     } else if (id === "adjust-date-time") {
       dateTimeDialog = { open: true, ids: targetIds(item.id, gridState.selection) };
+    } else if (id === "batch-edit") {
+      batchEditDialog = { open: true, ids: targetIds(item.id, gridState.selection) };
     } else if (id === "stack-photos") {
       // Bursts and anything else the detector did not offer: the selection
       // (or the clicked photo) becomes one stack; the first becomes the top.
@@ -917,7 +924,13 @@
     resolve={photosById}
     onjump={jumpToPhoto}
     onaddtoalbum={openTrayAlbumPicker}
-    onbatch={(e) => (batchDialog = { open: true, ...e })}
+    onbatch={(e) => {
+      if (e.mode === "edit") {
+        batchEditDialog = { open: true, ids: e.ids };
+      } else {
+        batchDialog = { open: true, ...e };
+      }
+    }}
   />
   {#if viewer.open && !edit.open}
     <Viewer
@@ -977,6 +990,11 @@
     ids={batchDialog.ids}
     {folders}
     onapplied={handleBatchApplied}
+  />
+  <BatchEditDialog
+    bind:open={batchEditDialog.open}
+    ids={batchEditDialog.ids}
+    onapplied={() => void refreshLibrary()}
   />
   <ContextMenu
     bind:open={photoMenu.open}

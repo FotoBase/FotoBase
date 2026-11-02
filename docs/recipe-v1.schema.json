@@ -22,11 +22,11 @@
     },
     "opType": {
       "enum": [
-        "crop", "straighten", "auto_color", "auto_contrast", "fill_light",
+        "crop", "straighten", "rotate", "auto_color", "auto_contrast", "fill_light",
         "temperature", "tint", "saturation", "brightness",
         "highlight_recovery", "shadow_recovery", "sepia",
         "warm_colors", "cool_colors", "red_eye", "text", "retouch",
-        "grayscale", "bw", "sharpen", "undo_all"
+        "grayscale", "bw", "sharpen", "film_grain", "undo_all"
       ]
     }
   }

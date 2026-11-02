@@ -14,6 +14,7 @@ use tauri_plugin_updater::UpdaterExt;
 
 pub mod associations;
 pub mod batch_commands;
+pub mod batch_edit;
 pub mod catalog_registry;
 pub mod codec;
 pub mod datetime_commands;
@@ -66,6 +67,10 @@ const EXPORT_QUEUE_CAPACITY: usize = 2;
 /// burst of slider drags collapses onto the latest recipe.
 const EDIT_QUEUE_CAPACITY: usize = 8;
 
+/// Capacity of the batch-edit queue (TASK-04-011): bounded, per PLAN §3
+/// rule 4; one background batch at a time serializes sidecar writers.
+const BATCH_EDIT_QUEUE_CAPACITY: usize = 2;
+
 /// Sequence number for unique portable-export job keys.
 static EXPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -74,6 +79,9 @@ static DATETIME_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64
 
 /// Sequence number for unique import job keys.
 static IMPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Sequence number for unique batch-edit job keys.
+static BATCH_EDIT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Dedup guard for the lazy hash backfill: at most one backfill thread at a
 /// time. A scan that lands while one is running is covered — the running
@@ -115,6 +123,13 @@ struct AppState {
     /// Bounded queue for edit-view preview renders (TASK-04-010).
     edits:
         fotobase_jobs::Queue<Result<fotobase_render::RecipePreview, fotobase_render::RenderError>>,
+    /// Bounded queue for batch edit runs (TASK-04-011); the worker
+    /// serializes concurrent batches onto one sidecar writer.
+    batch_edits: fotobase_jobs::Queue<batch_edit::BatchEditReport>,
+    /// Cancel token of the most recently started batch edit
+    /// (TASK-04-011): `cancel_batch_edit` trips it, the running job
+    /// observes the flag and stops between photos.
+    batch_edit_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
     /// Cancel token of the most recently started import (TASK-01-017):
     /// `cancel_import` trips it, the running job observes the flag.
     import_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
@@ -832,6 +847,90 @@ async fn adjust_datetime(
         fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
         fotobase_jobs::Outcome::Cancelled => Err("date/time adjustment cancelled".into()),
         fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Batch edit (TASK-04-011, PLAN §2E "Batch edit"): one §2E op applied to
+/// every selected photo's sidecar recipe. The run goes through the bounded
+/// job queue (§3 rule 4) at background priority on its own catalog
+/// connection; progress streams on the `batch-edit-progress` event and
+/// `cancel_batch_edit` stops it between photos — every processed photo
+/// keeps a valid per-photo recipe.
+#[tauri::command]
+async fn batch_edit(
+    ids: Vec<i64>,
+    op: batch_edit::BatchOp,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<batch_edit::BatchEditReport, String> {
+    let queue = state.batch_edits.clone();
+    let token = fotobase_jobs::CancelToken::default();
+    {
+        let mut guard = state
+            .batch_edit_cancel
+            .lock()
+            .map_err(|e| format!("batch edit cancel mutex poisoned: {e}"))?;
+        *guard = Some(token.clone());
+    }
+    let job_app = app.clone();
+    let catalog_path = state.catalog_path();
+    let seq = BATCH_EDIT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let handle = queue
+        .try_enqueue(
+            format!("batch-edit-{seq}"),
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |ctx| {
+                let app = job_app.clone();
+                let ids = ids.clone();
+                let catalog_path = catalog_path.clone();
+                let token = token.clone();
+                let ctx = ctx.clone();
+                async move {
+                    let cancel = std::sync::atomic::AtomicBool::new(false);
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        batch_edit::run(&catalog_path, &ids, op, &cancel, &|p| {
+                            if token.is_cancelled() || ctx.is_cancelled() {
+                                cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
+                            let _ = app.emit(batch_edit::BATCH_EDIT_EVENT, p);
+                        })
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(report)) => fotobase_jobs::Outcome::Done(report),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("batch edit task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue batch edit: {e}"))?;
+    let outcome = handle.result().await;
+    // The stored token belongs to this run only: clear it so a stale
+    // cancel can never hit the *next* batch.
+    if let Ok(mut guard) = state.batch_edit_cancel.lock() {
+        *guard = None;
+    }
+    let _ = app.emit("library-changed", ());
+    match outcome.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("batch edit cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Cancel the batch edit that is currently running or queued (TASK-04-011).
+/// Best-effort: with no batch in flight it is a no-op.
+#[tauri::command]
+fn cancel_batch_edit(state: tauri::State<'_, AppState>) {
+    let token = state
+        .batch_edit_cancel
+        .lock()
+        .map_err(|e| format!("batch edit cancel mutex poisoned: {e}"))
+        .ok()
+        .and_then(|guard| guard.clone());
+    if let Some(token) = token {
+        token.cancel();
     }
 }
 
@@ -1913,6 +2012,9 @@ pub fn run() {
             let edits = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(EDIT_QUEUE_CAPACITY)
             });
+            let batch_edits = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(BATCH_EDIT_QUEUE_CAPACITY)
+            });
             let persisted = settings::Settings::load(&data_dir);
             // Catalog registry (TASK-03-024): which catalog opens at launch
             // (the last-used one, functional spec). The default entry keeps
@@ -1942,6 +2044,8 @@ pub fn run() {
                 datetime_jobs,
                 exports,
                 edits,
+                batch_edits,
+                batch_edit_cancel: Mutex::new(None),
                 import_cancel: Mutex::new(None),
                 settings: Mutex::new(persisted),
                 pending_update: Mutex::new(None),
@@ -2088,6 +2192,8 @@ pub fn run() {
             batch_rename,
             preview_batch_move,
             batch_move,
+            batch_edit,
+            cancel_batch_edit,
             photo_info,
             video_info,
             list_folders,

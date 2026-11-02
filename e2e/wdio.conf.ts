@@ -5,7 +5,7 @@
 // HOME, so every run is a cold start: empty catalog, empty thumbnail cache,
 // default settings.
 
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, execSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
@@ -26,21 +26,44 @@ function driverListenFlag(): string {
   return help.includes("--webdriver-port") ? "--webdriver-port" : "--port";
 }
 
+async function portOpen(port: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const socket = net.connect(port, "127.0.0.1");
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("error", () => resolve(false));
+  });
+}
+
+// WebKitWebDriver (spawned by tauri-driver) takes DRIVER_PORT + 1, so both
+// must be free before a new driver starts — otherwise the new driver fails
+// to bind while wdio happily connects to the stale one from the previous
+// spec file, driving the wrong app instance.
+const ALL_DRIVER_PORTS = [DRIVER_PORT, DRIVER_PORT + 1];
+
 async function waitForPort(port: number, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const open = await new Promise<boolean>((resolve) => {
-      const socket = net.connect(port, "127.0.0.1");
-      socket.once("connect", () => {
-        socket.destroy();
-        resolve(true);
-      });
-      socket.once("error", () => resolve(false));
-    });
-    if (open) return;
+    if (await portOpen(port)) return;
     await new Promise((r) => setTimeout(r, 200));
   }
   throw new Error(`tauri-driver did not start listening on port ${DRIVER_PORT}`);
+}
+
+async function waitPortsFree(timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const busy = (await Promise.all(ALL_DRIVER_PORTS.map(portOpen))).some(Boolean);
+    if (!busy) return;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `ports ${ALL_DRIVER_PORTS.join("/")} still occupied by a stale driver`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
 }
 
 export const config: WebdriverIO.Config = {
@@ -55,6 +78,11 @@ export const config: WebdriverIO.Config = {
   framework: "mocha",
   reporters: ["spec"],
   mochaOpts: { ui: "bdd", timeout: 180_000 },
+  // WebKitGTK under xvfb (software GL) intermittently hangs a webview
+  // mid-spec; a retry in a fresh session (driver, HOME, library) is the
+  // bounded answer. Safe now that sessions can no longer share a driver.
+  specFileRetries: 1,
+  specFileRetriesDelay: 5,
   capabilities: [
     {
       // webdriverio v9 otherwise injects `webSocketUrl: true` (BiDi), which
@@ -79,6 +107,15 @@ export const config: WebdriverIO.Config = {
   },
 
   async beforeSession() {
+    // The previous session's driver may not be fully gone yet (kill is async
+    // and WebKitWebDriver outlives tauri-driver). Wait for the ports to be
+    // released, or the new driver fails to bind and the session silently
+    // attaches to the stale one.
+    await waitPortsFree(30_000).catch(() => {
+      // A stale driver that never lets go is fatal for correctness: kill it.
+      execSync("pkill -f tauri-driver || true; pkill -f WebKitWebDriver || true");
+      return waitPortsFree(10_000);
+    });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "fb-e2e-home-"));
     // The app inherits the driver's environment.
     driver = spawn("tauri-driver", [driverListenFlag(), String(DRIVER_PORT)], {
@@ -102,8 +139,25 @@ export const config: WebdriverIO.Config = {
   },
 
   afterSession() {
-    driver?.kill();
-    driver = undefined;
+    if (driver) {
+      // Kill the whole tree: WebKitWebDriver (the child tauri-driver spawns,
+      // holding DRIVER_PORT + 1) survives a plain SIGTERM to its parent and
+      // would poison the next session's port allocation.
+      try {
+        execSync(`pkill -P ${driver.pid} || true`);
+      } catch {
+        // no children — fine
+      }
+      driver.kill();
+      driver = undefined;
+    }
+    // Belt and braces for the app itself (spawned by the driver, so not our
+    // child): a leftover instance would keep ports busy and HOME stale.
+    try {
+      execSync("pkill -f tauri-driver || true; pkill -f WebKitWebDriver || true; pkill -f '/fotobase( |$)' || true");
+    } catch {
+      // nothing left to kill — fine
+    }
     // The app may still be flushing its cache as it exits: retry, never fail the run.
     if (home) {
       try {

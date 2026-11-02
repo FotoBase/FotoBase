@@ -47,6 +47,7 @@ export const EMPTY_EDIT_STATE: EditState = {
   autoFix: DEFAULT_AUTO_FIX,
   tuning: DEFAULT_TUNING,
   effects: DEFAULT_EFFECTS,
+  extra: [],
 };
 
 export interface EditState {
@@ -55,6 +56,11 @@ export interface EditState {
   autoFix: AutoFixState;
   tuning: TuningState;
   effects: EffectsState;
+  /// Ops no tab owns (text, retouch, rotate, film grain — written by the
+  /// batch flow or future tooling). Passed through verbatim so saving an
+  /// edit never destroys edits the tabs cannot represent (spec §5: a
+  /// reader must not lose foreign data).
+  extra: RecipeOp[];
 }
 
 export type RecipeOp = { type: string; params: Record<string, unknown> };
@@ -69,6 +75,7 @@ export function opsFromEditState(state: EditState): RecipeOp[] {
     ...tuningOps(state.tuning),
     ...redEyeOps(state.redEye),
     ...effectOps(state.effects),
+    ...(state.extra ?? []),
   ];
 }
 
@@ -87,6 +94,8 @@ export function recipeFromState(state: EditState): {
 /// (retouch, text — written by future tooling) are skipped, never fail the
 /// load, matching the reader conformance rule (spec §5).
 export function stateFromRecipe(recipe: {
+  spec?: string;
+  version?: number;
   ops?: Array<{ type: string; params?: Record<string, unknown> }>;
 }): EditState {
   const state: EditState = {
@@ -95,6 +104,7 @@ export function stateFromRecipe(recipe: {
     autoFix: { ...DEFAULT_AUTO_FIX },
     tuning: { ...DEFAULT_TUNING },
     effects: { ...DEFAULT_EFFECTS },
+    extra: [],
   };
   for (const op of recipe.ops ?? []) {
     const params = op.params ?? {};
@@ -164,8 +174,10 @@ export function stateFromRecipe(recipe: {
         state.effects = { ...state.effects, [op.type]: num(params.amount, 0) };
         break;
       default:
-        // Unknown op: skip with no failure (spec §2), the engine still
-        // applies it at render time.
+        // An op no tab owns (text, retouch, rotate, film grain — the batch
+        // flow or future tooling): keep it so a later save re-emits it
+        // verbatim instead of silently dropping the user's edits.
+        state.extra = [...state.extra, { type: op.type, params }];
         break;
     }
   }
@@ -181,7 +193,6 @@ function num(v: unknown, fallback: number): number {
 export function isEmptyState(state: EditState): boolean {
   return opsFromEditState(state).length === 0;
 }
-
 // --- Session undo/redo (PLAN §2D; per-photo history is 04-003) --------------
 
 /// Undo/redo history: linear past/present/future, values shared by

@@ -1,6 +1,6 @@
 # task: implement batch edit ops
 
-**Feature:** [FEAT-04-03-batch-edit](FEAT-04-03-batch-edit.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** todo
+**Feature:** [FEAT-04-03-batch-edit](FEAT-04-03-batch-edit.md) · **Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review (2026-11-02)
 
 ## Description
 Apply the §2E batch ops to a multi-selection via the Photo Tray: rotate CW/CCW, auto contrast, auto color, sepia, sharpen, warmify, film grain, B&W, auto red-eye, show/hide text — with progress and cancellation (PLAN §2E "Batch edit"; §6 P2b).
@@ -21,5 +21,5 @@ Apply the §2E batch ops to a multi-selection via the Photo Tray: rotate CW/CCW,
 - E2e: select via tray, apply batch op, observe progress UI.
 
 ## Acceptance criteria
-- [ ] 04-011: All §2E batch ops apply to a multi-selection with progress and cancellation.
-- [ ] 04-011: Batch results equal per-photo results.
+- [x] 04-011: All §2E batch ops apply to a multi-selection with progress and cancellation.
+- [x] 04-011: Batch results equal per-photo results.
