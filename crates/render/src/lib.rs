@@ -35,6 +35,7 @@ pub const RAW_AVAILABLE: bool = cfg!(all(feature = "raw", not(target_os = "windo
 /// TIFF magic, and CR3 shares the ISOBMFF `ftyp` with HEIC, so the extension
 /// is the only cheap discriminator; RAF carries its own `FUJIFILM` magic but
 /// is included here for uniformity. Mirrors the scanner's IMAGE_EXTS.
+#[cfg(all(feature = "raw", not(target_os = "windows")))]
 const RAW_EXTS: &[&str] = &["cr2", "cr3", "nef", "arw", "raf", "orf", "rw2", "dng"];
 
 use std::path::{Path, PathBuf};
@@ -217,15 +218,19 @@ fn decode(bytes: &[u8], src: &Path) -> Result<(Vec<u8>, u32, u32), RenderError> 
     // HEIC. On LibRaw failure the embedded JPEG preview is extracted from
     // the container (fallback path) — never a hard failure for unsupported
     // or corrupt bodies.
-    let ext = src.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-    if RAW_AVAILABLE && RAW_EXTS.contains(&ext.as_str()) {
-        return match raw::decode_raw(bytes) {
-            Ok(out) => Ok(out),
-            Err(detail) => match decode_embedded_jpeg(bytes) {
-                Some(out) => Ok(out),
-                None => Err(RenderError::Decode { path: src.to_path_buf(), detail }),
-            },
-        };
+    #[cfg(all(feature = "raw", not(target_os = "windows")))]
+    {
+        let ext =
+            src.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        if RAW_EXTS.contains(&ext.as_str()) {
+            return match raw::decode_raw(bytes) {
+                Ok(out) => Ok(out),
+                Err(detail) => match decode_embedded_jpeg(bytes) {
+                    Some(out) => Ok(out),
+                    None => Err(RenderError::Decode { path: src.to_path_buf(), detail }),
+                },
+            };
+        }
     }
     match sniff(bytes) {
         Sniffed::Jpeg => match zune_jpeg_decode(bytes) {
@@ -259,6 +264,7 @@ fn decode(bytes: &[u8], src: &Path) -> Result<(Vec<u8>, u32, u32), RenderError> 
 /// fallback): scan for the first JPEG SOI marker and its matching EOI, then
 /// decode through the normal JPEG path. Best-effort by design — the caller
 /// treats `None` as "no fallback available".
+#[cfg(all(feature = "raw", not(target_os = "windows")))]
 fn decode_embedded_jpeg(bytes: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     const SOI: [u8; 3] = [0xFF, 0xD8, 0xFF];
     const EOI: [u8; 2] = [0xFF, 0xD9];

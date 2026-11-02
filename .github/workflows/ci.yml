@@ -68,7 +68,8 @@ jobs:
         # links against. AVIF goes through libaom here because ubuntu-22.04
         # ships dav1d 0.9, whose API is incompatible with the dav1d plugin
         # of embedded libheif 1.23 (needs dav1d >= 1.0); macOS gets dav1d
-        # via brew, which is new enough.
+        # via brew, which is new enough. libraw-dev: RAW decode via LibRaw
+        # (TASK-04-013, pkg-config `libraw_r`).
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -81,7 +82,6 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            # TASK-04-013: RAW decode via LibRaw (pkg-config `libraw_r`).
             libde265-dev \
             libaom-dev \
             libraw-dev
