@@ -4,7 +4,7 @@
 //! explicit Save; images never travel over IPC (thumb:// / preview:// serve
 //! from disk cache); heavy work runs in the `fotobase-jobs` queue.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use fotobase_catalog::{Catalog, SyncError};
@@ -1332,6 +1332,50 @@ fn save_photo(
     Ok(saved)
 }
 
+/// Save as… (TASK-04-017, PLAN §2F): render the edited pixels into a new
+/// file at the chosen location. The original is never touched; a colliding
+/// destination is auto-suffixed, never overwritten.
+#[tauri::command]
+fn save_as_photo(
+    file_id: i64,
+    destination: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::save::SavedCopy, String> {
+    let saved = with_catalog_sync(&state, |cat| {
+        crate::save::save_as_photo(cat, file_id, Path::new(&destination)).map_err(|e| {
+            fotobase_catalog::SyncError::Catalog(fotobase_catalog::CatalogError::Corrupted(
+                e.to_string(),
+            ))
+        })
+    })?;
+    let _ = app.emit("library-changed", ());
+    Ok(saved)
+}
+
+/// Save a copy (TASK-04-017): duplicate the current (edited) picture next
+/// to the original (`destination: null`) or at the chosen location. Same
+/// never-touch-the-original and never-overwrite rules as Save as….
+#[tauri::command]
+fn save_copy_photo(
+    file_id: i64,
+    destination: Option<String>,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::save::SavedCopy, String> {
+    let saved = with_catalog_sync(&state, |cat| {
+        crate::save::save_copy_photo(cat, file_id, destination.as_deref().map(Path::new)).map_err(
+            |e| {
+                fotobase_catalog::SyncError::Catalog(fotobase_catalog::CatalogError::Corrupted(
+                    e.to_string(),
+                ))
+            },
+        )
+    })?;
+    let _ = app.emit("library-changed", ());
+    Ok(saved)
+}
+
 /// Revert (TASK-04-016): restore the archived original byte-identical,
 /// clear the recipe and the save's stack record.
 #[tauri::command]
@@ -1932,6 +1976,7 @@ pub fn run() {
         // downloaded artifacts is done by the plugin itself (minisign against
         // the pubkey pinned in tauri.conf.json) and cannot be disabled.
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .register_uri_scheme_protocol(THUMB_PROTOCOL, |ctx, request| {
             let state = ctx.app_handle().state::<AppState>();
             // `?s=2` selects the HiDPI (1024px) cache entry (TASK-01-024).
@@ -2187,6 +2232,8 @@ pub fn run() {
             get_recipe,
             set_recipe,
             save_photo,
+            save_as_photo,
+            save_copy_photo,
             revert_photo,
             render_edit_preview,
             quit_from_tray,

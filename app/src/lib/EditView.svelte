@@ -13,6 +13,7 @@
 -->
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { thumbUri, type GridItem } from "./grid";
   import { gridState } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
@@ -194,7 +195,46 @@
     }
   }
 
+  // "Save as…" (TASK-04-017): the OS save dialog picks the destination;
+  // cancelling asks nothing of the backend. Collision handling (never
+  // overwrite) is the backend's.
+  async function doSaveAs(): Promise<void> {
+    const photo = current;
+    if (photo === null || saveBusy) return;
+    const destination = await saveDialog({
+      title: t("edit.view.saveAs"),
+      defaultPath: photo.filename,
+    });
+    if (destination === null) return;
+    saveBusy = true;
+    saveError = null;
+    try {
+      await invoke("save_as_photo", { fileId: photo.id, destination });
+    } catch (e) {
+      saveError = String(e);
+    } finally {
+      saveBusy = false;
+    }
+  }
+
+  // "Save a copy" (TASK-04-017): no destination argument — the backend
+  // duplicates the current picture next to the original as `name (copy)`.
+  async function doSaveCopy(): Promise<void> {
+    const photo = current;
+    if (photo === null || saveBusy) return;
+    saveBusy = true;
+    saveError = null;
+    try {
+      await invoke("save_copy_photo", { fileId: photo.id, destination: null });
+    } catch (e) {
+      saveError = String(e);
+    } finally {
+      saveBusy = false;
+    }
+  }
+
   async function doRevert(): Promise<void> {
+
     const photo = current;
     if (photo === null || saveBusy) return;
     saveBusy = true;
@@ -292,6 +332,24 @@
         disabled={!hasEdits || saveBusy}
       >
         {savedFlash ? t("edit.view.saved") : t("edit.view.save")}
+      </button>
+      <button
+        type="button"
+        data-testid="edit-save-as"
+        title={t("edit.view.saveAs")}
+        onclick={doSaveAs}
+        disabled={saveBusy}
+      >
+        {t("edit.view.saveAs")}
+      </button>
+      <button
+        type="button"
+        data-testid="edit-save-copy"
+        title={t("edit.view.saveCopy")}
+        onclick={doSaveCopy}
+        disabled={saveBusy}
+      >
+        {t("edit.view.saveCopy")}
       </button>
       <button
         type="button"
