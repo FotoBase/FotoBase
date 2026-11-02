@@ -14,15 +14,18 @@ pub struct BatchFile {
     /// ISO (or EXIF-style) capture stamp, if known.
     pub taken_at: Option<String>,
     pub mtime: f64,
+    /// Decoded pixel dimensions, if known (TASK-04-012 `{res}` suffix).
+    pub width: Option<i64>,
+    pub height: Option<i64>,
 }
 
 impl Catalog {
     /// The rows for `ids`, in the order given (the batch counter follows the
     /// user's selection order). Unknown ids are skipped.
     pub fn batch_files(&self, ids: &[i64]) -> Result<Vec<BatchFile>> {
-        let mut stmt = self
-            .conn()
-            .prepare_cached("SELECT id, path, taken_at, mtime FROM files WHERE id = ?1")?;
+        let mut stmt = self.conn().prepare_cached(
+            "SELECT id, path, taken_at, mtime, width, height FROM files WHERE id = ?1",
+        )?;
         let mut out = Vec::with_capacity(ids.len());
         for id in ids {
             let row = stmt
@@ -32,6 +35,8 @@ impl Catalog {
                         path: r.get(1)?,
                         taken_at: r.get(2)?,
                         mtime: r.get(3)?,
+                        width: r.get(4)?,
+                        height: r.get(5)?,
                     })
                 })
                 .optional()?;

@@ -9,6 +9,7 @@ import {
   baseName,
   batchMove,
   batchRename,
+  buildPattern,
   DEFAULT_SPEC,
   isApplicable,
   previewBatchMove,
@@ -96,6 +97,15 @@ describe("batch helpers", () => {
     expect(isApplicable(clashPlan)).toBe(false);
     expect(isApplicable({ moves: [], collisions: [] })).toBe(false);
   });
+
+  it("buildPattern composes custom name, suffixes and the counter (TASK-04-012)", () => {
+    expect(buildPattern("holiday", false, false)).toBe("holiday-{n}");
+    expect(buildPattern("holiday", true, false)).toBe("holiday-{date}-{n}");
+    expect(buildPattern("holiday", false, true)).toBe("holiday-{res}-{n}");
+    expect(buildPattern("holiday", true, true)).toBe("holiday-{date}-{res}-{n}");
+    expect(buildPattern("  holiday  ", false, false)).toBe("holiday-{n}");
+    expect(buildPattern("", false, false)).toBe(DEFAULT_SPEC.pattern);
+  });
 });
 
 describe("tray.refresh", () => {
@@ -155,17 +165,43 @@ describe("BatchDialog rename", () => {
     expect((screen.getByTestId("batch-apply") as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("re-previews when the pattern changes", async () => {
+  it("re-previews when the custom name changes", async () => {
     invokeMock.mockResolvedValue(okPlan);
     open();
     await waitFor(() => expect(screen.getAllByTestId("batch-row")).toHaveLength(2));
     invokeMock.mockClear();
-    await fireEvent.input(screen.getByTestId("batch-pattern"), { target: { value: "holiday-{n}" } });
+    await fireEvent.input(screen.getByTestId("batch-name"), { target: { value: "holiday" } });
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith(
         "preview_batch_rename",
         expect.objectContaining({
           spec: expect.objectContaining({ pattern: "holiday-{n}" }),
+        }),
+      ),
+    );
+  });
+
+  it("appends the date and resolution suffixes when checked (TASK-04-012)", async () => {
+    invokeMock.mockResolvedValue(okPlan);
+    open();
+    await waitFor(() => expect(screen.getAllByTestId("batch-row")).toHaveLength(2));
+    invokeMock.mockClear();
+    await fireEvent.input(screen.getByTestId("batch-name"), { target: { value: "trip" } });
+    await fireEvent.click(screen.getByTestId("batch-date-suffix"));
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith(
+        "preview_batch_rename",
+        expect.objectContaining({
+          spec: expect.objectContaining({ pattern: "trip-{date}-{n}" }),
+        }),
+      ),
+    );
+    await fireEvent.click(screen.getByTestId("batch-res-suffix"));
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith(
+        "preview_batch_rename",
+        expect.objectContaining({
+          spec: expect.objectContaining({ pattern: "trip-{date}-{res}-{n}" }),
         }),
       ),
     );

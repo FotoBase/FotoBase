@@ -11,6 +11,7 @@
     baseName,
     batchMove,
     batchRename,
+    buildPattern,
     DEFAULT_SPEC,
     isApplicable,
     previewBatchMove,
@@ -41,7 +42,9 @@
     onapplied: (moves: PlannedMove[]) => void;
   } = $props();
 
-  let pattern = $state(DEFAULT_SPEC.pattern);
+  let name = $state("photo");
+  let withDate = $state(false);
+  let withRes = $state(false);
   let start = $state(DEFAULT_SPEC.start);
   let step = $state(DEFAULT_SPEC.step);
   let pad = $state(DEFAULT_SPEC.pad);
@@ -58,7 +61,7 @@
 
   function currentSpec(): RenameSpec {
     return {
-      pattern,
+      pattern: buildPattern(name, withDate, withRes),
       start: count(start, 1_000_000_000),
       step: count(step, 1_000_000),
       pad: count(pad, 12),
@@ -68,7 +71,9 @@
   // Re-seed the form every time the dialog opens.
   $effect(() => {
     if (!open) return;
-    pattern = DEFAULT_SPEC.pattern;
+    name = "photo";
+    withDate = false;
+    withRes = false;
     start = DEFAULT_SPEC.start;
     step = DEFAULT_SPEC.step;
     pad = DEFAULT_SPEC.pad;
@@ -160,10 +165,20 @@
         <h2>{title}</h2>
         {#if mode === "rename"}
           <label>
-            {t("batch.pattern")}
-            <input data-testid="batch-pattern" type="text" bind:value={pattern} />
+            {t("batch.name")}
+            <input data-testid="batch-name" type="text" bind:value={name} />
             <small>{t("batch.patternHint")}</small>
           </label>
+          <div class="batch-suffixes">
+            <label>
+              <input data-testid="batch-date-suffix" type="checkbox" bind:checked={withDate} />
+              {t("batch.dateSuffix")}
+            </label>
+            <label>
+              <input data-testid="batch-res-suffix" type="checkbox" bind:checked={withRes} />
+              {t("batch.resSuffix")}
+            </label>
+          </div>
           <div class="batch-counter">
             <label>
               {t("batch.start")}
@@ -278,6 +293,15 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 0.5rem;
+  }
+  .batch-suffixes {
+    display: flex;
+    gap: 1rem;
+  }
+  .batch-suffixes label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
   }
   .batch-preview {
     margin: 0;

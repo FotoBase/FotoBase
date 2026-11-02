@@ -112,3 +112,72 @@ fn preview_move_reports_collisions() {
     assert_eq!(plan.moves.len(), 1);
     assert_eq!(plan.collisions.len(), 1);
 }
+
+// ---- TASK-04-012: pattern rename with date/resolution suffixes -------------
+
+/// Give every cataloged file a known resolution (the fixture bytes are not
+/// real images, so the scanner leaves width/height NULL).
+fn with_resolution(cat: &Catalog, w: i64, h: i64) {
+    cat.conn().execute("UPDATE files SET width = ?1, height = ?2", [w, h]).unwrap();
+}
+
+#[test]
+fn rename_three_files_with_date_and_resolution_suffixes() {
+    let (tmp, mut cat, ids) = fixture();
+    assert_eq!(ids.len(), 2);
+    fs::write(lib(&tmp, "a/three.jpg"), b"333").unwrap();
+    let scan = scan_folder(&mut cat, &tmp.path().join("lib"), &AtomicBool::new(false)).unwrap();
+    let _ = scan;
+    let three = cat
+        .file_id_by_path(at(&tmp.path().join("lib"), "a/three.jpg").to_str().unwrap())
+        .unwrap()
+        .unwrap();
+    let ids = [ids[0], ids[1], three];
+    with_resolution(&cat, 1920, 1080);
+
+    let spec = RenameSpec { pattern: "trip-{date}-{res}-{n}".into(), start: 1, step: 1, pad: 2 };
+    let moves = cmds::rename(&mut cat, &ids, &spec, CollisionPolicy::Refuse).unwrap();
+    assert_eq!(moves.len(), 3);
+    let names: Vec<String> = moves
+        .iter()
+        .map(|m| Path::new(&m.to).file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    // Same date for all three, resolution suffix, numbered — no collisions.
+    let d = "2026-11-02";
+    assert_eq!(names[0], format!("trip-{d}-1920x1080-01.jpg"), "{names:?}");
+    assert_eq!(names[1], format!("trip-{d}-1920x1080-02.jpg"));
+    assert_eq!(names[2], format!("trip-{d}-1920x1080-03.jpg"));
+    for m in &moves {
+        assert!(Path::new(&m.to).is_file(), "{} missing", m.to);
+    }
+}
+
+#[test]
+fn a_taken_target_name_gets_the_next_free_name_never_overwrites() {
+    let (tmp, mut cat, ids) = fixture();
+    // The target name is already taken by a pre-existing file on disk.
+    fs::write(lib(&tmp, "a/trip-01.jpg"), b"pre-existing").unwrap();
+    let moves =
+        cmds::rename(&mut cat, &ids, &spec("trip-{n}"), CollisionPolicy::AutoSuffix).unwrap();
+    assert!(lib(&tmp, "a/trip-01.jpg").exists());
+    assert_eq!(fs::read(lib(&tmp, "a/trip-01.jpg")).unwrap(), b"pre-existing");
+    assert!(lib(&tmp, "a/trip-01 (2).jpg").exists());
+    assert_eq!(moves.len(), 2);
+}
+
+#[test]
+fn catalog_lookup_by_the_new_name_resolves_the_same_photo() {
+    let (_tmp, mut cat, ids) = fixture();
+    with_resolution(&cat, 800, 600);
+    let spec = RenameSpec { pattern: "pic-{res}-{n}".into(), start: 1, step: 1, pad: 2 };
+    let moves = cmds::rename(&mut cat, &ids, &spec, CollisionPolicy::Refuse).unwrap();
+    // The row keeps its id (ratings/tags stay attached) and the path follows.
+    for m in &moves {
+        let found = cat.file_id_by_path(&m.to).unwrap().unwrap();
+        assert_eq!(found, m.id, "{} did not resolve to the same photo", m.to);
+        let files = cat.batch_files(&[m.id]).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, m.to);
+        assert_eq!(files[0].width, Some(800));
+    }
+}

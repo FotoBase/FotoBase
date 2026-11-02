@@ -33,6 +33,18 @@ export interface BatchPlan {
 
 export const DEFAULT_SPEC: RenameSpec = { pattern: "photo-{n}", start: 1, step: 1, pad: 3 };
 
+/// Rename pattern from the dialog's custom name plus the optional date and
+/// resolution suffixes (TASK-04-012): `name[-{date}][-{res}]-{n}`. An empty
+/// name falls back to the default pattern.
+export function buildPattern(name: string, withDate: boolean, withRes: boolean): string {
+  const base = name.trim();
+  if (base === "") return DEFAULT_SPEC.pattern;
+  let pattern = base;
+  if (withDate) pattern += "-{date}";
+  if (withRes) pattern += "-{res}";
+  return `${pattern}-{n}`;
+}
+
 /// File name of a path, whichever separator it uses.
 export function baseName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;

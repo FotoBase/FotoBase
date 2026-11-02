@@ -26,7 +26,7 @@
 ## feat: batch edit
 
 - [x] `04-011` (M) Batch ops per §2E: rotate CW/CCW, auto contrast/color, sepia, sharpen, warmify, film grain, B&W, auto red-eye, show/hide text.
-- [ ] `04-012` (S) Rename with custom name + optional date/resolution suffixes.
+- [x] `04-012` (S) Rename with custom name + optional date/resolution suffixes.
 
 ## feat: additional decoders
 

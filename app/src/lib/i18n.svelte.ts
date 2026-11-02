@@ -189,6 +189,9 @@ const messages: Record<string, Dict> = {
     "batch.renameTitle": "Rename photos",
     "batch.moveTitle": "Move photos",
     "batch.pattern": "Name pattern",
+    "batch.name": "Name",
+    "batch.dateSuffix": "Add capture date",
+    "batch.resSuffix": "Add resolution",
     "batch.patternHint":
       "{stem} original name · {n} counter · {date} capture date. The extension is kept.",
     "batch.start": "Start at",
@@ -583,6 +586,9 @@ const messages: Record<string, Dict> = {
     "batch.renameTitle": "Fotos umbenennen",
     "batch.moveTitle": "Fotos verschieben",
     "batch.pattern": "Namensmuster",
+    "batch.name": "Name",
+    "batch.dateSuffix": "Aufnahmedatum anhängen",
+    "batch.resSuffix": "Auflösung anhängen",
     "batch.patternHint":
       "{stem} Originalname · {n} Zähler · {date} Aufnahmedatum. Die Dateiendung bleibt.",
     "batch.start": "Start bei",
