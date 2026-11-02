@@ -22,9 +22,9 @@
     /// "Add to album" was pressed: the shell opens its album picker at the
     /// anchor for these ids.
     onaddtoalbum?: (e: { ids: number[]; x: number; y: number }) => void;
-    /// "Rename…" / "Move…" was pressed: the shell opens the batch dialog for
-    /// the tray's photos.
-    onbatch?: (e: { mode: "rename" | "move"; ids: number[] }) => void;
+    /// "Rename…" / "Move…" / "Edit…" was pressed: the shell opens the
+    /// matching batch dialog for the tray's photos.
+    onbatch?: (e: { mode: "rename" | "move" | "edit"; ids: number[] }) => void;
   }
 
   let {
@@ -75,6 +75,12 @@
       data-testid="tray-move"
       disabled={tray.count === 0}
       onclick={() => onbatch({ mode: "move", ids: tray.ids })}>{t("tray.move")}</button
+    >
+    <button
+      type="button"
+      data-testid="tray-edit"
+      disabled={tray.count === 0}
+      onclick={() => onbatch({ mode: "edit", ids: tray.ids })}>{t("tray.edit")}</button
     >
     <button
       type="button"

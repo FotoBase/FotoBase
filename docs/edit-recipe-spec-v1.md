@@ -36,6 +36,7 @@ An open, versioned format. Any tool can read and apply a Fotobase recipe from th
 |---|---|---|
 | `crop` | `x, y, w, h` (normalized rect) | applied before downstream ops |
 | `straighten` | `angle` (deg, CW), `auto_fill: bool` | rotates; auto_fill scales to avoid empty corners |
+| `rotate` | `angle` (deg, CW; multiple of 90, default 0) | quarter-turn rotation (batch edit); lossless, output dimensions swap for 90/270 |
 | `auto_color` | — | white-balance fix (I'm Feeling Lucky color pass) |
 | `auto_contrast` | — | tone-curve stretch |
 | `fill_light` | `amount` [0..1] (0.5) | shadow lift |
@@ -53,6 +54,7 @@ An open, versioned format. Any tool can read and apply a Fotobase recipe from th
 | `grayscale` | `enabled: bool` | |
 | `bw` | `amount` [0..1] (1.0) | B&W blend strength; recipe op, distinct from the view-only B&W display mode |
 | `sharpen` | `amount` [0..1] | |
+| `film_grain` | `amount` [0..1], `seed` (integer, default 0) | deterministic per-pixel noise; pure function of (x, y, seed), so the same op always yields the same pixels |
 | `undo_all` | — | clears all ops (equivalent to empty `ops[]`; kept for menu semantics) |
 
 Future ops (curves, HSL, perspective, lens correction — F2 Pro tab) will bump the spec version or add op types additively; readers skip unknown types (§2).

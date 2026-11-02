@@ -39,6 +39,7 @@ fn apply_op(img: &LinearImage, op: &Op) -> LinearImage {
     match op.op_type.as_str() {
         "crop" => crop(img, op),
         "straighten" => straighten(img, op),
+        "rotate" => rotate(img, op),
         "auto_color" => auto_color(img),
         "auto_contrast" => auto_contrast(img),
         "fill_light" => per_pixel(img, |px| fill_light(px, fnum(op, "amount", 0.5))),
@@ -70,6 +71,13 @@ fn apply_op(img: &LinearImage, op: &Op) -> LinearImage {
         }
         "bw" => per_pixel(img, |px| bw(px, fnum(op, "amount", 1.0))),
         "sharpen" => sharpen(img, fnum(op, "amount", 0.5)),
+        "film_grain" => match fnum(op, "amount", 0.0) {
+            // amount 0 is a no-op: skip the pass so the buffer is
+            // bit-identical (TASK-04-011, same strength-0 rule as
+            // saturation).
+            0.0 => img.clone(),
+            a => film_grain(img, a, op),
+        },
         // `undo_all` is handled in `apply_recipe` (restart from the original).
         "undo_all" => img.clone(),
         // Unknown op types are skipped with a warning at parse time (spec §2).
@@ -288,6 +296,93 @@ fn crop(img: &LinearImage, op: &Op) -> LinearImage {
     for y in 0..ph {
         for x in 0..pw {
             out.set(x, y, img.get(px0 + x, py0 + y));
+        }
+    }
+    out
+}
+
+/// Quarter-turn rotation (TASK-04-011, the §2E batch rotate CW/CCW op).
+/// `angle` is degrees clockwise, a multiple of 90; the output dimensions
+/// swap for 90/270. Lossless: every output pixel is a source pixel, no
+/// resampling.
+fn rotate(img: &LinearImage, op: &Op) -> LinearImage {
+    let angle = fnum(op, "angle", 0.0).rem_euclid(360.0);
+    if angle == 0.0 {
+        return img.clone();
+    }
+    match angle as u32 {
+        90 => {
+            let mut out = LinearImage::new(img.height, img.width);
+            for y in 0..out.height {
+                for x in 0..out.width {
+                    // 90° CW maps source (sx, sy) to (h-1-sy, sx); inverting
+                    // gives out(x, y) = src(y, h-1-x).
+                    out.set(x, y, img.get(y, img.height - 1 - x));
+                }
+            }
+            out
+        }
+        180 => {
+            let mut out = LinearImage::new(img.width, img.height);
+            for y in 0..out.height {
+                for x in 0..out.width {
+                    out.set(x, y, img.get(img.width - 1 - x, img.height - 1 - y));
+                }
+            }
+            out
+        }
+        270 => {
+            let mut out = LinearImage::new(img.height, img.width);
+            for y in 0..out.height {
+                for x in 0..out.width {
+                    // 270° CW = 90° CCW: (sx, sy) → (sy, w-1-sx), so
+                    // out(x, y) = src(w-1-y, x).
+                    out.set(x, y, img.get(img.width - 1 - y, x));
+                }
+            }
+            out
+        }
+        // Validation (recipe.rs) only admits multiples of 90; anything else
+        // is passed through unchanged rather than guessed at.
+        _ => img.clone(),
+    }
+}
+
+/// SplitMix64-style finalizer: turns a counter into a well-distributed
+/// pseudo-random u64. Pure and stateless, so the grain is deterministic.
+fn grain_hash(x: u32, y: u32, seed: u64) -> u64 {
+    let mut h = (x as u64) << 32 | y as u64;
+    h = h.wrapping_add(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15));
+    h ^= h >> 30;
+    h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^= h >> 27;
+    h = h.wrapping_mul(0x94D0_49BB_1331_11EB);
+    h ^= h >> 31;
+    h
+}
+
+/// Film grain (TASK-04-011, the §2E batch op): deterministic per-pixel
+/// noise. The noise is a pure function of (x, y, seed), so the same op
+/// yields the same pixels at any time and in any order — the
+/// batch-equals-per-photo rule — and preview/export parity holds.
+fn film_grain(img: &LinearImage, amount: f64, op: &Op) -> LinearImage {
+    let seed = match param(op, "seed") {
+        Some(Value::Number(n)) => n.as_f64().unwrap_or(0.0) as i64 as u64,
+        _ => 0,
+    };
+    let mut out = img.clone();
+    for y in 0..img.height {
+        for x in 0..img.width {
+            // One noise draw shared by the channels keeps grain luminance-
+            // shaped (silver-halide-like) instead of colored confetti.
+            let n = grain_hash(x, y, seed) as f64 / u64::MAX as f64 * 2.0 - 1.0;
+            let src = img.get(x, y);
+            let px = [
+                (src[0] + (amount * 0.25 * n) as f32).clamp(0.0, 1.0),
+                (src[1] + (amount * 0.25 * n) as f32).clamp(0.0, 1.0),
+                (src[2] + (amount * 0.25 * n) as f32).clamp(0.0, 1.0),
+            ];
+            out.set(x, y, px);
         }
     }
     out
@@ -967,5 +1062,92 @@ mod tests {
                 assert!(m != o && m != g, "bw(0.5) must actually blend");
             }
         }
+    }
+
+    // --- rotate (TASK-04-011: the batch CW/CCW op) --------------------------
+
+    #[test]
+    fn rotate_cw_moves_pixels_and_swaps_dimensions() {
+        // A 2×3 image with a unique value per pixel: 90° CW maps source
+        // (sx, sy) to (h-1-sy, sx); inverting gives out(x, y) = src(y, h-1-x).
+        let src = LinearImage::from_fn(2, 3, |x, y| [(x * 10 + y) as f32 / 100.0, 0.0, 0.0]);
+        let out = apply_op(&src, &op("rotate", json!({ "angle": 90 })));
+        assert_eq!((out.width, out.height), (3, 2), "90° rotation swaps the dimensions");
+        for y in 0..out.height {
+            for x in 0..out.width {
+                let expected = src.get(y, src.height - 1 - x);
+                assert_eq!(out.get(x, y), expected, "rotate CW pixel ({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn rotate_ccw_is_the_inverse_of_rotate_cw() {
+        // Non-square so a transposed mapping cannot pass by accident.
+        let src = LinearImage::from_fn(3, 5, |x, y| {
+            [(x + y) as f32 / 8.0, 0.25, 1.0 - (x + y) as f32 / 8.0]
+        });
+        let cw = apply_op(&src, &op("rotate", json!({ "angle": 90 })));
+        assert_eq!((cw.width, cw.height), (5, 3));
+        let back = apply_op(&cw, &op("rotate", json!({ "angle": 270 })));
+        assert_eq!(back.data, src.data, "90° CW then 270° CW (CCW) is identity");
+        let ccw = apply_op(&src, &op("rotate", json!({ "angle": 270 })));
+        assert_eq!((ccw.width, ccw.height), (5, 3));
+        let forth = apply_op(&ccw, &op("rotate", json!({ "angle": 90 })));
+        assert_eq!(forth.data, src.data, "270° CW then 90° CW is identity");
+    }
+
+    #[test]
+    fn rotate_180_maps_every_pixel_to_its_point_opposite() {
+        let src = img();
+        let out = apply_op(&src, &op("rotate", json!({ "angle": 180 })));
+        assert_eq!((out.width, out.height), (src.width, src.height));
+        for y in 0..src.height {
+            for x in 0..src.width {
+                assert_eq!(
+                    out.get(x, y),
+                    src.get(src.width - 1 - x, src.height - 1 - y),
+                    "180° rotation pixel ({x}, {y})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rotate_zero_and_full_turn_are_identity() {
+        let src = img();
+        assert_eq!(apply_op(&src, &op("rotate", json!({ "angle": 0 }))).data, src.data);
+        assert_eq!(apply_op(&src, &op("rotate", json!({}))).data, src.data);
+        assert_eq!(apply_op(&src, &op("rotate", json!({ "angle": 360 }))).data, src.data);
+    }
+
+    // --- film grain (TASK-04-011: the §2E batch op) -------------------------
+
+    #[test]
+    fn film_grain_is_deterministic_per_pixel() {
+        // Same op, same input → same pixels (the batch-equals-per-photo rule);
+        // the noise must not depend on iteration order or timing.
+        let a = apply_op(&img(), &op("film_grain", json!({ "amount": 0.5, "seed": 7 })));
+        let b = apply_op(&img(), &op("film_grain", json!({ "amount": 0.5, "seed": 7 })));
+        assert_eq!(a.data, b.data, "same seed must give identical pixels");
+    }
+
+    #[test]
+    fn film_grain_changes_pixels_and_seeds_change_the_pattern() {
+        let src = img();
+        let grain = apply_op(&src, &op("film_grain", json!({ "amount": 0.5, "seed": 1 })));
+        assert_ne!(grain.data, src.data, "grain at 0.5 must actually change pixels");
+        let other = apply_op(&src, &op("film_grain", json!({ "amount": 0.5, "seed": 2 })));
+        assert_ne!(grain.data, other.data, "different seeds must differ");
+        // Every pixel stays in range even at full strength.
+        let full = apply_op(&src, &op("film_grain", json!({ "amount": 1.0 })));
+        assert!(full.data.iter().all(|v| (0.0..=1.0).contains(v)));
+    }
+
+    #[test]
+    fn film_grain_amount_zero_is_a_noop() {
+        let src = img();
+        let out = apply_op(&src, &op("film_grain", json!({ "amount": 0.0 })));
+        assert_eq!(out.data, src.data, "amount 0 must not change the buffer");
     }
 }

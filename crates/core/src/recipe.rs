@@ -20,6 +20,7 @@ pub const RECIPE_VERSION: u32 = 1;
 pub const V1_OP_TYPES: &[&str] = &[
     "crop",
     "straighten",
+    "rotate",
     "auto_color",
     "auto_contrast",
     "fill_light",
@@ -38,6 +39,7 @@ pub const V1_OP_TYPES: &[&str] = &[
     "grayscale",
     "bw",
     "sharpen",
+    "film_grain",
     "undo_all",
 ];
 
@@ -343,6 +345,26 @@ fn validate_params(op_type: &str, params: &Value, idx: usize) -> Result<(), Reci
                         "ops[{idx}] retouch.strokes[{j}].radius out of range [0, 1]"
                     ));
                 }
+            }
+        }
+        "film_grain" => {
+            unit("amount", 0.0, 1.0)?;
+            let seed = p.get("seed");
+            match seed {
+                None | Some(Value::Number(_)) => {}
+                Some(_) => return err(format!("ops[{idx}] film_grain.seed must be a number")),
+            }
+        }
+        "rotate" => {
+            // Quarter turns only (TASK-04-011): lossless, no resampling.
+            let angle = num(p, "angle").unwrap_or(0.0);
+            if !angle.is_finite()
+                || angle.rem_euclid(90.0) != 0.0
+                || !(0.0..360.0).contains(&angle.rem_euclid(360.0))
+            {
+                return err(format!(
+                    "ops[{idx}] rotate.angle must be a multiple of 90 (got {angle})"
+                ));
             }
         }
         "auto_color" | "auto_contrast" | "undo_all" => {}

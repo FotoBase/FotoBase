@@ -34,6 +34,7 @@ pub const RECIPE_SPEC: &str = "fotobase.recipe";
 pub const V1_OP_TYPES: &[&str] = &[
     "crop",
     "straighten",
+    "rotate",
     "auto_color",
     "auto_contrast",
     "fill_light",
@@ -52,6 +53,7 @@ pub const V1_OP_TYPES: &[&str] = &[
     "grayscale",
     "bw",
     "sharpen",
+    "film_grain",
     "undo_all",
 ];
 
