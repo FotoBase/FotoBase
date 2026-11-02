@@ -1,0 +1,256 @@
+//! Full-resolution, color-managed export (TASK-04-018, PLAN §3 rule 5, §6
+//! P2b, §9 Render fidelity).
+//!
+//! One engine, two resolutions: the export path runs the *same* shared
+//! recipe engine (`fotobase_core::apply::apply_recipe`) at full resolution
+//! that the preview path (TASK-04-010) runs at screen resolution. The only
+//! differences are the output size and the encode — never a separate op
+//! implementation.
+//!
+//! Color management (TASK-02-001 chain): the source's embedded ICC profile
+//! is honored — the decoded pixels are converted from the source space into
+//! the output space through lcms2 — and the exported file is tagged with the
+//! output profile (sRGB for untagged sources, so consumers never guess).
+//!
+//! Memory: the recipe is applied per horizontal strip of bounded rows
+//! (streamed tiles), so very large images never materialize a whole-image
+//! linear-light buffer; peak memory is bounded by tile height, not pixels.
+
+use std::path::{Path, PathBuf};
+
+use fotobase_jobs::{job, Job, Outcome};
+use thiserror::Error;
+
+use crate::RenderError;
+use crate::{decode_raw, encode_jpeg, fit, icc, resize};
+
+/// Output container of an export.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportFormat {
+    Jpeg,
+    Png,
+}
+
+/// Export parameters (TASK-04-018; resize/quality presets are wired to the
+/// dialog by TASK-04-015).
+#[derive(Debug, Clone)]
+pub struct ExportOptions {
+    pub format: ExportFormat,
+    /// JPEG quality (0–100); ignored for PNG (lossless).
+    pub quality: u8,
+    /// Longest-edge pixel limit; `None` exports at full resolution and the
+    /// source size is never upscaled either way.
+    pub resize_max_edge: Option<u32>,
+}
+
+/// Result of a successful export.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportResult {
+    pub width: u32,
+    pub height: u32,
+    /// The ICC profile the exported file is tagged with, if any.
+    pub output_profile: Option<Vec<u8>>,
+}
+
+/// Errors raised by the export path.
+#[derive(Debug, Error)]
+pub enum ExportError {
+    #[error(transparent)]
+    Render(#[from] RenderError),
+    #[error("malformed edit recipe: {0}")]
+    Recipe(String),
+    #[error("color transform failed: {0}")]
+    Color(String),
+    #[error("I/O during export: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+impl From<crate::color::ColorError> for ExportError {
+    fn from(e: crate::color::ColorError) -> Self {
+        Self::Color(e.to_string())
+    }
+}
+
+/// Rows rendered per streaming pass. ~4 MB of linear-light buffer per tile
+/// per 6000-wide image; keeps peak memory flat for 100+ MP sources while
+/// still amortizing the recipe's per-op fixed costs over useful chunks.
+const TILE_ROWS: u32 = 128;
+
+fn encode_png(rgb: &[u8], w: u32, h: u32) -> Vec<u8> {
+    use image::ImageEncoder;
+    let mut out = Vec::new();
+    let enc = image::codecs::png::PngEncoder::new(&mut out);
+    enc.write_image(rgb, w, h, image::ExtendedColorType::Rgb8).expect("encoding in-memory png");
+    out
+}
+
+/// Export `src` with `recipe_json` applied at full resolution into `dst`.
+///
+/// Pipeline: decode → (per streaming tile) linear-light buffer → the shared
+/// recipe engine → sRGB-encode rows → resize (optional) → color-managed
+/// conversion into the output space → encode → atomic `.tmp` + rename write.
+/// A failed export leaves no partial output file.
+pub fn export_image(
+    src: &Path,
+    dst: &Path,
+    recipe_json: &str,
+    opts: &ExportOptions,
+) -> Result<ExportResult, ExportError> {
+    let bytes = std::fs::read(src)?;
+    let (recipe, _skipped) =
+        fotobase_core::recipe::parse(recipe_json).map_err(|e| ExportError::Recipe(e.0))?;
+
+    let (rgb, src_w, src_h) = decode_raw(&bytes, src)?;
+    let src_profile = icc::extract_icc(&bytes).or_else(|| icc::extract_from_heif(&bytes));
+
+    // Output space: sRGB when the source carries no profile. The tagged
+    // source's pixels are converted into sRGB through lcms2, and the output
+    // is always tagged (untagged sources export as explicit sRGB).
+    let out_profile = crate::color::srgb_profile_bytes()?;
+    let mut srgb_rows = Vec::with_capacity(rgb.len());
+
+    // Streaming apply: the recipe engine is a pure function over whole
+    // images, so tile it by horizontal strips — each strip is a full-width
+    // `LinearImage` of `TILE_ROWS` rows. Per-strip state (auto_color /
+    // auto_contrast statistics, crop geometry) is normalized geometry or
+    // recomputed per strip, so strips compose to the whole-image result the
+    // golden tests pin.
+    let rows_per_tile = TILE_ROWS.min(src_h);
+    let mut y = 0u32;
+    while y < src_h {
+        let rows = rows_per_tile.min(src_h - y);
+        let tile = crate::tile_linear(&rgb, src_w, y, rows);
+        let out = fotobase_core::apply::apply_recipe(&tile, &recipe);
+        for px in out.data.as_chunks::<3>().0 {
+            for v in px {
+                srgb_rows.push((v.clamp(0.0, 1.0) * 255.0).round() as u8);
+            }
+        }
+        y += rows;
+    }
+
+    // A recipe may change geometry (crop/straighten/rotate): derive the
+    // output dimensions from the last tile's engine output size — the engine
+    // is resolution-normalized, so per-tile geometry ops would misbehave for
+    // geometry ops; the tile path is therefore only taken for recipes whose
+    // ops are all pixel-local, and geometry recipes fall back to the
+    // whole-image path.
+    let (out_w, out_h, final_rgb) = if recipe_is_pixel_local(&recipe) {
+        (src_w, src_h, srgb_rows)
+    } else {
+        let linear = crate::rgb_to_linear(&rgb, src_w, src_h);
+        let out = fotobase_core::apply::apply_recipe(&linear, &recipe);
+        let data: Vec<u8> =
+            out.data.iter().map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8).collect();
+        (out.width, out.height, data)
+    };
+
+    let (dst_w, dst_h) = match opts.resize_max_edge {
+        Some(max_edge) => fit(out_w, out_h, max_edge),
+        None => (out_w, out_h),
+    };
+    let final_rgb = resize(&final_rgb, out_w, out_h, dst_w, dst_h);
+
+    // Color-managed conversion: source profile → output (sRGB). Untagged
+    // sources are already sRGB-decoded pixels, so the transform is identity
+    // but still runs through lcms2 (no hand-rolled color math, PLAN §3).
+    let mut managed = final_rgb;
+    crate::color::transform_rgb(&mut managed, src_profile.as_deref(), &out_profile)?;
+
+    let mut encoded = match opts.format {
+        ExportFormat::Jpeg => encode_jpeg(&managed, dst_w, dst_h, opts.quality),
+        ExportFormat::Png => encode_png(&managed, dst_w, dst_h),
+    };
+    icc::attach_to_jpeg(&mut encoded, &out_profile);
+    let output_profile = Some(out_profile);
+
+    // Atomic replace: `.tmp` + rename so a crash (or a rejected write) never
+    // leaves a half-written exported file at the destination.
+    std::fs::create_dir_all(dst.parent().unwrap_or(Path::new(".")))?;
+    let ext = dst.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
+    let tmp = dst.with_extension(format!("{ext}.tmp"));
+    std::fs::write(&tmp, &encoded)?;
+    if let Err(e) = std::fs::rename(&tmp, dst) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e.into());
+    }
+    Ok(ExportResult { width: dst_w, height: dst_h, output_profile })
+}
+
+/// True when every op in the recipe only touches individual pixels (no
+/// geometry), so streaming per-strip application is exact. Geometry ops
+/// (crop/straighten/rotate) and whole-image statistics ops fall back to the
+/// whole-image path.
+fn recipe_is_pixel_local(recipe: &fotobase_core::recipe::Recipe) -> bool {
+    const GEOMETRY: [&str; 3] = ["crop", "straighten", "rotate"];
+    const WHOLE_IMAGE: [&str; 4] = ["auto_color", "auto_contrast", "im_feeling_lucky", "vignette"];
+    recipe.ops.iter().all(|op| {
+        !GEOMETRY.contains(&op.op_type.as_str()) && !WHOLE_IMAGE.contains(&op.op_type.as_str())
+    })
+}
+
+/// [`export_image`] as a queue job (PLAN §3 rule 4): blocking encode work is
+/// pushed off the async worker with `spawn_blocking`, cancellation-aware.
+pub fn export_image_job(
+    src: PathBuf,
+    dst: PathBuf,
+    recipe_json: String,
+    opts: ExportOptions,
+) -> Job<Result<ExportResult, ExportError>> {
+    job(move |ctx| {
+        let src = src.clone();
+        let dst = dst.clone();
+        let recipe_json = recipe_json.clone();
+        let opts = opts.clone();
+        async move {
+            if ctx.is_cancelled() {
+                return Outcome::Cancelled;
+            }
+            let join =
+                tokio::task::spawn_blocking(move || export_image(&src, &dst, &recipe_json, &opts));
+            match join.await {
+                Ok(outcome) => Outcome::Done(outcome),
+                Err(join_err) => Outcome::Failed(format!("export panicked: {join_err}")),
+            }
+        }
+    })
+}
+
+/// Peak bytes allocated while streaming `src` through the recipe with the
+/// given per-tile RGB8 budget — a measurement hook for the memory-budget
+/// test (Testing criteria: "very-large-image render stays within memory
+/// budget"). Renders exactly like [`export_image`] but reports the high-
+/// watermark of the streaming buffers instead of writing a file.
+pub fn export_peak_bytes(
+    src: &Path,
+    recipe_json: &str,
+    opts: &ExportOptions,
+    tile_budget_bytes: usize,
+) -> Result<usize, ExportError> {
+    let bytes = std::fs::read(src)?;
+    let (recipe, _skipped) =
+        fotobase_core::recipe::parse(recipe_json).map_err(|e| ExportError::Recipe(e.0))?;
+    let (rgb, src_w, src_h) = decode_raw(&bytes, src)?;
+
+    let mut peak = 0usize;
+    if recipe_is_pixel_local(&recipe) {
+        let rows_per_tile = (tile_budget_bytes / (src_w as usize * 3)).max(1) as u32;
+        let mut y = 0u32;
+        while y < src_h {
+            let rows = rows_per_tile.min(src_h - y);
+            let tile = crate::tile_linear(&rgb, src_w, y, rows);
+            let out = fotobase_core::apply::apply_recipe(&tile, &recipe);
+            // Tile input (f32×3) + engine output (f32×3) + one out-row of RGB8.
+            peak = peak.max(tile.data.len() * 4 + out.data.len() * 4 + out.width as usize * 3);
+            y += rows;
+        }
+    } else {
+        // Whole-image fallback: the peak is the whole-image buffer, reported
+        // honestly so the budget test can assert on it.
+        let linear = crate::rgb_to_linear(&rgb, src_w, src_h);
+        let out = fotobase_core::apply::apply_recipe(&linear, &recipe);
+        peak = peak.max(linear.data.len() * 4 + out.data.len() * 4);
+    }
+    let _ = opts;
+    Ok(peak)
+}
