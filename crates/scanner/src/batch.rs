@@ -45,7 +45,9 @@ const RESERVED_NAMES: [&str; 22] = [
 ///
 /// Tokens: `{stem}` original file stem, `{n}` counter (`start + step * index`,
 /// zero-padded to `pad` digits), `{date}` capture date `YYYY-MM-DD` (falls
-/// back to the file's mtime). The original extension is always kept.
+/// back to the file's mtime), `{res}` picture resolution `WxH` (renders
+/// nothing when the dimensions are unknown). The original extension is
+/// always kept.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RenameSpec {
     pub pattern: String,
@@ -140,6 +142,7 @@ enum Piece {
     Stem,
     Counter,
     Date,
+    Res,
 }
 
 fn parse_pattern(pattern: &str) -> Result<Vec<Piece>, PatternError> {
@@ -168,6 +171,7 @@ fn parse_pattern(pattern: &str) -> Result<Vec<Piece>, PatternError> {
                     "stem" => Piece::Stem,
                     "n" => Piece::Counter,
                     "date" => Piece::Date,
+                    "res" => Piece::Res,
                     other => {
                         return Err(PatternError::Invalid(format!("unknown token `{{{other}}}`")))
                     }
@@ -204,6 +208,8 @@ pub fn render_name(
     index: usize,
     taken_at: Option<&str>,
     mtime: f64,
+    // `WxH` picture resolution, `None` when the dimensions are unknown.
+    resolution: Option<&str>,
 ) -> Result<String, PatternError> {
     let mut out = String::new();
     for piece in parse_pattern(&spec.pattern)? {
@@ -216,6 +222,11 @@ pub fn render_name(
             }
             Piece::Date => {
                 out.push_str(&taken_at.and_then(date_of).unwrap_or_else(|| iso_date(mtime)));
+            }
+            Piece::Res => {
+                if let Some(res) = resolution {
+                    out.push_str(res);
+                }
             }
         }
     }
@@ -247,6 +258,15 @@ fn validate_name(name: &str) -> Result<(), PatternError> {
     Ok(())
 }
 
+/// `WxH` for known dimensions, `None` otherwise (the `{res}` suffix then
+/// renders nothing — TASK-04-012).
+fn res_of(width: Option<i64>, height: Option<i64>) -> Option<String> {
+    match (width, height) {
+        (Some(w), Some(h)) if w > 0 && h > 0 => Some(format!("{w}x{h}")),
+        _ => None,
+    }
+}
+
 // ---- planning -------------------------------------------------------------
 
 /// Preview a rename of `items` (in selection order) to `spec`.
@@ -261,7 +281,14 @@ pub fn plan_rename(
         let path = Path::new(&item.path);
         let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         let ext = path.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
-        let name = render_name(spec, &stem, index, item.taken_at.as_deref(), item.mtime)?;
+        let name = render_name(
+            spec,
+            &stem,
+            index,
+            item.taken_at.as_deref(),
+            item.mtime,
+            res_of(item.width, item.height).as_deref(),
+        )?;
         let full = format!("{name}{ext}");
         if full.len() > MAX_NAME_BYTES {
             return Err(PatternError::Invalid(format!("name too long: {full:?}")));

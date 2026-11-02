@@ -128,23 +128,23 @@ fn names(plan: &BatchPlan) -> Vec<String> {
 #[test]
 fn counter_honours_start_step_and_pad() {
     let s = RenameSpec { pattern: "trip-{n}".into(), start: 10, step: 5, pad: 3 };
-    assert_eq!(render_name(&s, "IMG_1", 0, None, 0.0).unwrap(), "trip-010");
-    assert_eq!(render_name(&s, "IMG_1", 2, None, 0.0).unwrap(), "trip-020");
-    assert_eq!(render_name(&spec("name-{n}"), "x", 1, None, 0.0).unwrap(), "name-2");
+    assert_eq!(render_name(&s, "IMG_1", 0, None, 0.0, None).unwrap(), "trip-010");
+    assert_eq!(render_name(&s, "IMG_1", 2, None, 0.0, None).unwrap(), "trip-020");
+    assert_eq!(render_name(&spec("name-{n}"), "x", 1, None, 0.0, None).unwrap(), "name-2");
 }
 
 #[test]
 fn stem_and_date_tokens_render() {
     let s = spec("{date}_{stem}_{n}");
     let taken = Some("2023-05-01T10:20:30");
-    assert_eq!(render_name(&s, "IMG_7", 0, taken, 0.0).unwrap(), "2023-05-01_IMG_7_1");
+    assert_eq!(render_name(&s, "IMG_7", 0, taken, 0.0, None).unwrap(), "2023-05-01_IMG_7_1");
     // EXIF-style stamps and a missing taken_at (falls back to mtime, UTC).
     assert_eq!(
-        render_name(&spec("{date}"), "x", 0, Some("2023:05:01 10:20:30"), 0.0).unwrap(),
+        render_name(&spec("{date}"), "x", 0, Some("2023:05:01 10:20:30"), 0.0, None).unwrap(),
         "2023-05-01"
     );
     assert_eq!(
-        render_name(&spec("{date}"), "x", 0, None, 86_400.0 * 19_723.0).unwrap(),
+        render_name(&spec("{date}"), "x", 0, None, 86_400.0 * 19_723.0, None).unwrap(),
         "2024-01-01"
     );
 }
@@ -153,7 +153,10 @@ fn stem_and_date_tokens_render() {
 fn bad_patterns_are_rejected() {
     for bad in ["{nope}", "a{n", "a}b", "", "{n}/x", "a\\b", "a:b", "x*", "..", " "] {
         assert!(
-            matches!(render_name(&spec(bad), "x", 0, None, 0.0), Err(PatternError::Invalid(_))),
+            matches!(
+                render_name(&spec(bad), "x", 0, None, 0.0, None),
+                Err(PatternError::Invalid(_))
+            ),
             "{bad:?} must be rejected"
         );
     }
@@ -446,4 +449,26 @@ fn reassociated_rename_gets_the_new_filename() {
         )
         .unwrap();
     assert_eq!(name, "renamed.jpg", "grid and search show the file's current name");
+}
+
+// ---- unit: resolution token (TASK-04-012) ----------------------------------
+
+#[test]
+fn resolution_token_renders_width_x_height() {
+    assert_eq!(
+        render_name(&spec("pic-{res}"), "x", 0, None, 0.0, Some("1920x1080")).unwrap(),
+        "pic-1920x1080"
+    );
+    // Unknown resolution renders nothing — the suffix is optional, not a
+    // placeholder that pollutes the name.
+    assert_eq!(render_name(&spec("pic-{res}"), "x", 0, None, 0.0, None).unwrap(), "pic-");
+}
+
+#[test]
+fn date_and_resolution_suffixes_combine_with_the_counter() {
+    let taken = Some("2023-05-01T10:20:30");
+    assert_eq!(
+        render_name(&spec("trip-{date}-{res}-{n}"), "x", 1, taken, 0.0, Some("800x600")).unwrap(),
+        "trip-2023-05-01-800x600-2"
+    );
 }
