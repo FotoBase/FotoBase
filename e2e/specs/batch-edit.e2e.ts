@@ -3,6 +3,12 @@
 // picking an op runs the batch through the job queue with a progress UI,
 // and every processed photo's sidecar recipe is the same per-photo recipe
 // the single-photo flow would have written. No original changes (§9).
+//
+// Dialog interactions go through JS clicks exclusively: WebKitWebDriver
+// under xvfb intermittently reports the dialog's buttons as "click
+// intercepted" (the dialog is a scrollable overlay; the driver's computed
+// click point can land on the backdrop). The buttons' handlers are what
+// this spec exercises, and a JS click fires exactly those.
 
 import { browser, expect, $, $$ } from "@wdio/globals";
 import fs from "node:fs";
@@ -14,46 +20,72 @@ let lib: Library;
 
 const cells = () => $$('[data-testid="grid-cell"]');
 
-// WebKitGTK intermittently reports an interactable-looking element as "not
-// interactable" (element re-rendered between lookup and click). Plain
-// clicks with bounded retries.
-async function clickTestId(testid: string): Promise<void> {
+// JS click on the element's own handler: no coordinates, no interception.
+async function domClick(testid: string): Promise<void> {
   const sel = `[data-testid="${testid}"]`;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      const el = await $(sel);
-      await el.click();
-      return;
-    } catch {
-      await browser.pause(500);
-    }
-  }
-  throw new Error(`could not click ${sel}`);
-}
-
-// Click + verify + DOM-click fallback (the edit-view spec's pattern):
-// overlay elements under xvfb sometimes swallow real clicks.
-async function activate(
-  testid: string,
-  verify: () => Promise<boolean> | boolean,
-): Promise<void> {
-  const sel = `[data-testid="${testid}"]`;
-  await clickTestId(testid);
-  try {
-    await browser.waitUntil(verify, { timeout: 2000 });
-    return;
-  } catch {
-    // fall through to the DOM click
-  }
   await browser.execute((selector: string) => {
     const el = document.querySelector(selector) as HTMLElement | null;
     if (!el) throw new Error(`${selector} not found`);
+    if (el instanceof HTMLButtonElement && el.disabled) {
+      throw new Error(`${selector} is disabled`);
+    }
     el.click();
   }, sel);
-  await browser.waitUntil(verify, {
-    timeout: 8000,
-    timeoutMsg: `${sel} never took effect`,
+}
+
+// Whether an element exists in the DOM right now (no implicit waits —
+// safe to poll).
+function exists(testid: string): Promise<boolean> {
+  return browser.execute(
+    (selector: string) => document.querySelector(selector) !== null,
+    `[data-testid="${testid}"]`,
+  );
+}
+
+// The dialog's live UI state, read straight from the DOM: "progress" while
+// the run is in flight, "done"/"error" once it reports, "none" otherwise.
+type DialogState = { state: "progress" | "done" | "error" | "none"; text: string };
+
+function dialogState(): Promise<DialogState> {
+  return browser.execute(() => {
+    const q = (id: string) => document.querySelector(`[data-testid="${id}"]`);
+    const text = (id: string) => (q(id)?.textContent ?? "").trim();
+    if (q("batch-edit-error")) return { state: "error", text: text("batch-edit-error") };
+    if (q("batch-edit-done")) return { state: "done", text: text("batch-edit-done") };
+    if (q("batch-edit-progress")) {
+      return { state: "progress" as const, text: text("batch-edit-progress") };
+    }
+    return { state: "none" as const, text: "" };
   });
+}
+
+// Run one batch op and wait for the report. A backend error surfaces here
+// with its text instead of as an opaque "never took effect".
+async function runBatchOp(op: string): Promise<DialogState> {
+  await domClick(`batch-edit-op-${op}`);
+  const deadline = Date.now() + 30_000;
+  let last: DialogState = { state: "none", text: "" };
+  while (Date.now() < deadline) {
+    last = await dialogState();
+    if (last.state === "error") {
+      throw new Error(`batch ${op} failed: ${last.text}`);
+    }
+    if (last.state === "done") return last;
+    await browser.pause(250);
+  }
+  throw new Error(`batch ${op} never finished; last dialog state: ${last.state} ${last.text}`);
+}
+
+// Close the dialog if a previous test left it open: the backdrop sits above
+// the tray, so an open dialog would block the next test's "Edit…" action.
+async function closeDialogIfOpen(): Promise<void> {
+  if (await exists("batch-edit-dialog")) {
+    await domClick("batch-edit-close");
+    await browser.waitUntil(async () => !(await exists("batch-edit-dialog")), {
+      timeout: 5_000,
+      timeoutMsg: "batch edit dialog never closed",
+    });
+  }
 }
 
 async function waitForCellCount(count: number): Promise<void> {
@@ -73,19 +105,21 @@ function sidecarText(name: string): string {
 }
 
 // Every photo in the grid into the tray, one context menu at a time: each
-// right-click selects the photo under the pointer, "Add to tray" appends
-// it, and the tray accumulates across photos.
+// right-click opens the photo menu, "Add to tray" appends the photo, and
+// the tray accumulates across photos. The menu item is picked with a JS
+// click (see the header note); the right-click itself is the real gesture.
 async function fillTray(): Promise<void> {
-  const cellCount = await cells().length;
-  for (let i = 0; i < cellCount; i++) {
-    const img = await $$('[data-testid="grid-cell"] img')[i];
+  const imgs = await $$('[data-testid="grid-cell"] img');
+  for (const img of imgs) {
     await img.click({ button: "right", x: 10, y: 10 });
-    await activate("menu-item-add-to-tray", async () => {
-      try {
-        return !(await $('[data-testid="context-menu"]').isDisplayed());
-      } catch {
-        return true;
-      }
+    await browser.waitUntil(() => exists("context-menu"), {
+      timeout: 5_000,
+      timeoutMsg: "photo context menu never opened",
+    });
+    await domClick("menu-item-add-to-tray");
+    await browser.waitUntil(async () => !(await exists("context-menu")), {
+      timeout: 5_000,
+      timeoutMsg: "photo context menu never closed",
     });
   }
   await browser.waitUntil(
@@ -135,33 +169,25 @@ describe("batch edit", () => {
     await fillTray();
 
     // Tray action opens the batch edit dialog for the tray's photos.
-    await activate("tray-edit", () => $('[data-testid="batch-edit-dialog"]').isDisplayed());
+    await domClick("tray-edit");
+    await browser.waitUntil(() => exists("batch-edit-dialog"), {
+      timeoutMsg: "batch edit dialog never opened",
+    });
 
     // One §2E op button per op; picking one runs the batch immediately.
     const opButtons = await $$('[data-testid^="batch-edit-op-"]');
     expect(opButtons.length).toBe(12);
 
-    // The run is quick for three photos, so the progress counter may flash
-    // by: accept either the live counter or the finished report.
-    await activate("batch-edit-op-rotate_cw", async () => {
-      try {
-        return await $('[data-testid="batch-edit-progress"]').isDisplayed();
-      } catch {
-        try {
-          return await $('[data-testid="batch-edit-done"]').isDisplayed();
-        } catch {
-          return false;
-        }
-      }
-    });
-    await $('[data-testid="batch-edit-done"]').waitForDisplayed({
-      timeout: 10_000,
-    });
+    // The run goes through the job queue; the dialog shows the progress
+    // counter while it runs and the report when it lands.
+    const report = await runBatchOp("rotate_cw");
+    expect(report.text).toContain("3");
 
     // Batch result equals per-photo result: the recipe the batch wrote is
     // exactly what the single-photo edit flow would have written.
     await browser.waitUntil(
-      () => sidecarText(SOLO).includes('"rotate"') && sidecarText(SOLO).includes('"angle":90'),
+      () =>
+        sidecarText(SOLO).includes('"rotate"') && sidecarText(SOLO).includes('"angle":90'),
       { timeout: 10_000, timeoutMsg: "solo sidecar never gained the rotate op" },
     );
     await browser.waitUntil(
@@ -175,38 +201,39 @@ describe("batch edit", () => {
     for (const name of [PAIR_JPEG, SOLO]) {
       expect(sha256(path.join(lib.dir, name))).toBe(lib.checksums[name]);
     }
+
+    await closeDialogIfOpen();
   });
 
   it("a cancelled batch leaves only valid per-photo recipes behind", async () => {
-    // Open the dialog again and cancel mid-run: the cancel button lives
-    // only while the batch runs, so click it as soon as it appears.
-    await activate("tray-edit", () => $('[data-testid="batch-edit-dialog"]').isDisplayed());
-    await clickTestId("batch-edit-op-film_grain");
-    try {
-      await (await $('[data-testid="batch-edit-cancel"]')).click();
-    } catch {
-      // The batch already finished (three photos are fast) — nothing to
-      // cancel, and the run's outcome is still a valid end state.
+    // Three photos process in milliseconds, so winning the cancel race is
+    // not guaranteed: click Cancel the moment the button appears, and
+    // accept a run that already finished — either way the dialog must
+    // reach a terminal report and every existing sidecar must hold a
+    // valid recipe packet (deterministic cancel semantics are covered by
+    // the Rust integration tests).
+    await domClick("tray-edit");
+    await browser.waitUntil(() => exists("batch-edit-dialog"), {
+      timeoutMsg: "batch edit dialog never opened",
+    });
+    await domClick("batch-edit-op-film_grain");
+
+    // Poll for the cancel button for a moment; a finished run has none.
+    for (let i = 0; i < 6 && (await exists("batch-edit-cancel")) === false; i++) {
+      if ((await dialogState()).state === "done") break;
+      await browser.pause(200);
+    }
+    if (await exists("batch-edit-cancel")) {
+      await domClick("batch-edit-cancel");
     }
 
-    // Whatever the race's outcome, the dialog reaches a terminal report and
-    // every sidecar that exists holds a valid recipe packet: processed
-    // photos keep their edits, unprocessed ones stay recipe-less.
-    await browser.waitUntil(
-      async () => {
-        try {
-          return await $('[data-testid="batch-edit-done"]').isDisplayed();
-        } catch {
-          return false;
-        }
-      },
-      { timeout: 10_000, timeoutMsg: "batch never reported an outcome" },
-    );
-    try {
-      await clickTestId("batch-edit-close");
-    } catch {
-      // Closing is cosmetic here; the assertions below are the contract.
-    }
+    await browser.waitUntil(async () => (await dialogState()).state === "done", {
+      timeout: 30_000,
+      timeoutMsg: "batch never reported an outcome",
+    });
+    const report = await dialogState();
+    expect(report.text).not.toContain("failed");
+
     for (const name of [PAIR_JPEG, SOLO]) {
       const text = sidecarText(name);
       if (text === "") continue;
@@ -217,5 +244,7 @@ describe("batch edit", () => {
     for (const name of [PAIR_JPEG, SOLO]) {
       expect(sha256(path.join(lib.dir, name))).toBe(lib.checksums[name]);
     }
+
+    await closeDialogIfOpen();
   });
 });
