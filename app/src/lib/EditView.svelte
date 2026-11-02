@@ -167,6 +167,54 @@
     }
   }
 
+  // --- Save / Revert (TASK-04-016, PLAN §2F) ---------------------------------
+  // Save is the one path that modifies an original: the backend archives
+  // the untouched original into `.originals/`, renders the recipe at full
+  // resolution into the original path and records the stack. Revert
+  // restores the archived original byte-identical and clears the edits.
+
+  let saveBusy = $state(false);
+  let savedFlash = $state(false);
+  let saveError: string | null = $state(null);
+  const hasEdits = $derived(!isEmptyState(state));
+
+  async function doSave(): Promise<void> {
+    const photo = current;
+    if (photo === null || saveBusy || !hasEdits) return;
+    saveBusy = true;
+    saveError = null;
+    try {
+      await invoke("save_photo", { fileId: photo.id });
+      savedFlash = true;
+      setTimeout(() => (savedFlash = false), 2000);
+    } catch (e) {
+      saveError = String(e);
+    } finally {
+      saveBusy = false;
+    }
+  }
+
+  async function doRevert(): Promise<void> {
+    const photo = current;
+    if (photo === null || saveBusy) return;
+    saveBusy = true;
+    saveError = null;
+    try {
+      await invoke("revert_photo", { fileId: photo.id });
+      // The edits are gone: reset the session to a clean state and show
+      // the restored original.
+      loadedHadRecipe = false;
+      history = editHistory(EMPTY);
+      panelEpoch++;
+      previewSrc = baseUri;
+      renderError = null;
+    } catch (e) {
+      saveError = String(e);
+    } finally {
+      saveBusy = false;
+    }
+  }
+
   // --- Undo / redo (session history; Ctrl/Cmd+Z, Shift for redo) -------------
 
   function doUndo(): void {
@@ -238,6 +286,24 @@
     <div class="edit-view-history">
       <button
         type="button"
+        data-testid="edit-save"
+        title={t("edit.view.save")}
+        onclick={doSave}
+        disabled={!hasEdits || saveBusy}
+      >
+        {savedFlash ? t("edit.view.saved") : t("edit.view.save")}
+      </button>
+      <button
+        type="button"
+        data-testid="edit-revert"
+        title={t("edit.view.revert")}
+        onclick={doRevert}
+        disabled={saveBusy}
+      >
+        {t("edit.view.revert")}
+      </button>
+      <button
+        type="button"
         data-testid="edit-undo"
         title={t("edit.view.undo")}
         onclick={doUndo}
@@ -281,6 +347,11 @@
     {#if renderError}
       <span class="edit-view-error" data-testid="edit-error" role="alert">
         {t("edit.view.renderFailed", { error: renderError })}
+      </span>
+    {/if}
+    {#if saveError}
+      <span class="edit-view-error" data-testid="edit-save-error" role="alert">
+        {t("edit.view.saveFailed", { error: saveError })}
       </span>
     {/if}
   </div>
