@@ -72,3 +72,43 @@ export function faceBox(cluster: QueueCluster): {
     height: `${cluster.height * 100}%`,
   };
 }
+
+// ---- People Manager (TASK-05-006, PLAN §2 Tools menu, §6 P3 People) ----
+
+/// One People Manager entry: a named person (`person_id`) or an unnamed
+/// cluster (`cluster_id`), with a face count and a representative face in
+/// the same shape the queue uses (null when a person has no faces).
+export interface PeopleEntry {
+  person_id: number | null;
+  cluster_id: number | null;
+  name: string | null;
+  face_count: number;
+  representative: QueueCluster | null;
+}
+
+/// Every named person and every unnamed cluster, named first.
+export async function peopleEntries(): Promise<PeopleEntry[]> {
+  return (await call<PeopleEntry[] | null>("people_manager_list")) ?? [];
+}
+
+/// Rename a person: every confirmed face's sidecar MWG region is rewritten
+/// (sidecar-first), then the persons row. Returns the renamed person.
+export function renamePerson(
+  personId: number,
+  name: string,
+): Promise<{ id: number; name: string }> {
+  return call<{ id: number; name: string }>("people_manager_rename", {
+    personId,
+    name,
+  });
+}
+
+/// `thumb://` URI for an entry's representative face; empty without one.
+export function entryThumbUri(entry: PeopleEntry): string {
+  return entry.representative ? faceThumbUri(entry.representative) : "";
+}
+
+/// A non-blank, changed name may be saved.
+export function canRename(current: string | null, name: string): boolean {
+  return name.trim().length > 0 && name.trim() !== (current ?? "").trim();
+}

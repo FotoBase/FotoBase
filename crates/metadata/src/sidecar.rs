@@ -376,6 +376,27 @@ fn region_bag(regions: &Element) -> Option<&Element> {
     })
 }
 
+/// Set a property value in whichever form the writing tool used —
+/// attribute (`mwg-rs:Name="…"`, digiKam) or child element (exiv2).
+/// `false` when the node carries neither.
+fn set_name_text(node: &mut Element, prefix: &str, local: &str, text: &str) -> bool {
+    let attr = format!("{prefix}:{local}");
+    if let Some((_, v)) = node.attributes.iter_mut().find(|(k, _)| *k == attr) {
+        *v = text.to_string();
+        return true;
+    }
+    for c in &mut node.children {
+        if let Child::Element(e) = c {
+            if e.prefix == prefix && e.local == local {
+                e.children.clear();
+                e.children.push(Child::Text(text.to_string()));
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn region_bag_mut(regions: &mut Element) -> Option<&mut Element> {
     let holder = if regions.find_child("mwg-rs", "RegionList").is_some() {
         regions
@@ -1257,6 +1278,40 @@ impl Sidecar {
             }
         }
         Some(fresh.len())
+    }
+
+    /// Rewrite the `mwg-rs:Name` of every face region whose name matches
+    /// `old` (case-insensitively, like `same_face`) to `new`. Boxes, other
+    /// regions and unknown nodes stay verbatim. Returns how many regions
+    /// were renamed, or `None` — nothing changed — when an existing
+    /// `Regions` has a structure we do not recognise, which we never
+    /// rewrite.
+    pub fn rename_face_regions(&mut self, old: &str, new: &str) -> Option<usize> {
+        let old = old.trim().to_lowercase();
+        let d = self.tree.description_mut()?;
+        let regions = d.find_child_mut("mwg-rs", "Regions")?;
+        let bag = region_bag_mut(regions)?;
+        let mut renamed = 0;
+        for child in &mut bag.children {
+            let Child::Element(li) = child else { continue };
+            let node = match li.find_child_mut("rdf", "Description") {
+                Some(desc) => desc,
+                None => li,
+            };
+            let matches = node
+                .child_text_or_attr("mwg-rs", "Type")
+                .is_some_and(|t| t.trim().eq_ignore_ascii_case("face"))
+                && node
+                    .child_text_or_attr("mwg-rs", "Name")
+                    .is_some_and(|n| n.trim().to_lowercase() == old);
+            if !matches {
+                continue;
+            }
+            if set_name_text(node, "mwg-rs", "Name", new) {
+                renamed += 1;
+            }
+        }
+        Some(renamed)
     }
 
     // ---- write path (merge-on-write, 00-010 §3) --------------------------

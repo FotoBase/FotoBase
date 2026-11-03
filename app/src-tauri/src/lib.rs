@@ -1555,6 +1555,32 @@ fn people_queue_bulk(
     })
 }
 
+/// The People Manager list (TASK-05-006, PLAN §2 Tools menu, §6 P3
+/// People): every named person and every unnamed cluster with a face count
+/// and representative face. Cheap catalog query — no image bytes over IPC
+/// (§3 rule 3).
+#[tauri::command]
+fn people_manager_list(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::PeopleEntry>, String> {
+    with_catalog(&state, people::entries)
+}
+
+/// Rename a person (TASK-05-006): every confirmed face's sidecar MWG
+/// region is rewritten sidecar-first per docs/sidecar-merge-on-write.md,
+/// then the persons row. Returns the renamed person.
+#[tauri::command]
+fn people_manager_rename(
+    person_id: i64,
+    name: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<people::RenamedPerson, String> {
+    with_catalog_mut(&state, |cat| {
+        people::rename(cat, person_id, &name)
+            .map_err(|e| fotobase_catalog::CatalogError::Corrupted(e.to_string()))
+    })
+}
+
 /// Delete the user-confirmed subset of a duplicate group (TASK-04-019):
 /// each id routes through the file-menu "Delete from disk" path — OS trash
 /// first, catalog row dropped after. The UI's confirmation dialog is the
@@ -2635,6 +2661,8 @@ pub fn run() {
             stack_suggestions,
             people_queue,
             people_queue_bulk,
+            people_manager_list,
+            people_manager_rename,
             folder_ini_pending_folders,
             ingest_folder_ini,
             decline_folder_ini,

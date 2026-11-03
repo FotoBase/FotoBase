@@ -73,3 +73,26 @@ pub fn bulk(
         BulkAction::Reject => Ok(cat.bulk_reject_cluster(cluster_id)?),
     }
 }
+
+// ---- TASK-05-006: the People Manager (PLAN §2 Tools menu, §6 P3 People) ---
+
+/// Every named person and every unnamed cluster, each with a face count and
+/// a representative face (the photo's content-hash `thumb://` URI — no
+/// image bytes over IPC, §3 rule 3).
+pub fn entries(cat: &Catalog) -> Result<Vec<fotobase_catalog::PeopleEntry>, CatalogError> {
+    cat.people_entries()
+}
+
+/// Rename a person: every confirmed face's sidecar MWG region is rewritten
+/// (sidecar-first per docs/sidecar-merge-on-write.md), then the persons
+/// row. Returns the renamed person.
+pub fn rename(
+    cat: &mut Catalog,
+    person_id: i64,
+    name: &str,
+) -> Result<fotobase_catalog::PersonRow, fotobase_catalog::sync::SyncError> {
+    cat.rename_person(person_id, name)
+}
+
+/// The renamed person, serialized for IPC.
+pub type RenamedPerson = fotobase_catalog::PersonRow;
