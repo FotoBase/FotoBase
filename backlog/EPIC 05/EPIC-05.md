@@ -27,3 +27,7 @@
 - [x] `05-010` (S) Per-folder face-detection toggle in Folder Manager.
 - [ ] `05-011` (M) Contacts link (local contacts only) — name ↔ contact mapping.
 - [ ] `05-012` (M) Clustering precision/recall evaluation on labeled face set (§9); resource-cap tests on battery.
+
+## feat: e2e stability
+
+- [ ] `05-013` (M) Stabilize the e2e suite: edit-view interaction hangs under xvfb, tray-quit drain race, session-creation port race.
