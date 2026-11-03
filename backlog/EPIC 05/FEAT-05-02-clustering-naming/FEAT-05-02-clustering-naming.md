@@ -11,7 +11,7 @@
 
 - [x] `05-003` (L) HDBSCAN clustering (crate or in-house per §4); cluster persistence; re-cluster incrementally.
 - [x] `05-004` (M) Name-a-cluster flow; suggestions for remaining matches.
-- [ ] `05-005` (M) Unnamed people queue: bulk confirm/reject.
+- [x] `05-005` (M) Unnamed people queue: bulk confirm/reject.
 - [ ] `05-006` (M) People Manager dialog (all named + unnamed clusters).
 - [ ] `05-007` (M) Person albums (auto album per person); "has faces" filter; names in FTS search.
 
@@ -19,6 +19,6 @@
 
 - [x] [TASK-05-003-hdbscan-clustering.md](TASK-05-003-hdbscan-clustering.md) — implement hdbscan face clustering
 - [x] [TASK-05-004-name-cluster-flow.md](TASK-05-004-name-cluster-flow.md) — implement name-a-cluster flow with suggestions
-- [ ] [TASK-05-005-unnamed-queue.md](TASK-05-005-unnamed-queue.md) — build unnamed people queue
+- [x] [TASK-05-005-unnamed-queue.md](TASK-05-005-unnamed-queue.md) — build unnamed people queue
 - [ ] [TASK-05-006-people-manager.md](TASK-05-006-people-manager.md) — build people manager dialog
 - [ ] [TASK-05-007-person-albums-filters.md](TASK-05-007-person-albums-filters.md) — implement person albums and face filters

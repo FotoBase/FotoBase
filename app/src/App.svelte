@@ -23,6 +23,7 @@
   import StackPicker from "./lib/StackPicker.svelte";
   import StackSuggestionsDialog from "./lib/StackSuggestionsDialog.svelte";
   import DuplicateFinderDialog from "./lib/DuplicateFinderDialog.svelte";
+  import PeoplePanel from "./lib/PeoplePanel.svelte";
   import SearchBar from "./lib/SearchBar.svelte";
   import FilterBar from "./lib/FilterBar.svelte";
   import { cutoffDate } from "./lib/filters";
@@ -77,6 +78,9 @@
   let stackSuggestionsOpen = $state(false);
   // Near-duplicate finder (TASK-04-019): opened from the toolbar.
   let duplicateFinderOpen = $state(false);
+  // Unnamed people queue (TASK-05-005): opened from the toolbar; a bulk
+  // action lands a named MWG region, so the shell re-reads the grid.
+  let peopleOpen = $state(false);
   let stackPicker = $state<{ open: boolean; stackId: string; x: number; y: number }>({
     open: false,
     stackId: "",
@@ -839,6 +843,13 @@
   >
     {t("app.duplicates")}
   </button>
+  <button
+    type="button"
+    onclick={() => (peopleOpen = true)}
+    data-testid="open-people"
+  >
+    {t("app.people")}
+  </button>
   {#if settings}
     <OptionsDialog
       bind:open={optionsOpen}
@@ -866,6 +877,7 @@
   />
   <StackSuggestionsDialog bind:open={stackSuggestionsOpen} onapplied={() => void refreshView()} />
   <DuplicateFinderDialog bind:open={duplicateFinderOpen} onapplied={() => void refreshView()} />
+  <PeoplePanel bind:open={peopleOpen} onchanged={() => void refreshView()} />
   <StackPicker
     bind:open={stackPicker.open}
     stackId={stackPicker.stackId}

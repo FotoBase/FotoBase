@@ -223,3 +223,162 @@ fn confirming_an_unnamed_cluster_face_is_refused() {
     cat.cluster_faces(5).unwrap();
     assert!(cat.confirm_suggestion(ids[0], 1).is_err(), "unnamed cluster confirmed");
 }
+
+// ---- TASK-05-005: the unnamed people queue (PLAN §2G, §6 P3 People) ----
+
+/// The queue lists only unnamed clusters, with a representative face (file,
+/// box and content hash for the `thumb://` URI) and the count of still-
+/// actionable faces.
+#[test]
+fn unnamed_queue_lists_only_unnamed_clusters() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = open(dir.path());
+    let mut embs = blob(A, 25, 0.01, 1);
+    embs.extend(blob(B, 25, 0.01, 2));
+    let ids = seed_faces(&mut cat, dir.path(), &embs);
+    cat.cluster_faces(5).unwrap();
+    let a = cat.face_cluster_assignments(&ids[..25]).unwrap()[&ids[0]];
+    let b = cat.face_cluster_assignments(&ids[25..]).unwrap()[&ids[25]];
+    cat.name_cluster(a, "Alice").unwrap();
+
+    let queue = cat.unnamed_queue().unwrap();
+    assert_eq!(queue.len(), 1, "named cluster must not be queued: {queue:?}");
+    let entry = &queue[0];
+    assert_eq!(entry.cluster_id, b);
+    assert_eq!(entry.face_count, 25);
+    assert_eq!(entry.representative.face_id, ids[25], "lowest face id is the rep");
+    assert!(entry.representative.hash.is_none(), "no content hash in this fixture");
+    assert!((entry.representative.x - 0.1).abs() < 1e-4);
+
+    // Naming it empties the queue.
+    cat.name_cluster(b, "Bob").unwrap();
+    assert!(cat.unnamed_queue().unwrap().is_empty());
+}
+
+/// Bulk confirm: one action names the cluster (creates the person), stamps
+/// every face of it and writes the name into each photo's sidecar as a
+/// named MWG region — the integration criterion. The queue empties.
+#[test]
+fn bulk_confirm_names_all_faces_and_writes_their_mwg_regions() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = open(dir.path());
+    let ids = seed_faces(&mut cat, dir.path(), &blob(A, 25, 0.01, 1));
+    cat.cluster_faces(5).unwrap();
+    let a = cat.face_cluster_assignments(&ids).unwrap()[&ids[0]];
+
+    let a_faces = cat.face_cluster_assignments(&ids).unwrap();
+    let in_a: Vec<i64> = ids.iter().copied().filter(|i| a_faces.contains_key(i)).collect();
+    let (person, confirmed) = cat.bulk_confirm_cluster(a, "Alice").unwrap();
+    assert_eq!(person.name, "Alice");
+    assert_eq!(confirmed, in_a.len(), "every clustered face confirmed");
+
+    for id in &in_a {
+        assert_eq!(cat.face_person(*id).unwrap(), Some(person.id));
+        let file_id: i64 = cat
+            .conn()
+            .query_row("SELECT file_id FROM faces WHERE id = ?1", [id], |r| r.get(0))
+            .unwrap();
+        let original: String = cat
+            .conn()
+            .query_row("SELECT path FROM files WHERE id = ?1", [file_id], |r| r.get(0))
+            .unwrap();
+        let sc = Sidecar::read(&sidecar_path(&original)).unwrap();
+        let regions = sc.face_regions();
+        assert_eq!(regions.len(), 1, "face {id}: {regions:?}");
+        assert_eq!(regions[0].name, "Alice");
+    }
+    assert!(cat.unnamed_queue().unwrap().is_empty());
+}
+
+/// Bulk reject suppresses the suggestion for the whole cluster: the faces
+/// stay detected (rows remain, person_id still NULL) but leave the queue,
+/// and a later bulk confirm of the same cluster does not re-name them.
+#[test]
+fn bulk_reject_suppresses_the_cluster_but_keeps_the_faces() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = open(dir.path());
+    let ids = seed_faces(&mut cat, dir.path(), &blob(A, 25, 0.01, 1));
+    cat.cluster_faces(5).unwrap();
+    let a = cat.face_cluster_assignments(&ids).unwrap()[&ids[0]];
+
+    let assignments = cat.face_cluster_assignments(&ids).unwrap();
+    let in_a: Vec<i64> = ids.iter().copied().filter(|i| assignments.contains_key(i)).collect();
+    let rejected = cat.bulk_reject_cluster(a).unwrap();
+    assert_eq!(rejected, in_a.len());
+
+    // Faces remain detected: rows exist, no person attached, no sidecar
+    // write happened.
+    for id in &in_a {
+        assert_eq!(cat.face_person(*id).unwrap(), None);
+    }
+    assert!(cat.unnamed_queue().unwrap().is_empty(), "rejected cluster leaves the queue");
+
+    // Confirming afterwards touches only faces that were not rejected —
+    // here none, so the person is created but nothing is stamped or
+    // written to any sidecar.
+    let (person, confirmed) = cat.bulk_confirm_cluster(a, "Alice").unwrap();
+    assert_eq!(confirmed, 0);
+    for id in &ids {
+        assert_eq!(cat.face_person(*id).unwrap(), None, "rejected face stays unstamped");
+    }
+    assert_eq!(person.name, "Alice");
+}
+
+/// A partially rejected cluster: bulk confirm names only the remaining
+/// faces; rejected ones stay suppressed. The queue drops the cluster once
+/// no actionable face is left.
+#[test]
+fn bulk_confirm_skips_rejected_faces() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = open(dir.path());
+    let ids = seed_faces(&mut cat, dir.path(), &blob(A, 25, 0.01, 1));
+    cat.cluster_faces(5).unwrap();
+    let a = cat.face_cluster_assignments(&ids).unwrap()[&ids[0]];
+
+    // Reject two faces directly (the per-face rejection state the queue
+    // builds on).
+    let assignments = cat.face_cluster_assignments(&ids).unwrap();
+    let in_a: Vec<i64> = ids.iter().copied().filter(|i| assignments.contains_key(i)).collect();
+    cat.reject_face(in_a[0]).unwrap();
+    cat.reject_face(in_a[1]).unwrap();
+
+    let (_, confirmed) = cat.bulk_confirm_cluster(a, "Alice").unwrap();
+    assert_eq!(confirmed, in_a.len() - 2, "only the non-rejected faces");
+    assert_eq!(cat.face_person(in_a[0]).unwrap(), None);
+    assert_eq!(cat.face_person(in_a[1]).unwrap(), None);
+    assert_eq!(cat.face_person(in_a[2]).unwrap(), Some(1));
+    // No actionable face is left, so the cluster is out of the queue even
+    // though two faces are still unnamed.
+    assert!(cat.unnamed_queue().unwrap().is_empty());
+}
+
+/// Confirming an unknown cluster is refused.
+#[test]
+fn bulk_confirm_of_an_unknown_cluster_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = open(dir.path());
+    assert!(cat.bulk_confirm_cluster(42, "Alice").is_err());
+    assert!(cat.bulk_reject_cluster(42).is_err());
+}
+
+/// A blank name is refused, and a name already in use fails without
+/// partially stamping the cluster.
+#[test]
+fn bulk_confirm_refuses_bad_names_atomically() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = open(dir.path());
+    let mut embs = blob(A, 25, 0.01, 1);
+    embs.extend(blob(B, 25, 0.01, 2));
+    let ids = seed_faces(&mut cat, dir.path(), &embs);
+    cat.cluster_faces(5).unwrap();
+    let a = cat.face_cluster_assignments(&ids[..25]).unwrap()[&ids[0]];
+    let b = cat.face_cluster_assignments(&ids[25..]).unwrap()[&ids[25]];
+    cat.name_cluster(a, "Alice").unwrap();
+
+    assert!(cat.bulk_confirm_cluster(b, "  ").is_err(), "blank name accepted");
+    assert!(cat.bulk_confirm_cluster(b, "Alice").is_err(), "duplicate name accepted");
+    // Nothing was stamped by the failed attempts.
+    for id in &ids[25..] {
+        assert_eq!(cat.face_person(*id).unwrap(), None);
+    }
+}

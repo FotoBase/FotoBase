@@ -16,7 +16,7 @@
 
 - [x] `05-003` (L) HDBSCAN clustering (crate or in-house per §4); cluster persistence; re-cluster incrementally.
 - [x] `05-004` (M) Name-a-cluster flow; suggestions for remaining matches.
-- [ ] `05-005` (M) Unnamed people queue: bulk confirm/reject.
+- [x] `05-005` (M) Unnamed people queue: bulk confirm/reject.
 - [ ] `05-006` (M) People Manager dialog (all named + unnamed clusters).
 - [ ] `05-007` (M) Person albums (auto album per person); "has faces" filter; names in FTS search.
 
