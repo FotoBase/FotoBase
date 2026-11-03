@@ -65,7 +65,7 @@ jobs:
         # is older than the dav1d plugin of embedded libheif 1.23 needs
         # (dav1d >= 1.0); macOS gets dav1d via brew, which is new enough.
         # libraw-dev: RAW decode via LibRaw (TASK-04-013, pkg-config `libraw_r`).
-        # libopenjp2-dev: the embedded libheif enables its OpenJPEG (JPEG 2000)
+        # libopenjp2-7-dev: the embedded libheif enables its OpenJPEG (JPEG 2000)
         # codec plugin, which links `-lopenjp2` — the ubuntu-24.04 runner image
         # ships only the runtime lib, not the dev symlink.
         run: |
@@ -83,7 +83,7 @@ jobs:
             libde265-dev \
             libaom-dev \
             libraw-dev \
-            libopenjp2-dev
+            libopenjp2-7-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:
