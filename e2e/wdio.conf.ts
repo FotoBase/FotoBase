@@ -181,12 +181,6 @@ export const config: WebdriverIO.Config = {
         HOME: home,
         XDG_DATA_HOME: path.join(home, ".local", "share"),
         XDG_CONFIG_HOME: path.join(home, ".config"),
-        // xvfb has no DRI3, so WebKitGTK's DMA-BUF renderer falls back to
-        // software GL in the web process, which intermittently wedges
-        // mid-spec (TASK-05-013: screenshots and clicks time out while
-        // the app's main loop is idle). Test-environment only; the app
-        // itself is unchanged.
-        WEBKIT_DISABLE_DMABUF_RENDERER: "1",
       },
     });
     await waitForPort(DRIVER_PORT, 30_000);

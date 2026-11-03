@@ -7,10 +7,12 @@ import { browser, expect, $, $$ } from "@wdio/globals";
 import fs from "node:fs";
 import path from "node:path";
 
-import { activate } from "../support/interact";
+import { activate, installVitals, logVitals } from "../support/interact";
 import { makeLibrary, sha256, SOLO, type Library } from "../support/library";
 
 let lib: Library;
+// Spec start, for the vitals timeline (TASK-05-013).
+const t0 = Date.now();
 
 type Reply = { ok: true; value: unknown } | { ok: false; error: string };
 
@@ -116,6 +118,12 @@ describe("edit view", () => {
     );
     expect(error).toBeNull();
     await waitForCellCount(3);
+    await installVitals();
+    await logVitals("library loaded", t0);
+  });
+
+  afterEach(async function () {
+    await logVitals(`after "${this.currentTest?.title}"`, t0);
   });
 
   after(() => {
@@ -129,11 +137,14 @@ describe("edit view", () => {
     // selection re-render can swallow the dblclick), so use the keyboard
     // path: click selects, Enter opens.
     await $(`[data-testid="grid-cell"] img[alt="${SOLO}"]`).click();
+    await logVitals("solo selected", t0);
     await browser.keys(["Enter"]);
     await $('[data-testid="viewer"]').waitForDisplayed();
+    await logVitals("viewer open", t0);
     await activate("edit-open", () =>
       $('[data-testid="edit-view"]').isDisplayed(),
     );
+    await logVitals("edit view open", t0);
     await $('[data-testid="edit-view"]').waitForDisplayed();
     await $('[data-testid="edit-tab-basic"]').waitForDisplayed();
     await $('[data-testid="edit-tab-tuning"]').waitForDisplayed();

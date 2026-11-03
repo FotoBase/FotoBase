@@ -57,3 +57,37 @@ export async function activate(
     timeoutMsg: `verify ${sel}: clicked once, effect not observed within ${timeout}ms`,
   });
 }
+
+/// Page vitals for wedge hunting (TASK-05-013): counts of resource loads per
+/// URI scheme since `installVitals()`, read without touching the app.
+export async function installVitals(): Promise<void> {
+  await browser.execute(() => {
+    const w = window as unknown as { __fbVitals?: Record<string, number> };
+    if (w.__fbVitals) return;
+    const counts: Record<string, number> = {};
+    w.__fbVitals = counts;
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        const scheme = e.name.split(":")[0];
+        counts[scheme] = (counts[scheme] ?? 0) + 1;
+      }
+    }).observe({ type: "resource", buffered: true });
+  });
+}
+
+/// One log line: elapsed ms, how long the page took to answer, and the
+/// per-scheme load counts.
+export async function logVitals(step: string, t0: number): Promise<void> {
+  const asked = Date.now();
+  const counts = await withDeadline(
+    browser.execute(
+      () => JSON.stringify((window as unknown as { __fbVitals?: unknown }).__fbVitals ?? {}),
+    ),
+    20_000,
+    `vitals ${step}`,
+  ).catch((e: Error) => `unanswered (${e.message})`);
+  // eslint-disable-next-line no-console
+  console.log(
+    `[e2e] vitals +${asked - t0}ms ${step}: answered in ${Date.now() - asked}ms loads=${counts}`,
+  );
+}
