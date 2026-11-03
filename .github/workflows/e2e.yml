@@ -72,6 +72,10 @@ jobs:
         working-directory: e2e
         run: npm run typecheck
 
+      - name: Unit-test the harness helpers
+        working-directory: e2e
+        run: npm run test:unit
+
       - name: Run e2e specs
         working-directory: e2e
         run: xvfb-run -a npm test

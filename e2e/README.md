@@ -21,14 +21,24 @@ cargo install tauri-driver --locked          # plus webkit2gtk-driver and xvfb
 cargo build -p fotobase --features tauri/custom-protocol
 cd e2e && npm ci
 xvfb-run -a npm test                         # FOTOBASE_E2E_APP overrides the binary path
+npm run test:unit                            # harness helpers only (node:test; runs on macOS too)
 ```
 
 ## How it works
 
 - `wdio.conf.ts` starts `tauri-driver` per session with a fresh temp `HOME`:
-  empty catalog, empty thumbnail cache, default settings.
+  empty catalog, empty thumbnail cache, default settings. Before and after
+  every session it reaps leftover drivers and app instances
+  (`support/procs.ts`, shell-free: `pkill -f` inside `execSync` matches and
+  kills its own shell on Linux) and logs what it had to kill as
+  `[e2e] … reaped …` — the first thing to check when a spec fails.
 - `support/library.ts` makes a throw-away library (a RAW+JPEG pair and a solo
   photo) and records the originals' checksums.
+- `support/interact.ts` `activate()` clicks overlay controls with ONE DOM
+  dispatch and then waits for the effect. WebKitWebDriver's native click on
+  those controls hangs or reports "not interactable" under xvfb, and a second
+  "fallback" click would toggle the control back. Errors name the phase
+  (`find` / `dispatch` / `verify`).
 - Specs hand the library to the app with the `set_folder_mode` IPC command
   (`window.__TAURI__`, same as the Folder Manager) — no app-side test hook.
 - Selectors are the app's `data-testid`s.

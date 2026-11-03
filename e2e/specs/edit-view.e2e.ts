@@ -7,6 +7,7 @@ import { browser, expect, $, $$ } from "@wdio/globals";
 import fs from "node:fs";
 import path from "node:path";
 
+import { activate } from "../support/interact";
 import { makeLibrary, sha256, SOLO, type Library } from "../support/library";
 
 let lib: Library;
@@ -37,24 +38,6 @@ const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
 
 const cells = () => $$('[data-testid="grid-cell"]');
 
-// WebKitGTK intermittently reports an interactable-looking element as "not
-// interactable" (element re-rendered between lookup and click). Plain
-// clicks with bounded retries; the selector is named when giving up so
-// failures say what could not be clicked.
-async function clickTestId(testid: string): Promise<void> {
-  const sel = `[data-testid="${testid}"]`;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      const el = await $(sel);
-      await el.click();
-      return;
-    } catch {
-      await browser.pause(500);
-    }
-  }
-  throw new Error(`could not click ${sel}`);
-}
-
 // Sidecar polls: the debounced save lands ~250ms after the last edit, so
 // assert with a waitUntil instead of an instant read.
 function sidecarPath(): string {
@@ -83,33 +66,6 @@ async function waitSidecarContains(fragment: string): Promise<void> {
   await browser.waitUntil(() => sidecarText().includes(fragment), {
     timeout: 10_000,
     timeoutMsg: `sidecar never contained ${fragment}; last value: ${sidecarText().slice(0, 500)}`,
-  });
-}
-
-// Click + verify + DOM-click fallback. WebKitGTK under xvfb intermittently
-// reports overlay elements as "not interactable" or dispatches the click at
-// coordinates nothing receives; the fallback fires the element's own click
-// handler directly, which is what these specs actually exercise.
-async function activate(
-  testid: string,
-  verify: () => Promise<boolean> | boolean,
-): Promise<void> {
-  const sel = `[data-testid="${testid}"]`;
-  await clickTestId(testid);
-  try {
-    await browser.waitUntil(verify, { timeout: 2000 });
-    return;
-  } catch {
-    // fall through to the DOM click
-  }
-  await browser.execute((selector: string) => {
-    const el = document.querySelector(selector) as HTMLElement | null;
-    if (!el) throw new Error(`${selector} not found`);
-    el.click();
-  }, sel);
-  await browser.waitUntil(verify, {
-    timeout: 8000,
-    timeoutMsg: `${sel} never took effect`,
   });
 }
 
@@ -203,11 +159,10 @@ describe("edit view", () => {
     });
 
     // Tuning tab: Fill Light slider. WebKitGTK refuses sendKeys on range
-    // inputs and synthetic events are unreliable here, so try, in order: a
-    // real WebDriver click (the center of a 0..1 slider is exactly 0.5),
-    // keyboard steps on the focused input, and finally a dispatched input
-    // event — the panel's handler (clamping, op emission) is what the spec
-    // exercises, whichever interaction reaches it.
+    // inputs and its native click on the slider is one of the interactions
+    // that hangs under xvfb (TASK-05-013), so set the value and dispatch the
+    // input event once — the panel's handler (clamping, op emission) is what
+    // the spec exercises.
     await activate("edit-tab-tuning", async () => {
       try {
         return await $('[data-testid="tuning"]').isDisplayed();
@@ -238,22 +193,14 @@ describe("edit view", () => {
       )} sidecar(${sidecar.length})=${sidecar.slice(0, 400)}`;
     };
 
-    try {
-      await (await $('[data-testid="fill-light"]')).click();
-      await browser.waitUntil(fillSaved, { timeout: 3000 });
-    } catch {
-      // fall through
-    }
-    if (!fillSaved()) {
-      await browser.execute(() => {
-        const el = document.querySelector(
-          '[data-testid="fill-light"]',
-        ) as HTMLInputElement | null;
-        if (!el) throw new Error("fill-light slider not found");
-        el.value = "0.5";
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-      });
-    }
+    await browser.execute(() => {
+      const el = document.querySelector(
+        '[data-testid="fill-light"]',
+      ) as HTMLInputElement | null;
+      if (!el) throw new Error("fill-light slider not found");
+      el.value = "0.5";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     await browser.waitUntil(fillSaved, {
       timeout: 10_000,
       timeoutMsg: `fill_light never saved; ${await sliderDiagnostics()}`,
