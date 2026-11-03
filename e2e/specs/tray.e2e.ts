@@ -114,16 +114,18 @@ describe("tray background watching", () => {
   it("quit fully exits the process", async () => {
     // Same function the tray menu's Quit item runs (tray::quit); the OS
     // tray itself is outside WebDriver's reach.
-    // Fire-and-forget: the app exits before it could reply, which would kill
-    // the WebDriver session mid-command.
+    // Fire-and-forget, deferred: the execute must return before the app
+    // starts exiting, or the exit races the reply and the command fails
+    // with "invalid session id" (TASK-05-013).
     const before = appProcesses();
     const started = Date.now();
     await browser.execute(() => {
-      (
+      const core = (
         window as unknown as {
           __TAURI__: { core: { invoke: (c: string) => Promise<unknown> } };
         }
-      ).__TAURI__.core.invoke("quit_from_tray");
+      ).__TAURI__.core;
+      setTimeout(() => void core.invoke("quit_from_tray"), 100);
     });
     try {
       await browser.waitUntil(() => appProcesses().length === 0, { timeout: 10_000 });

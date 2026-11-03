@@ -273,11 +273,19 @@ describe("batch edit", () => {
     const report = await dialogState();
     expect(report.text).not.toContain("failed");
 
+    // Not cancelled: every photo got the op. Cancelled ("processed photos
+    // keep their edits"): each photo either got it or still carries its
+    // earlier rotate recipe untouched — never a half-written packet.
+    const cancelled = await exists("batch-edit-cancelled");
     for (const name of [PAIR_JPEG, SOLO]) {
       const text = sidecarText(name);
       if (text === "") continue;
       expect(text).toContain("fotobase.recipe");
-      expect(text).toContain("film_grain");
+      if (cancelled && !text.includes("film_grain")) {
+        expect(text).toContain('"rotate"');
+      } else {
+        expect(text).toContain("film_grain");
+      }
     }
     // §9: originals still untouched after the second batch.
     for (const name of [PAIR_JPEG, SOLO]) {
