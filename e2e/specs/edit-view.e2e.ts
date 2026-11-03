@@ -7,7 +7,7 @@ import { browser, expect, $, $$ } from "@wdio/globals";
 import fs from "node:fs";
 import path from "node:path";
 
-import { activate, logVitals } from "../support/interact";
+import { activate, installVitals, logVitals } from "../support/interact";
 import { makeLibrary, sha256, SOLO, type Library } from "../support/library";
 
 let lib: Library;
@@ -118,6 +118,7 @@ describe("edit view", () => {
     );
     expect(error).toBeNull();
     await waitForCellCount(3);
+    await installVitals();
     await logVitals("library loaded", t0);
   });
 

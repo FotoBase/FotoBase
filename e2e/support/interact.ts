@@ -58,19 +58,39 @@ export async function activate(
   });
 }
 
-/// One vitals line for wedge hunting (TASK-05-013): elapsed ms, how long
-/// the page took to answer, and `performance.timeOrigin` — it changes when
-/// WebKit reloads the page after restarting a crashed/unresponsive web
-/// process.
+/// Activity counters for wedge hunting (TASK-05-013), read by `logVitals`:
+/// image loads/errors (capture phase: load does not bubble) and the
+/// backend's `thumb-rendered` events. Observes only; changes no app state.
+export async function installVitals(): Promise<void> {
+  await browser.executeAsync((done: () => void) => {
+    const w = window as unknown as {
+      __fbVitals?: Record<string, number>;
+      __TAURI__: { event: { listen: (e: string, cb: () => void) => Promise<unknown> } };
+    };
+    if (w.__fbVitals) return done();
+    const c: Record<string, number> = { imgLoad: 0, imgError: 0, thumbRendered: 0 };
+    w.__fbVitals = c;
+    document.addEventListener("load", (e) => e.target instanceof HTMLImageElement && c.imgLoad++, true);
+    document.addEventListener("error", (e) => e.target instanceof HTMLImageElement && c.imgError++, true);
+    w.__TAURI__.event.listen("thumb-rendered", () => c.thumbRendered++).then(() => done(), () => done());
+  });
+}
+
+/// One vitals line: elapsed ms, how long the page took to answer, the
+/// activity counters, and `performance.timeOrigin` (changes when WebKit
+/// reloads the page after restarting a crashed/unresponsive web process).
 export async function logVitals(step: string, t0: number): Promise<void> {
   const asked = Date.now();
-  const origin = await withDeadline(
-    browser.execute(() => String(performance.timeOrigin)),
+  const state = await withDeadline(
+    browser.execute(() =>
+      JSON.stringify({
+        page: performance.timeOrigin,
+        ...((window as unknown as { __fbVitals?: object }).__fbVitals ?? {}),
+      }),
+    ),
     20_000,
     `vitals ${step}`,
   ).catch((e: Error) => `unanswered (${e.message})`);
   // eslint-disable-next-line no-console
-  console.log(
-    `[e2e] vitals +${asked - t0}ms ${step}: answered in ${Date.now() - asked}ms page=${origin}`,
-  );
+  console.log(`[e2e] vitals +${asked - t0}ms ${step}: answered in ${Date.now() - asked}ms ${state}`);
 }
