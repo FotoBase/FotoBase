@@ -15,6 +15,12 @@ let lib: Library;
 
 const DUPLICATE = "IMG_0001-copy.jpg";
 
+// `textContent`, not getText(): WebDriver's visible-text rule drops text a
+// stylesheet clips with overflow hidden + ellipsis (the member file names).
+const textOf = async (el: {
+  getProperty(name: string): Promise<unknown>;
+}): Promise<string> => String(await el.getProperty("textContent"));
+
 async function waitForCellCount(count: number): Promise<void> {
   await browser.waitUntil(async () => (await cells().length) === count, {
     timeoutMsg: `expected ${count} grid cells`,
@@ -59,10 +65,13 @@ describe("near-duplicate finder", () => {
     await $('[data-testid="dupes-run"]').click();
     await $('[data-testid="dupe-group"]').waitForDisplayed();
 
-    const group = await $('[data-testid="dupe-group"]').getText();
+    // All three JPEGs come from the same bytes in the fixture library, so
+    // the group holds all of them. `textContent`, not getText(): WebDriver's
+    // visible-text rule drops text a stylesheet clips with overflow hidden.
+    const group = await textOf(await $('[data-testid="dupe-group"]'));
     expect(group).toContain(PAIR_JPEG);
     expect(group).toContain(DUPLICATE);
-    expect(group).not.toContain(SOLO);
+    expect(group).toContain(SOLO);
   });
 
   it("cancel deletes nothing", async () => {
@@ -80,16 +89,25 @@ describe("near-duplicate finder", () => {
     await $('[data-testid="dupes-run"]').waitForDisplayed();
     await $('[data-testid="dupe-group"]').waitForDisplayed();
 
-    // Mark the copy (the second member) for deletion.
+    // Mark the copy by name: member order in the group is row-id order.
     const marks = await $$('[data-testid="dupe-mark"]');
-    await marks[1].click();
+    let marked = false;
+    for (const mark of marks) {
+      if ((await textOf(mark)).includes(DUPLICATE)) {
+        await mark.click();
+        marked = true;
+        break;
+      }
+    }
+    expect(marked).toBe(true);
     await $('[data-testid="dupes-delete"]').click();
     await $('[data-testid="dupes-confirm"]').click();
     await $('[data-testid="dupes-close"]').click();
 
     await waitForCellCount(3);
     expect(fs.existsSync(path.join(lib.dir, DUPLICATE))).toBe(false);
-    // The keeper stays untouched on disk.
+    // The keepers stay untouched on disk.
     expect(fs.existsSync(path.join(lib.dir, PAIR_JPEG))).toBe(true);
+    expect(fs.existsSync(path.join(lib.dir, SOLO))).toBe(true);
   });
 });
