@@ -1,8 +1,8 @@
 //! darktable / digiKam interop suite (TASK-03-004, 00-010 §6 M11/M12).
 //!
 //! Fixtures under `tests/fixtures/interop/` are produced by the real tools:
-//! `darktable-3.8.1-fixture.xmp` by darktable-cli 3.8.1 (the ubuntu-22.04 floor
-//! version, PLAN §4), `digikam-8-fixture.xmp` by the exiv2 write path digiKam
+//! `darktable-3.8.1-fixture.xmp` by darktable-cli 3.8.1 (the pinned fixture
+//! version), `digikam-8-fixture.xmp` by the exiv2 write path digiKam
 //! itself uses (digiKam has no headless CLI; 00-010 fallback: real-tool
 //! serialization). `tools/interop_fixtures.sh` regenerates both in CI and
 //! diffs against the checked-in copies.

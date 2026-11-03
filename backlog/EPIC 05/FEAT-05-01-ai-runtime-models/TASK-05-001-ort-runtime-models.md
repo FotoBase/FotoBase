@@ -12,6 +12,7 @@ The `ai` crate: `ort` (ONNX Runtime) integration with CPU as default provider, p
 
 ## Technical specs
 - `crates/ai` (§3 module layout); `ort` with CPU execution provider default, CoreML/DirectML/CUDA optional (§4).
+  - Note: the `ort` prebuilt ONNX Runtime binaries require glibc 2.38 / GCC 13 libstdc++; this raised the Linux floor to Ubuntu 24.04 ([ADR-0014](../../../docs/adr/adr-0014-linux-floor-ubuntu-24.md)).
 - Download: checksum-verified model files into the catalog location (§1 "catalog location" holds ML models).
 - License manifest per model checked in CI (§10 model-licensing risk); only MIT/Apache-2.0 weights.
 

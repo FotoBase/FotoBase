@@ -32,7 +32,7 @@ The automated path (containerized Samba + the scripted cycle run 3× consecutive
 Record one line per cycle in the PR or task issue:
 
 ```
-cycle 1: OS <macOS 15 / Win 11 / Ubuntu 22.04> · unplug method <wifi-off> · paused <s> after disconnect ·
+cycle 1: OS <macOS 15 / Win 11 / Ubuntu 24.04> · unplug method <wifi-off> · paused <s> after disconnect ·
 resumed <yes/no auto> · final count <N/N> · duplicates <0> · UI hang <none> · PASS/FAIL
 ```
 

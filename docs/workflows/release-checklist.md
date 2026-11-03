@@ -15,7 +15,7 @@ Steps in order. A release is not published if any step fails.
 
 ## 2. Perf decision run
 
-- [ ] Full 50k-fixture run on the recorded reference machine (oldest-supported Ubuntu 22.04 hardware), per `docs/webkitgtk-perf-protocol.md`.
+- [ ] Full 50k-fixture run on the recorded reference machine (oldest-supported Ubuntu 24.04 hardware), per `docs/webkitgtk-perf-protocol.md`.
 - [ ] `perf-report.json` produced, committed for trend comparison, and all bars pass (first thumbnail < 2 s; ≥ 60 fps; < 150 MB idle; 0 jank events).
 - [ ] If any bar is missed: canvas fallback becomes the Linux default, recorded in an ADR — do not ship the DOM default on Linux over a failed bar.
 

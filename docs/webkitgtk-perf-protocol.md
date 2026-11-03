@@ -8,7 +8,7 @@ Defines the protocol that decides whether the DOM grid meets the P1 perf bar on 
 
 ## 1. Environment
 
-- **OS/WebView:** ubuntu-latest CI runner + WebKitGTK 2.40+ (the §11 Q4 floor); one local run per release on the oldest supported Ubuntu 22.04 x64 machine available (the "old hardware" positioning target).
+- **OS/WebView:** ubuntu-24.04 CI runner + WebKitGTK 2.44+ (the Linux WebView floor since ADR-0014); one local run per release on the oldest supported Ubuntu 24.04 x64 machine available (the "old hardware" positioning target).
 - **Fixture:** the 00-013 generator (`fixture gen --seed 42 --out <dir>`).
   - CI smoke: `--count 1000` (fits CI time budget; catches regressions only).
   - Perf decision run: `--count 50000` (local, hardware recorded, results committed as JSON).
@@ -32,7 +32,7 @@ All captured by the harness into a single machine-readable `perf-report.json` (s
 {
   "protocol": 1,
   "fixture": { "count": 50000, "seed": 42 },
-  "runner": { "os": "ubuntu-22.04", "webkitgtk": "2.40.x", "cpu": "...", "ram_gb": 8 },
+  "runner": { "os": "ubuntu-24.04", "webkitgtk": "2.44.x", "cpu": "...", "ram_gb": 8 },
   "renderer": "dom" | "canvas",
   "metrics": {
     "time_to_first_thumbnail_s": 1.8,

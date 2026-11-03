@@ -3,8 +3,8 @@
 #
 # Regenerates the checked-in sidecar fixtures with the real tools and diffs
 # them against the copies in crates/metadata/tests/fixtures/interop/. Runs in
-# CI (ubuntu-22.04 ships darktable 3.8.1 — the same version the fixtures were
-# produced with; PLAN §4 floor). digiKam has no headless CLI, so its fixture
+# CI (the fixture-generation runner ships darktable 3.8.1 — the same version
+# the fixtures were produced with). digiKam has no headless CLI, so its fixture
 # is produced by the exiv2 read-modify-write serialization digiKam itself
 # uses (00-010 fallback: real-tool output, no GUI).
 #

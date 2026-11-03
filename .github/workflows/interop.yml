@@ -5,7 +5,8 @@ name: interop
 # tools and diffs against them (drift = a tool version bump changed real
 # output), then runs the fixture-based interop tests.
 #
-# ubuntu-22.04 = the PLAN §4 floor runner and the version the fixtures were
+# ubuntu-22.04 pins the darktable version the interop fixtures were generated
+# with (3.8.1) — a fixture-version pin, not the OS floor (ADR-0014).
 # produced with (darktable 3.8.1, exiv2 0.27.5). digiKam has no headless CLI;
 # its fixture comes from the exiv2 write path digiKam itself uses (00-010).
 
