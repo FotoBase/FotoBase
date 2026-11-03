@@ -25,6 +25,8 @@ env:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    # A wedged webview must not hold a runner for the 6 h default.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +47,7 @@ jobs:
             libaom-dev \
             libraw-dev \
             webkit2gtk-driver \
+            gdb \
             xvfb
 
       - uses: dtolnay/rust-toolchain@stable

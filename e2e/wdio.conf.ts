@@ -13,7 +13,7 @@ import path from "node:path";
 import { browser } from "@wdio/globals";
 
 import { withDeadline } from "./support/interact";
-import { APP, DRIVER, NATIVE_DRIVER, describeProcs, reap } from "./support/procs";
+import { APP, DRIVER, NATIVE_DRIVER, describeProcs, homeOf, listProcs, matching, reap, threadStacks } from "./support/procs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const appBinary =
@@ -22,6 +22,30 @@ const DRIVER_PORT = 4444;
 
 let driver: ChildProcess | undefined;
 let home: string | undefined;
+let stacksDumped = false;
+
+// Thread backtraces of this session's app into the uploaded artifact, plus
+// the main thread (GTK/WebKit UI loop) inline in the log.
+function dumpAppStacks(label: string): void {
+  const mine = matching(listProcs(), APP).filter((p) => homeOf(p.pid) === home);
+  if (mine.length === 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[e2e] stack dump: no app process for this session; all: ${describeProcs(matching(listProcs(), APP))}`);
+    return;
+  }
+  const dir = path.join(import.meta.dirname, "screenshots");
+  fs.mkdirSync(dir, { recursive: true });
+  for (const p of mine) {
+    const stacks = threadStacks(p.pid);
+    const file = path.join(dir, `${label}-stacks-${p.pid}.txt`);
+    fs.writeFileSync(file, stacks);
+    const main = stacks.split(/\nThread /).find((t) => /^\d+ .*\(LWP (\d+)\)/.exec(t)?.[1] === String(p.pid));
+    // eslint-disable-next-line no-console
+    console.log(
+      `[e2e] stack dump pid=${p.pid} -> ${path.basename(file)}; main thread:\n${(main ?? stacks).slice(0, 6000)}`,
+    );
+  }
+}
 
 function driverListenFlag(): string {
   // tauri-driver renamed its listen flag between v1 and v2.
@@ -144,6 +168,7 @@ export const config: WebdriverIO.Config = {
       return waitPortsFree(10_000);
     });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "fb-e2e-home-"));
+    stacksDumped = false;
     // Specs read this to tell their own app instance from leftovers.
     process.env.FB_E2E_HOME = home;
     // The app inherits the driver's environment.
@@ -186,6 +211,12 @@ export const config: WebdriverIO.Config = {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.log(`[e2e] no screenshot for "${test.title}": ${String(e).split("\n")[0]}`);
+      // The webview did not answer: capture where the app is stuck, once
+      // per session (TASK-05-013).
+      if (!stacksDumped) {
+        stacksDumped = true;
+        dumpAppStacks(name);
+      }
     }
   },
 

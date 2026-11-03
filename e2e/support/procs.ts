@@ -123,3 +123,18 @@ export function describeProcs(procs: Proc[]): string {
     })
     .join("; ");
 }
+
+/// All-thread backtraces of a live process (Linux CI, best effort): a wedged
+/// webview is otherwise a black box. Needs gdb and passwordless sudo (Ubuntu's
+/// ptrace_scope forbids attaching to a non-child); returns why not otherwise.
+export function threadStacks(pid: number): string {
+  try {
+    return execFileSync(
+      "sudo",
+      ["-n", "gdb", "-p", String(pid), "-batch", "-ex", "thread apply all bt 30"],
+      { encoding: "utf8", timeout: 120_000, stdio: ["ignore", "pipe", "pipe"] },
+    );
+  } catch (e) {
+    return `no stacks for pid ${pid}: ${String(e).split("\n")[0]}`;
+  }
+}

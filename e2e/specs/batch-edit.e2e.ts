@@ -108,26 +108,49 @@ function sidecarText(name: string): string {
 // right-click opens the photo menu, "Add to tray" appends the photo, and
 // the tray accumulates across photos. The menu item is picked with a JS
 // click (see the header note); the right-click itself is the real gesture.
+// Each add is verified on its own, so a failure names the photo and what
+// the menu offered (TASK-05-013: "tray never reached 3 photos" said nothing).
 async function fillTray(): Promise<void> {
+  const trayCount = (): Promise<string> =>
+    browser.execute(
+      () => document.querySelector('[data-testid="tray-count"]')?.textContent?.trim() ?? "",
+    );
   const imgs = await $$('[data-testid="grid-cell"] img');
+  let added = 0;
   for (const img of imgs) {
+    const alt = await img.getAttribute("alt");
     await img.click({ button: "right", x: 10, y: 10 });
     await browser.waitUntil(() => exists("context-menu"), {
       timeout: 5_000,
-      timeoutMsg: "photo context menu never opened",
+      timeoutMsg: `photo context menu never opened for ${alt}`,
     });
+    const offered = await browser.execute(() =>
+      Array.from(document.querySelectorAll('[data-testid^="menu-item-"]')).map((e) =>
+        e.getAttribute("data-testid"),
+      ),
+    );
     await domClick("menu-item-add-to-tray");
     await browser.waitUntil(async () => !(await exists("context-menu")), {
       timeout: 5_000,
       timeoutMsg: "photo context menu never closed",
     });
+    added++;
+    try {
+      await browser.waitUntil(async () => (await trayCount()).startsWith(String(added)), {
+        timeout: 5_000,
+      });
+    } catch {
+      throw new Error(
+        `tray did not grow to ${added} after adding ${alt}; tray-count="${await trayCount()}" menu offered: ${offered.join(",")}`,
+      );
+    }
   }
   await browser.waitUntil(
     async () => {
       const count = await $('[data-testid="tray-count"]').getText();
       return count.startsWith("3");
     },
-    { timeoutMsg: "tray never reached 3 photos" },
+    { timeoutMsg: `tray never reached 3 photos (tray-count="${await trayCount()}")` },
   );
 }
 
