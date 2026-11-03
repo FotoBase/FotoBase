@@ -24,6 +24,8 @@ serde_json = "1"
 # Settings (TASK-01-022) serialize to settings.json over IPC.
 serde = { version = "1", features = ["derive"] }
 fotobase-catalog = { path = "../../crates/catalog" }
+# Face detection/embedding jobs (TASK-05-002): the ort runtime lives here.
+fotobase-ai = { path = "../../crates/ai" }
 # Edit recipe engine (TASK-04-008): the neutral picker's balance math lives
 # next to the ops it inverts.
 fotobase-core = { path = "../../crates/core" }

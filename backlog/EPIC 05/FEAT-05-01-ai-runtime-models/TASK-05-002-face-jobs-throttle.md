@@ -1,6 +1,6 @@
 # task: run face detection and embedding as throttled jobs
 
-**Feature:** [FEAT-05-01-ai-runtime-models](FEAT-05-01-ai-runtime-models.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** todo
+**Feature:** [FEAT-05-01-ai-runtime-models](FEAT-05-01-ai-runtime-models.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-03)
 
 ## Description
 Face detection (YuNet) and embedding extraction run as job-queue jobs honoring battery throttling, keeping the UI responsive during a full-library face pass (PLAN §6 P3 People; §3 rule 4).
@@ -21,5 +21,5 @@ Face detection (YuNet) and embedding extraction run as job-queue jobs honoring b
 - Unit: folder with detection disabled → no face jobs scheduled.
 
 ## Acceptance criteria
-- [ ] 05-002: Detection + embedding run as job-queue jobs with battery throttling hook.
-- [ ] 05-002: UI responsive during full-library face pass.
+- [x] 05-002: Detection + embedding run as job-queue jobs with battery throttling hook.
+- [x] 05-002: UI responsive during full-library face pass.

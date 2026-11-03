@@ -20,6 +20,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V11,
     MIGRATION_V12,
     MIGRATION_V13,
+    MIGRATION_V14,
 ];
 
 const MIGRATION_V1: &str = "
@@ -418,6 +419,35 @@ CREATE TABLE folder_ini_ingest (
 /// NULL until the background hashing job fills it in; images only.
 const MIGRATION_V13: &str = "
 ALTER TABLE files ADD COLUMN phash BLOB;
+";
+
+/// TASK-05-002 / TASK-05-010: face-detection derived data (PLAN §6 P3
+/// People, §5 Authority). `folders.face_detect` is the per-folder toggle the
+/// Folder Manager shows; `files.face_scanned` marks a photo processed
+/// (0 pending, 1 done, 2 failed) so a pass with zero faces is not re-run
+/// forever and one corrupt file never blocks the pass. `faces` + `embeddings`
+/// hold the detection/embedding results — rebuildable from the originals,
+/// never written to sidecars (PLAN §3 rule 2); the sqlite-vec index arrives
+/// with TASK-05-008.
+const MIGRATION_V14: &str = "
+ALTER TABLE folders ADD COLUMN face_detect INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE files ADD COLUMN face_scanned INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE faces (
+    id         INTEGER PRIMARY KEY,
+    file_id    INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    x          REAL NOT NULL,
+    y          REAL NOT NULL,
+    width      REAL NOT NULL,
+    height     REAL NOT NULL,
+    landmarks  BLOB,
+    confidence REAL NOT NULL
+);
+CREATE INDEX idx_faces_file ON faces(file_id);
+CREATE TABLE embeddings (
+    face_id INTEGER PRIMARY KEY REFERENCES faces(id) ON DELETE CASCADE,
+    dim     INTEGER NOT NULL,
+    vector  BLOB NOT NULL
+);
 ";
 
 /// Apply all pending migrations, in order, each in its own transaction.

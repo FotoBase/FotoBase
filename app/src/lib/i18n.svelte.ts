@@ -89,7 +89,7 @@ const messages: Record<string, Dict> = {
     "folderManager.remove.confirmYes": "Remove",
     "folderManager.remove.confirmNo": "Keep",
     "folderManager.face": "Face detection",
-    "folderManager.face.placeholder": "Face detection is not available yet",
+    "folderManager.face.hint": "Detect and recognize faces in this folder",
     "folderManager.error": "Folder Manager: {error}",
     "app.import": "Import…",
     "import.title": "Import from folder",
@@ -362,7 +362,8 @@ const messages: Record<string, Dict> = {
     "dupes.delete": "delete?",
     "dupes.mark": "Click to mark for deletion",
     "dupes.deleteMarked": "Move {n} to Trash…",
-    "dupes.confirm": "Move {n} photo(s) to the Trash? Nothing is deleted permanently.",
+    "dupes.confirm":
+      "Move {n} photo(s) to the Trash? Nothing is deleted permanently.",
     "dupes.confirmYes": "Move to Trash",
     "dupes.confirmNo": "Cancel",
     "dupes.deleted": "Moved {n} photo(s) to the Trash.",
@@ -533,8 +534,8 @@ const messages: Record<string, Dict> = {
     "folderManager.remove.confirmYes": "Entfernen",
     "folderManager.remove.confirmNo": "Behalten",
     "folderManager.face": "Gesichtserkennung",
-    "folderManager.face.placeholder":
-      "Gesichtserkennung ist noch nicht verfügbar",
+    "folderManager.face.hint":
+      "Gesichter in diesem Ordner erkennen und benennen",
     "folderManager.error": "Ordnerverwaltung: {error}",
     "app.import": "Importieren…",
     "import.title": "Aus Ordner importieren",
@@ -842,13 +843,15 @@ const messages: Record<string, Dict> = {
     "dupes.title": "Fast-Duplikate finden",
     "dupes.run": "Nach Duplikaten suchen",
     "dupes.scanning": "Hashing läuft im Hintergrund…",
-    "dupes.report": "{hashed} Fotos gehasht ({failed} konnten nicht gelesen werden).",
+    "dupes.report":
+      "{hashed} Fotos gehasht ({failed} konnten nicht gelesen werden).",
     "dupes.empty": "Keine Fast-Duplikate gefunden.",
     "dupes.keep": "behalten",
     "dupes.delete": "löschen?",
     "dupes.mark": "Zum Löschen vormerken",
     "dupes.deleteMarked": "{n} in den Papierkorb…",
-    "dupes.confirm": "{n} Foto(s) in den Papierkorb verschieben? Nichts wird endgültig gelöscht.",
+    "dupes.confirm":
+      "{n} Foto(s) in den Papierkorb verschieben? Nichts wird endgültig gelöscht.",
     "dupes.confirmYes": "In den Papierkorb",
     "dupes.confirmNo": "Abbrechen",
     "dupes.deleted": "{n} Foto(s) in den Papierkorb verschoben.",

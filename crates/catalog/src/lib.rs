@@ -8,6 +8,7 @@
 pub mod albums;
 pub mod datetime;
 pub mod duplicates;
+pub mod faces;
 pub mod folder_ini;
 pub mod hidden;
 pub mod metadata_edit;
@@ -23,6 +24,7 @@ pub mod trash;
 pub use albums::AlbumInfo;
 pub use datetime::{AdjustError, AdjustFailure, AdjustReport, TimeAdjustment, TimePreview};
 pub use duplicates::{group_by_phash, DuplicateGroup, DEFAULT_DUPLICATE_THRESHOLD_BITS};
+pub use faces::{FaceRecord, FaceRow};
 pub use folder_ini::{FolderIniReport, FolderIniStatus};
 pub use metadata_edit::{FieldError, GpsEdit, MetadataEdit, MetadataField};
 pub use migrations::MIGRATIONS;
@@ -250,6 +252,8 @@ pub struct FolderInfo {
     /// Hidden itself or inside a hidden folder (TASK-03-009); only listed
     /// while "show hidden" is on.
     pub hidden: bool,
+    /// Per-folder face-detection toggle (TASK-05-010, PLAN §2 Tools menu).
+    pub face_detect: bool,
     /// Files directly in the folder (TASK-03-016 folder sort).
     pub file_count: i64,
     /// Summed size in bytes of those files (TASK-03-016 folder sort).
@@ -881,7 +885,7 @@ impl Catalog {
              CASE WHEN length(fi.taken_at) >= 4 \
                   THEN CAST(substr(fi.taken_at, 1, 4) AS INTEGER) END, \
                   CAST(strftime('%Y', fi.mtime, 'unixepoch') AS INTEGER))), f.hidden_eff, \
-             COUNT(fi.id), COALESCE(SUM(fi.size), 0), CAST(MAX(fi.mtime) AS INTEGER) \
+             f.face_detect, COUNT(fi.id), COALESCE(SUM(fi.size), 0), CAST(MAX(fi.mtime) AS INTEGER) \
              FROM folders f LEFT JOIN files fi ON fi.folder_id = f.id \
              {visible}GROUP BY f.id, f.path ORDER BY f.path"
         );
@@ -894,9 +898,10 @@ impl Catalog {
                 scan_mode: ScanMode::from_db(&mode),
                 year: r.get(3)?,
                 hidden: r.get(4)?,
-                file_count: r.get(5)?,
-                total_size: r.get(6)?,
-                newest_mtime: r.get(7)?,
+                face_detect: r.get::<_, i64>(5)? != 0,
+                file_count: r.get(6)?,
+                total_size: r.get(7)?,
+                newest_mtime: r.get(8)?,
             })
         })?;
         Ok(rows.flatten().collect())

@@ -58,6 +58,13 @@ pub fn catalog_cache_dir(dir: &Path) -> PathBuf {
     dir.join("thumbnails")
 }
 
+/// The AI models directory inside a catalog directory (PLAN §1: the catalog
+/// location holds ML models; the opt-in download flow from TASK-05-001
+/// installs checksum-verified files here).
+pub fn catalog_models_dir(dir: &Path) -> PathBuf {
+    dir.join("models")
+}
+
 impl Registry {
     /// The registry every fresh install starts with: a single `Default`
     /// catalog rooted at the app data dir (backward-compatible layout).

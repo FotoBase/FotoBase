@@ -10,7 +10,7 @@
 ## feat: AI runtime & models
 
 - [x] `05-001` (L) `ai` crate: `ort` (ONNX Runtime) integration, CPU default; opt-in model download flow (license manifest checked in CI — YuNet detect MIT, MobileFaceNet-class embed Apache-2.0, per §4 pins).
-- [ ] `05-002` (M) Face detection (YuNet) + embedding as job-queue jobs; battery throttling hook.
+- [x] `05-002` (M) Face detection (YuNet) + embedding as job-queue jobs; battery throttling hook.
 
 ## feat: clustering & naming
 
@@ -24,6 +24,6 @@
 
 - [ ] `05-008` (M) Face regions → MWG `mwg-rs:Regions` XMP write; sqlite-vec embeddings table.
 - [ ] `05-009` (S) "Reset faces" per photo (picture context menu).
-- [ ] `05-010` (S) Per-folder face-detection toggle in Folder Manager.
+- [x] `05-010` (S) Per-folder face-detection toggle in Folder Manager.
 - [ ] `05-011` (M) Contacts link (local contacts only) — name ↔ contact mapping.
 - [ ] `05-012` (M) Clustering precision/recall evaluation on labeled face set (§9); resource-cap tests on battery.

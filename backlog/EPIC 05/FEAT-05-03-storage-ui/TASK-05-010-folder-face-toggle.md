@@ -1,6 +1,6 @@
 # task: add per-folder face-detection toggle
 
-**Feature:** [FEAT-05-03-storage-ui](FEAT-05-03-storage-ui.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** todo
+**Feature:** [FEAT-05-03-storage-ui](FEAT-05-03-storage-ui.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-03)
 
 ## Description
 Per-folder face-detection toggle in the Folder Manager (PLAN §2 Tools menu "Folder Manager — face-detection toggle"; §6 P3 People).
@@ -19,4 +19,4 @@ Per-folder face-detection toggle in the Folder Manager (PLAN §2 Tools menu "Fol
 - E2e: toggle visible and functional in Folder Manager dialog.
 
 ## Acceptance criteria
-- [ ] 05-010: Per-folder face-detection toggle in Folder Manager controls scheduling.
+- [x] 05-010: Per-folder face-detection toggle in Folder Manager controls scheduling.

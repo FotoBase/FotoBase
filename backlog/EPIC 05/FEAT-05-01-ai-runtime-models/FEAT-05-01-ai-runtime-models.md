@@ -9,9 +9,9 @@
 - Models are permissively licensed (MIT/Apache-2.0) — usable in GPL distribution without exceptions.
 
 - [x] `05-001` (L) `ai` crate: `ort` (ONNX Runtime) integration, CPU default; opt-in model download flow (license manifest checked in CI — YuNet detect MIT, MobileFaceNet-class embed Apache-2.0, per §4 pins).
-- [ ] `05-002` (M) Face detection (YuNet) + embedding as job-queue jobs; battery throttling hook.
+- [x] `05-002` (M) Face detection (YuNet) + embedding as job-queue jobs; battery throttling hook.
 
 ## Tasks
 
 - [x] [TASK-05-001-ort-runtime-models.md](TASK-05-001-ort-runtime-models.md) — build ai crate with ort runtime and model downloads
-- [ ] [TASK-05-002-face-jobs-throttle.md](TASK-05-002-face-jobs-throttle.md) — run face detection and embedding as throttled jobs
+- [x] [TASK-05-002-face-jobs-throttle.md](TASK-05-002-face-jobs-throttle.md) — run face detection and embedding as throttled jobs

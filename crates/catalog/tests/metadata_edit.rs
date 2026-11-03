@@ -263,15 +263,19 @@ fn migrating_an_older_catalog_makes_the_next_rebuild_reread_sidecars() {
     drop(cat);
     let conn = rusqlite::Connection::open(&db).unwrap();
     // Schema v9 is the one before the artist column (migration 10); the
-    // later stack columns (migration 11) and folder ini table (migration 12)
-    // go with it.
+    // later stack columns (migration 11), folder ini table (migration 12)
+    // and face tables (migration 14) go with it.
     conn.execute_batch(
-        "DROP TABLE folder_ini_ingest;
+        "DROP TABLE embeddings;
+         DROP TABLE faces;
+         DROP TABLE folder_ini_ingest;
          DROP INDEX idx_files_stack;
          ALTER TABLE files DROP COLUMN stack_id;
          ALTER TABLE files DROP COLUMN stack_role;
          ALTER TABLE files DROP COLUMN has_recipe;
          ALTER TABLE files DROP COLUMN phash;
+         ALTER TABLE files DROP COLUMN face_scanned;
+         ALTER TABLE folders DROP COLUMN face_detect;
          ALTER TABLE metadata DROP COLUMN artist;
          ALTER TABLE metadata DROP COLUMN copyright;",
     )

@@ -23,6 +23,7 @@ pub mod duplicates;
 pub mod edit;
 pub mod emit_pacer;
 pub mod export_dialog;
+pub mod face_jobs;
 pub mod file_menu;
 pub mod folder_manager;
 pub mod import;
@@ -42,7 +43,15 @@ pub mod tray;
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase";
 
-pub use catalog_registry::{catalog_cache_dir, catalog_db_path};
+pub use catalog_registry::{catalog_cache_dir, catalog_db_path, catalog_models_dir};
+
+/// The AI models directory of the current catalog (opt-in downloads land
+/// here; the face pass refuses to run without its models).
+fn ai_models_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
+    let state = app.state::<AppState>();
+    let dir = state.catalog_dir();
+    catalog_models_dir(&dir)
+}
 
 /// Capacity of the thumbnail render queue: bounded, per PLAN §3 rule 4.
 const THUMB_QUEUE_CAPACITY: usize = 64;
@@ -80,6 +89,10 @@ const BATCH_EDIT_QUEUE_CAPACITY: usize = 2;
 /// Capacity of the duplicate-hashing queue (TASK-04-019): bounded, per
 /// PLAN §3 rule 4; one background run at a time.
 const DUPES_QUEUE_CAPACITY: usize = 2;
+/// Face pass (TASK-05-002): one full-library pass at a time, the queue
+/// pause gate is the battery hook. One running + one queued pass is plenty;
+/// new triggers coalesce onto the queued pass.
+const FACES_QUEUE_CAPACITY: usize = 2;
 
 /// Sequence number for unique portable-export job keys.
 static EXPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -146,6 +159,7 @@ struct AppState {
     /// Bounded queue for duplicate hashing runs (TASK-04-019): background
     /// priority, the single worker serializes runs (PLAN §3 rule 4).
     dupes: fotobase_jobs::Queue<duplicates::HashReport>,
+    faces: fotobase_jobs::Queue<face_jobs::FaceReport>,
     /// Cancel token of the most recently started import (TASK-01-017):
     /// `cancel_import` trips it, the running job observes the flag.
     import_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
@@ -188,6 +202,12 @@ impl AppState {
     /// Snapshot of the active catalog's thumbnail-cache directory.
     fn cache_dir(&self) -> PathBuf {
         self.cache_dir.lock().map(|g| g.clone()).unwrap_or_default()
+    }
+
+    /// Snapshot of the active catalog's owning directory (models live under
+    /// its `models/` subdirectory, PLAN §1).
+    fn catalog_dir(&self) -> PathBuf {
+        self.catalog_path().parent().map(Path::to_path_buf).unwrap_or_default()
     }
 }
 
@@ -1284,6 +1304,147 @@ fn remove_folder(path: String, state: tauri::State<'_, AppState>) -> Result<usiz
     with_folder_manager(&state, |fm| fm.remove(&path))
 }
 
+// --- Face detection (TASK-05-002 / TASK-05-010, PLAN §6 P3) -----------------
+
+/// Per-folder face-detection toggle (TASK-05-010, Folder Manager). Persist
+/// the decision; when a folder is switched ON, kick a background face pass
+/// through the job queue right away ("toggling on later triggers detection
+/// for that folder") — the pass reads the toggles itself, so it naturally
+/// picks up exactly the enabled folders. Switching OFF schedules nothing
+/// and leaves existing faces alone (functional spec).
+#[tauri::command]
+fn set_folder_face(
+    path: String,
+    enabled: bool,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let corrupted = |e: String| fotobase_catalog::CatalogError::Corrupted(e);
+    with_catalog_mut(&state, |cat| {
+        let changed = cat
+            .set_folder_face_detection(&path, enabled)
+            .map_err(|e| corrupted(format!("set face detection: {e}")))?;
+        if !changed {
+            // First time this folder is managed: seed a row, then set.
+            cat.seed_folder(&path).map_err(|e| corrupted(format!("seed folder {path}: {e}")))?;
+            cat.set_folder_face_detection(&path, enabled)
+                .map_err(|e| corrupted(format!("set face detection: {e}")))?;
+        }
+        Ok(())
+    })?;
+    if enabled {
+        spawn_face_pass(&app, &state);
+    }
+    Ok(())
+}
+
+/// Read one folder's toggle state back (the e2e and the dialog both want the
+/// catalog as the source of truth, not dialog-local state).
+#[tauri::command]
+fn folder_face_enabled(path: String, state: tauri::State<'_, AppState>) -> Result<bool, String> {
+    let corrupted = |e: String| fotobase_catalog::CatalogError::Corrupted(e);
+    with_catalog(&state, |cat| {
+        cat.folder_face_detection(&path)
+            .map_err(|e| corrupted(format!("read face detection: {e}")))
+            .map(|v| v.unwrap_or(false))
+    })
+}
+
+/// The blocking body of every face-pass job (TASK-05-002): own catalog
+/// connection (a 50k pass must not hold the UI's catalog mutex, §9),
+/// opt-in models required (PLAN §1 — without them the pass is a no-op and
+/// the Folder Manager keeps its toggles), cancellation from the queue's
+/// token.
+fn run_face_pass_blocking(
+    app: &tauri::AppHandle,
+    cancelled: bool,
+) -> Result<face_jobs::FaceReport, String> {
+    let model_dir = ai_models_dir(app);
+    if !model_dir.join("face_detection_yunet_2023mar.onnx").exists() {
+        return Ok(face_jobs::FaceReport::default());
+    }
+    let path = app.state::<AppState>().catalog_path().to_path_buf();
+    let mut cat = Catalog::open(path).map_err(|e| e.to_string())?;
+    let mut engine = face_jobs::OrtEngine::load(&model_dir).map_err(|e| e.to_string())?;
+    let flag = std::sync::atomic::AtomicBool::new(cancelled);
+    face_jobs::run_face_pass(&mut cat, &mut engine, &flag)
+}
+
+/// Enqueue a full-library face pass at background priority (§3 rule 4) on
+/// the battery-hooked queue. The job owns its own catalog connection so a
+/// 50k pass never holds the UI's catalog mutex (§9). Progress is emitted on
+/// `faces-progress` — counters only, never image bytes (§3 rule 3).
+fn spawn_face_pass(app: &tauri::AppHandle, state: &tauri::State<'_, AppState>) {
+    let queue = state.faces.clone();
+    let job_app = app.clone();
+    let queued = queue.try_enqueue(
+        face_jobs::job_key(),
+        fotobase_jobs::Priority::Background,
+        fotobase_jobs::job(move |ctx| {
+            let app = job_app.clone();
+            let emitter = job_app.clone();
+            async move {
+                let cancelled = ctx.is_cancelled();
+                let joined = tauri::async_runtime::spawn_blocking(move || {
+                    run_face_pass_blocking(&app, cancelled)
+                })
+                .await;
+                match joined {
+                    Ok(Ok(report)) => {
+                        let _ = emitter.emit(face_jobs::FACES_EVENT, &report);
+                        fotobase_jobs::Outcome::Done(report)
+                    }
+                    Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                    Err(e) => fotobase_jobs::Outcome::Failed(format!("face pass task: {e}")),
+                }
+            }
+        }),
+    );
+    if let Err(e) = queued {
+        tracing::warn!("enqueue face pass failed: {e}");
+    }
+}
+
+#[tauri::command]
+async fn run_face_pass(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<face_jobs::FaceReport, String> {
+    let queue = state.faces.clone();
+    let key = face_jobs::job_key();
+    let job_app = app.clone();
+    let handle = queue
+        .try_enqueue(
+            key,
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |ctx| {
+                let app = job_app.clone();
+                let emitter = job_app.clone();
+                async move {
+                    let cancelled = ctx.is_cancelled();
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        run_face_pass_blocking(&app, cancelled)
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(report)) => {
+                            let _ = emitter.emit(face_jobs::FACES_EVENT, &report);
+                            fotobase_jobs::Outcome::Done(report)
+                        }
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("face pass task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue face pass: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("face pass cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
 // --- File menu / folder context menu (TASK-01-021, PLAN §2) -----------------
 
 /// "Locate on disk" (File menu / Folder context menu): reveal a photo or
@@ -2266,6 +2427,15 @@ pub fn run() {
             let dupes = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(DUPES_QUEUE_CAPACITY)
             });
+            // The face queue runs on the battery hook: on battery the
+            // dequeue pauses (§10), on AC it admits immediately.
+            let face_battery = std::sync::Arc::new(fotobase_jobs::BatteryHook::new(false));
+            let faces = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::with_throttle(
+                    FACES_QUEUE_CAPACITY,
+                    face_battery.clone() as std::sync::Arc<dyn fotobase_jobs::ThrottleHook>,
+                )
+            });
             let persisted = settings::Settings::load(&data_dir);
             // Catalog registry (TASK-03-024): which catalog opens at launch
             // (the last-used one, functional spec). The default entry keeps
@@ -2298,6 +2468,7 @@ pub fn run() {
                 edits,
                 batch_edits,
                 dupes,
+                faces,
                 batch_edit_cancel: Mutex::new(None),
                 import_cancel: Mutex::new(None),
                 settings: Mutex::new(persisted),
@@ -2336,6 +2507,18 @@ pub fn run() {
                         let _ = watcher_app.emit("display-profile-changed", fp.clone());
                     }
                     last = fp;
+                }
+            });
+            // Battery probe (TASK-05-002, §10): feed the face queue's
+            // battery hook best-effort. Unknown power state means AC — the
+            // queue never pauses on a guess. No telemetry, no network.
+            let battery_hook = face_battery.clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(face_jobs::PROBE_INTERVAL).await;
+                    if let Some(on_battery) = face_jobs::probe_on_battery() {
+                        battery_hook.set_on_battery(on_battery);
+                    }
                 }
             });
             // stream:// janitor (TASK-02-006): the idle-timeout backstop —
@@ -2461,6 +2644,9 @@ pub fn run() {
             clear_cache,
             rebuild_catalog,
             set_folder_mode,
+            set_folder_face,
+            folder_face_enabled,
+            run_face_pass,
             remove_folder,
             reveal_path,
             delete_to_trash,

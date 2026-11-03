@@ -261,6 +261,17 @@ pub fn thumbnail(
     Ok(Thumbnail { path: cached, width: dst_w, height: dst_h, from_cache: false })
 }
 
+/// Decode a file to full-resolution RGB8 (contiguous, width*height*3) —
+/// the input the face pipeline (TASK-05-002) and future full-frame
+/// consumers need. Same decoder chain as [`thumbnail`] (RAW/HEIF/JXL/
+/// JPEG/…), no resize, no color management: the AI models are trained on
+/// raw sRGB-ish pixel data and the alignment/embedding path is
+/// color-profile-agnostic by design.
+pub fn decode_rgb(src: &Path) -> Result<(Vec<u8>, u32, u32), RenderError> {
+    let bytes = std::fs::read(src)?;
+    decode(&bytes, src)
+}
+
 /// Cheap dimension read of a cached thumbnail; `None` when absent/unreadable
 /// (a corrupt entry is treated as a miss and re-rendered).
 fn cached_dimensions(p: &Path) -> Option<(u32, u32)> {
