@@ -1,6 +1,6 @@
 # task: build unnamed people queue
 
-**Feature:** [FEAT-05-02-clustering-naming](FEAT-05-02-clustering-naming.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** todo
+**Feature:** [FEAT-05-02-clustering-naming](FEAT-05-02-clustering-naming.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-03)
 
 ## Description
 The Unnamed people queue: review unnamed clusters and suggestions with bulk confirm/reject (PLAN §2G "Unnamed people queue"; §6 P3 People).
@@ -19,4 +19,4 @@ The Unnamed people queue: review unnamed clusters and suggestions with bulk conf
 - Integration: bulk confirm → all faces in sidecar MWG regions with the person name.
 
 ## Acceptance criteria
-- [ ] 05-005: Unnamed queue supports bulk confirm/reject per cluster.
+- [x] 05-005: Unnamed queue supports bulk confirm/reject per cluster.

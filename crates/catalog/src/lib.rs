@@ -32,7 +32,7 @@ pub use folder_ini::{FolderIniReport, FolderIniStatus};
 pub use metadata_edit::{FieldError, GpsEdit, MetadataEdit, MetadataField};
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
-pub use people::{PersonRow, Suggestion};
+pub use people::{PersonRow, QueueCluster, QueueFace, Suggestion};
 pub use portable::{ExportFormat, ExportReport, ExportSections, PortableExport};
 pub use query::{FileQuery, FileSort};
 pub use relocate::BatchFile;

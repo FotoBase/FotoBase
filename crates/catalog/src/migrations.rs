@@ -22,6 +22,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V13,
     MIGRATION_V14,
     MIGRATION_V15,
+    MIGRATION_V16,
 ];
 
 const MIGRATION_V1: &str = "
@@ -471,6 +472,14 @@ CREATE TABLE persons (
     name    TEXT NOT NULL UNIQUE
 );
 ALTER TABLE faces ADD COLUMN person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL;
+";
+
+/// TASK-05-005: per-face rejection state for the unnamed people queue.
+/// A rejected face stays detected (the row and its embedding are kept —
+/// derived data, recomputable) but its suggestion is suppressed: it never
+/// re-enters the queue and a bulk confirm skips it.
+const MIGRATION_V16: &str = "
+ALTER TABLE faces ADD COLUMN rejected INTEGER NOT NULL DEFAULT 0;
 ";
 
 /// Apply all pending migrations, in order, each in its own transaction.

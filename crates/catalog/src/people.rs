@@ -210,3 +210,201 @@ impl Catalog {
         Ok(PersonRow { id: person_id, name })
     }
 }
+
+/// TASK-05-005: the unnamed people queue (PLAN §2G "Unnamed people queue").
+/// One reviewable entry: an unnamed cluster, the count of its still-
+/// actionable faces and a representative face for the thumbnail.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct QueueCluster {
+    pub cluster_id: i64,
+    /// Faces that a bulk action would still touch: unnamed and not rejected.
+    pub face_count: i64,
+    pub representative: QueueFace,
+}
+
+/// The representative face: box (fractions of the photo) plus the photo's
+/// content hash backing the `thumb://` URI (`None` until the hash backfill
+/// fills it in — no image bytes ever cross IPC, §3 rule 3).
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct QueueFace {
+    pub face_id: i64,
+    pub file_id: i64,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub hash: Option<String>,
+}
+
+impl Catalog {
+    /// Unnamed clusters with at least one actionable face (unnamed, not
+    /// rejected), cluster-id ordered for a stable queue. Fully rejected and
+    /// already-named clusters do not re-enter.
+    pub fn unnamed_queue(&self) -> Result<Vec<QueueCluster>> {
+        let mut stmt = self.conn().prepare_cached(
+            "SELECT c.id, COUNT(f.id), MIN(f.id) FROM face_clusters c \
+             JOIN faces f ON f.cluster = c.id \
+             WHERE f.person_id IS NULL AND f.rejected = 0 \
+             GROUP BY c.id ORDER BY c.id",
+        )?;
+        let heads = stmt
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        heads
+            .into_iter()
+            .map(|(cluster_id, face_count, rep)| {
+                let mut stmt = self.conn().prepare_cached(
+                    "SELECT f.id, f.file_id, f.x, f.y, f.width, f.height, fi.hash \
+                     FROM faces f JOIN files fi ON fi.id = f.file_id WHERE f.id = ?1",
+                )?;
+                let representative = stmt.query_row([rep], |r| {
+                    Ok(QueueFace {
+                        face_id: r.get(0)?,
+                        file_id: r.get(1)?,
+                        x: r.get(2)?,
+                        y: r.get(3)?,
+                        width: r.get(4)?,
+                        height: r.get(5)?,
+                        hash: r.get(6)?,
+                    })
+                })?;
+                Ok(QueueCluster { cluster_id, face_count, representative })
+            })
+            .collect()
+    }
+
+    /// Per-face rejection state (TASK-05-005): the suggestion is suppressed,
+    /// the face stays detected. A face with a confirmed person cannot be
+    /// rejected — its name is already user data in the sidecar.
+    pub fn reject_face(&self, face_id: i64) -> Result<()> {
+        let named: Option<Option<i64>> = self
+            .conn()
+            .query_row("SELECT person_id FROM faces WHERE id = ?1", [face_id], |r| r.get(0))
+            .optional()?;
+        match named {
+            None => Err(CatalogError::InvalidQuery(format!("no face {face_id}"))),
+            Some(Some(_)) => {
+                Err(CatalogError::InvalidQuery(format!("face {face_id} already has a person")))
+            }
+            Some(None) => {
+                self.conn().execute("UPDATE faces SET rejected = 1 WHERE id = ?1", [face_id])?;
+                Ok(())
+            }
+        }
+    }
+
+    /// Bulk reject: suppress the suggestion for every still-unnamed face of
+    /// the cluster in one action. Returns how many faces were rejected.
+    pub fn bulk_reject_cluster(&mut self, cluster_id: i64) -> Result<usize> {
+        let exists: bool = self
+            .conn()
+            .query_row("SELECT 1 FROM face_clusters WHERE id = ?1", [cluster_id], |r| r.get(0))
+            .optional()?
+            .unwrap_or(false);
+        if !exists {
+            return Err(CatalogError::InvalidQuery(format!("no cluster {cluster_id}")));
+        }
+        Ok(self.conn().execute(
+            "UPDATE faces SET rejected = 1 WHERE cluster = ?1 AND person_id IS NULL AND rejected = 0",
+            [cluster_id],
+        )?)
+    }
+
+    /// Bulk confirm: one action names the cluster (get-or-create the
+    /// person), stamps every still-unnamed non-rejected face with it and
+    /// writes the name into each photo's sidecar as a named MWG region
+    /// (§5 user data — sidecar first, catalog mirror second; one
+    /// transaction per face, so a sidecar failure leaves the remaining
+    /// faces unstamped but never corrupts a written one). Returns the
+    /// person and how many faces were confirmed.
+    pub fn bulk_confirm_cluster(
+        &mut self,
+        cluster_id: i64,
+        name: &str,
+    ) -> SyncResult<(PersonRow, usize)> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(CatalogError::InvalidQuery("person name is blank".into()).into());
+        }
+        let exists: bool = self
+            .conn()
+            .query_row("SELECT 1 FROM face_clusters WHERE id = ?1", [cluster_id], |r| r.get(0))
+            .optional()?
+            .unwrap_or(false);
+        if !exists {
+            return Err(CatalogError::InvalidQuery(format!("no cluster {cluster_id}")).into());
+        }
+        // Get-or-create: a cluster that already carries a person keeps it —
+        // a different name would silently rename confirmed faces.
+        let person = match self.cluster_person(cluster_id)? {
+            Some(person) => {
+                if !person.name.eq_ignore_ascii_case(name) {
+                    return Err(CatalogError::InvalidQuery(format!(
+                        "cluster {cluster_id} is already named {:?}",
+                        person.name
+                    ))
+                    .into());
+                }
+                person
+            }
+            None => {
+                let person_id =
+                    match self.conn().execute("INSERT INTO persons (name) VALUES (?1)", [name]) {
+                        Ok(_) => self.conn().last_insert_rowid(),
+                        Err(rusqlite::Error::SqliteFailure(e, _))
+                            if e.code == rusqlite::ErrorCode::ConstraintViolation =>
+                        {
+                            return Err(CatalogError::InvalidQuery(format!(
+                                "person name {name:?} is already in use"
+                            ))
+                            .into());
+                        }
+                        Err(e) => return Err(e.into()),
+                    };
+                PersonRow { id: person_id, name: name.to_string() }
+            }
+        };
+
+        let faces = {
+            let mut stmt = self.conn().prepare_cached(
+                "SELECT id, file_id, x, y, width, height FROM faces \
+                 WHERE cluster = ?1 AND person_id IS NULL AND rejected = 0 ORDER BY id",
+            )?;
+            let faces: Vec<_> = stmt
+                .query_map([cluster_id], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, f32>(2)?,
+                        r.get::<_, f32>(3)?,
+                        r.get::<_, f32>(4)?,
+                        r.get::<_, f32>(5)?,
+                    ))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            faces
+        };
+
+        let mut confirmed = 0;
+        for (face_id, file_id, x, y, w, h) in faces {
+            self.mutate_user_data(file_id, |sc| {
+                sc.add_face_regions(
+                    &[FaceRegion {
+                        name: name.to_string(),
+                        x: x as f64,
+                        y: y as f64,
+                        w: w as f64,
+                        h: h as f64,
+                    }],
+                    None,
+                );
+            })?;
+            self.conn().execute(
+                "UPDATE faces SET person_id = ?1 WHERE id = ?2",
+                rusqlite::params![person.id, face_id],
+            )?;
+            confirmed += 1;
+        }
+        Ok((person, confirmed))
+    }
+}

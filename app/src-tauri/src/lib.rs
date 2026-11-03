@@ -27,6 +27,7 @@ pub mod face_jobs;
 pub mod file_menu;
 pub mod folder_manager;
 pub mod import;
+pub mod people;
 pub mod perf_probe;
 pub mod preview;
 pub mod rating;
@@ -1528,6 +1529,32 @@ fn duplicate_groups(
     })
 }
 
+/// The unnamed people queue (TASK-05-005, PLAN §2G): unnamed clusters with
+/// a representative face, ready for bulk confirm/reject. Cheap catalog
+/// query — no image bytes over IPC (§3 rule 3).
+#[tauri::command]
+fn people_queue(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<people::QueueClusterInfo>, String> {
+    with_catalog(&state, people::queue)
+}
+
+/// One bulk action on a queue cluster (TASK-05-005): confirm names the
+/// cluster and stamps every actionable face, writing the named MWG region
+/// into each sidecar (sidecar-first per docs/sidecar-merge-on-write.md);
+/// reject suppresses the suggestion per face. Returns faces touched.
+#[tauri::command]
+fn people_queue_bulk(
+    cluster_id: i64,
+    action: people::BulkAction,
+    state: tauri::State<'_, AppState>,
+) -> Result<usize, String> {
+    with_catalog_mut(&state, |cat| {
+        people::bulk(cat, cluster_id, action)
+            .map_err(|e| fotobase_catalog::CatalogError::Corrupted(e.to_string()))
+    })
+}
+
 /// Delete the user-confirmed subset of a duplicate group (TASK-04-019):
 /// each id routes through the file-menu "Delete from disk" path — OS trash
 /// first, catalog row dropped after. The UI's confirmation dialog is the
@@ -2601,6 +2628,8 @@ pub fn run() {
             unstack,
             list_stack,
             stack_suggestions,
+            people_queue,
+            people_queue_bulk,
             folder_ini_pending_folders,
             ingest_folder_ini,
             decline_folder_ini,
