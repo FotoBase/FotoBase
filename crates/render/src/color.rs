@@ -59,8 +59,24 @@ fn to_xyy(t: [f64; 3]) -> lcms2::CIExyY {
 }
 
 /// Serialize the standard lcms2 sRGB profile (the Linux fallback destination).
+/// Deterministic: its fingerprint is the thumbnail cache tag, so it must not
+/// change between calls (see [`pin_creation_date`]).
 pub fn srgb_profile_bytes() -> Result<Vec<u8>, ColorError> {
-    Profile::new_srgb().icc().map_err(|_| ColorError::Transform)
+    let mut icc = Profile::new_srgb().icc().map_err(|_| ColorError::Transform)?;
+    pin_creation_date(&mut icc);
+    Ok(icc)
+}
+
+/// lcms2 stamps the wall-clock creation time into the ICC header (bytes
+/// 24..36, `dateTimeNumber`). Zero it so a profile built from constants
+/// serializes byte-identically — otherwise its fingerprint changed every
+/// second (TASK-05-013: endless thumbnail re-renders). The profile ID
+/// (bytes 84..100) stays all-zero, i.e. "not computed", so nothing it
+/// covers is invalidated.
+fn pin_creation_date(icc: &mut [u8]) {
+    if let Some(date) = icc.get_mut(24..36) {
+        date.fill(0);
+    }
 }
 
 /// Short stable fingerprint of a profile, used as the cache-file tag so

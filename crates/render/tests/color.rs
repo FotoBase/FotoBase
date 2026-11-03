@@ -256,3 +256,17 @@ fn png_iccp_extraction() {
         crc ^ 0xFFFF_FFFF
     }
 }
+
+/// TASK-05-013: the sRGB fallback is the display profile on Linux, and its
+/// fingerprint is the thumbnail cache tag. lcms2 stamps the creation time
+/// into the ICC header, so an unpinned serialization changed fingerprint
+/// every second — the profile poller then saw a "new display profile" on
+/// every tick and the thumbnail cache never hit (a re-render/event storm).
+#[test]
+fn srgb_fallback_profile_is_deterministic() {
+    let a = srgb_profile();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let b = srgb_profile();
+    assert_eq!(a, b, "sRGB profile bytes must not depend on the clock");
+    assert_eq!(thumb_profile_tag(Some(&a)), thumb_profile_tag(Some(&b)));
+}
