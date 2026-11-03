@@ -4,9 +4,11 @@
   // notify watcher), Remove from catalog (confirmed; files stay on disk).
   // Every change applies immediately — the parent refreshes the library
   // through `onchanged`, so a newly scanned folder shows up at once. The
-  // face-detection toggle is a disabled P3 placeholder (§2 Tools note).
+  // per-folder face-detection toggle (TASK-05-010, PLAN §2 Tools menu)
+  // persists its decision; switching a folder on triggers its face pass
+  // (TASK-05-002) in the backend.
   import { t } from "./i18n.svelte.js";
-  import { removeFolder, setFolderMode, type FolderMode } from "./folder-manager";
+  import { removeFolder, setFolderFace, setFolderMode, type FolderMode } from "./folder-manager";
   import type { FolderInfo } from "./folder-tree";
 
   let {
@@ -29,6 +31,19 @@
     busy = folder.path;
     try {
       await setFolderMode(folder.path, mode);
+      onchanged();
+    } catch (e) {
+      error = t("folderManager.error", { error: String(e) });
+    } finally {
+      busy = null;
+    }
+  }
+
+  async function applyFace(folder: FolderInfo, enabled: boolean): Promise<void> {
+    error = null;
+    busy = folder.path;
+    try {
+      await setFolderFace(folder.path, enabled);
       onchanged();
     } catch (e) {
       error = t("folderManager.error", { error: String(e) });
@@ -68,9 +83,11 @@
               <label class="face-toggle">
                 <input
                   type="checkbox"
-                  disabled
+                  checked={folder.face_detect ?? false}
+                  disabled={busy === folder.path}
+                  onchange={(e) => applyFace(folder, e.currentTarget.checked)}
                   data-testid={`face-toggle-${folder.path}`}
-                  title={t("folderManager.face.placeholder")}
+                  title={t("folderManager.face.hint")}
                 />
                 {t("folderManager.face")}
               </label>

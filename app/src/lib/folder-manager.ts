@@ -5,9 +5,23 @@
 export type FolderMode = "once" | "always";
 
 /** Apply a folder's mode: "always" arms the watcher, "once" scans now. */
-export async function setFolderMode(path: string, mode: FolderMode): Promise<void> {
+export async function setFolderMode(
+  path: string,
+  mode: FolderMode,
+): Promise<void> {
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("set_folder_mode", { path, mode });
+}
+
+/** Per-folder face-detection toggle (TASK-05-010, PLAN §2 Tools menu). The
+ * backend persists the decision and, on "on", triggers a background face
+ * pass for the enabled folders (TASK-05-002). */
+export async function setFolderFace(
+  path: string,
+  enabled: boolean,
+): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("set_folder_face", { path, enabled });
 }
 
 /** Remove a folder from the catalog; files on disk are never touched. */

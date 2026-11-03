@@ -157,6 +157,54 @@ impl ThrottleHook for NoThrottle {
     }
 }
 
+/// Battery throttling hook (TASK-05-002, PLAN §10 "pause on
+/// metered/battery", §3 rule 4): while the shared power state says "on
+/// battery", dequeueing pauses entirely — queued jobs wait, nothing is
+/// dropped, and the moment AC returns the queue proceeds at full speed.
+/// The state is a `watch` channel, so flipping it wakes parked waiters
+/// immediately (no polling) and any number of queue handles share one
+/// power state through `Clone`.
+///
+/// The app feeds the hook from a best-effort OS probe; there is no
+/// telemetry and no network involved.
+#[derive(Clone)]
+pub struct BatteryHook {
+    /// `true` = on battery (paused), `false` = on AC (admit).
+    on_battery: watch::Sender<bool>,
+}
+
+impl BatteryHook {
+    /// A hook starting in the given power state.
+    pub fn new(on_battery: bool) -> Self {
+        Self { on_battery: watch::Sender::new(on_battery) }
+    }
+
+    /// Flip the power state. Parked waiters wake when switching to AC;
+    /// switching to battery takes effect before the next dequeue.
+    pub fn set_on_battery(&self, on: bool) {
+        self.on_battery.send_replace(on);
+    }
+
+    /// The current power state.
+    pub fn on_battery(&self) -> bool {
+        *self.on_battery.borrow()
+    }
+}
+
+impl ThrottleHook for BatteryHook {
+    fn wait_admission(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(async move {
+            let mut rx = self.on_battery.subscribe();
+            if !*rx.borrow_and_update() {
+                return; // on AC: admit immediately
+            }
+            // Err (all senders dropped) also admits: a queue outliving its
+            // power state must never deadlock.
+            let _ = rx.wait_for(|on| !*on).await;
+        })
+    }
+}
+
 /// Errors from enqueueing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum EnqueueError {

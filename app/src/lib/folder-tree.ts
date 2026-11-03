@@ -15,6 +15,9 @@ export interface FolderInfo {
   /// Hidden folder (or inside one), listed only while "show hidden" is on
   /// (TASK-03-009): rendered grayed.
   hidden?: boolean;
+  /// Per-folder face-detection toggle (TASK-05-010, PLAN §2 Tools menu):
+  /// off unless the user enables it.
+  face_detect?: boolean;
   /// Folder-sort aggregates (TASK-03-016): files directly in the folder,
   /// their summed bytes, and the newest mtime in unix seconds (null when
   /// empty). Absent values sort as empty.
@@ -60,7 +63,10 @@ export function groupFoldersByYear(
       if (b === null) return -1;
       return b - a; // newest year first
     })
-    .map(([year, fs]) => ({ year, folders: sortFolders(fs, sort.sort, sort.reverse) }));
+    .map(([year, fs]) => ({
+      year,
+      folders: sortFolders(fs, sort.sort, sort.reverse),
+    }));
 }
 
 /** Display name of a folder: its last path segment. */
