@@ -30,4 +30,4 @@ Approach (work test-first even here: a repro is the test):
 - The fix may not touch app behavior: `cargo test --workspace` and the app Vitest suite stay green; if any app-side change is needed (e.g. `quit_from_tray` ack), it gets its own test.
 
 ## Acceptance criteria
-- [ ] 05-013: `edit-view.e2e.ts` and `tray.e2e.ts` pass 3 consecutive CI runs; failure rate measured before/after in the PR; no assertion weakened.
+- [x] 05-013: `edit-view.e2e.ts` and `tray.e2e.ts` pass 3 consecutive CI runs; failure rate measured before/after in the PR; no assertion weakened.
