@@ -108,27 +108,64 @@ function sidecarText(name: string): string {
 // right-click opens the photo menu, "Add to tray" appends the photo, and
 // the tray accumulates across photos. The menu item is picked with a JS
 // click (see the header note); the right-click itself is the real gesture.
+// Each add is verified on its own, so a failure names the photo and what
+// the menu offered (TASK-05-013: "tray never reached 3 photos" said nothing).
 async function fillTray(): Promise<void> {
+  const trayCount = (): Promise<string> =>
+    browser.execute(
+      () => document.querySelector('[data-testid="tray-count"]')?.textContent?.trim() ?? "",
+    );
+  // Page-reload detector: the tray store is module-global, so a count that
+  // drops back means the page reloaded (WebKit restarts a crashed or
+  // unresponsive web process) — TASK-05-013.
+  await browser.execute(() => {
+    (window as unknown as { __fbMarker?: number }).__fbMarker = 1;
+  });
+  const reloaded = async (): Promise<string> =>
+    (await browser.execute(() => (window as unknown as { __fbMarker?: number }).__fbMarker === 1))
+      ? "page NOT reloaded"
+      : "page RELOADED (marker gone)";
   const imgs = await $$('[data-testid="grid-cell"] img');
+  let added = 0;
   for (const img of imgs) {
+    const alt = await img.getAttribute("alt");
     await img.click({ button: "right", x: 10, y: 10 });
     await browser.waitUntil(() => exists("context-menu"), {
       timeout: 5_000,
-      timeoutMsg: "photo context menu never opened",
+      timeoutMsg: `photo context menu never opened for ${alt}`,
     });
+    const offered = await browser.execute(() =>
+      Array.from(document.querySelectorAll('[data-testid^="menu-item-"]')).map((e) =>
+        e.getAttribute("data-testid"),
+      ),
+    );
     await domClick("menu-item-add-to-tray");
     await browser.waitUntil(async () => !(await exists("context-menu")), {
       timeout: 5_000,
       timeoutMsg: "photo context menu never closed",
     });
+    added++;
+    try {
+      await browser.waitUntil(async () => (await trayCount()).startsWith(String(added)), {
+        timeout: 5_000,
+      });
+    } catch {
+      throw new Error(
+        `tray did not grow to ${added} after adding ${alt}; tray-count="${await trayCount()}" ${await reloaded()}; menu offered: ${offered.join(",")}`,
+      );
+    }
   }
   await browser.waitUntil(
     async () => {
       const count = await $('[data-testid="tray-count"]').getText();
       return count.startsWith("3");
     },
-    { timeoutMsg: "tray never reached 3 photos" },
-  );
+    { timeout: 10_000 },
+  ).catch(async () => {
+    throw new Error(
+      `tray never reached 3 photos (tray-count="${await trayCount()}", ${await reloaded()})`,
+    );
+  });
 }
 
 describe("batch edit", () => {
@@ -223,9 +260,11 @@ describe("batch edit", () => {
       if ((await dialogState()).state === "done") break;
       await browser.pause(200);
     }
-    if (await exists("batch-edit-cancel")) {
-      await domClick("batch-edit-cancel");
-    }
+    // Check-and-click in ONE script: the run can finish between a separate
+    // exists() and click (TASK-05-013), and a finished run is accepted.
+    await browser.execute(() => {
+      (document.querySelector('[data-testid="batch-edit-cancel"]') as HTMLElement | null)?.click();
+    });
 
     await browser.waitUntil(async () => (await dialogState()).state === "done", {
       timeout: 30_000,
@@ -234,11 +273,19 @@ describe("batch edit", () => {
     const report = await dialogState();
     expect(report.text).not.toContain("failed");
 
+    // Not cancelled: every photo got the op. Cancelled ("processed photos
+    // keep their edits"): each photo either got it or still carries its
+    // earlier rotate recipe untouched — never a half-written packet.
+    const cancelled = await exists("batch-edit-cancelled");
     for (const name of [PAIR_JPEG, SOLO]) {
       const text = sidecarText(name);
       if (text === "") continue;
       expect(text).toContain("fotobase.recipe");
-      expect(text).toContain("film_grain");
+      if (cancelled && !text.includes("film_grain")) {
+        expect(text).toContain('"rotate"');
+      } else {
+        expect(text).toContain("film_grain");
+      }
     }
     // §9: originals still untouched after the second batch.
     for (const name of [PAIR_JPEG, SOLO]) {

@@ -1,6 +1,6 @@
 # task: stabilize the e2e suite (edit-view hangs, tray quit race)
 
-**Feature:** [FEAT-05-08-e2e-stability](FEAT-05-08-e2e-stability.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** todo
+**Feature:** [FEAT-05-08-e2e-stability](FEAT-05-08-e2e-stability.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-03)
 
 ## Description
 The e2e suite (WebdriverIO + tauri-driver, PLAN §4 "Testing & tooling", `.github/workflows/e2e.yml`) is too flaky to gate merges: on 2026-11-03 it failed on `main` twice (runs 41616425604, 41638071493) and on PR #249 twice (run 41645698226 + its `--failed` rerun), always in the same two spec files, while the same specs' siblings passed in interleaved runs (41603548611, 41631337409, 41641652081). A suite that fails 2-of-4 runs trains the team to ignore red, which is worse than no gate.
@@ -30,4 +30,4 @@ Approach (work test-first even here: a repro is the test):
 - The fix may not touch app behavior: `cargo test --workspace` and the app Vitest suite stay green; if any app-side change is needed (e.g. `quit_from_tray` ack), it gets its own test.
 
 ## Acceptance criteria
-- [ ] 05-013: `edit-view.e2e.ts` and `tray.e2e.ts` pass 3 consecutive CI runs; failure rate measured before/after in the PR; no assertion weakened.
+- [x] 05-013: `edit-view.e2e.ts` and `tray.e2e.ts` pass 3 consecutive CI runs; failure rate measured before/after in the PR; no assertion weakened.

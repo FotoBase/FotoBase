@@ -30,4 +30,4 @@
 
 ## feat: e2e stability
 
-- [ ] `05-013` (M) Stabilize the e2e suite: edit-view interaction hangs under xvfb, tray-quit drain race, session-creation port race.
+- [x] `05-013` (M) Stabilize the e2e suite: edit-view interaction hangs under xvfb, tray-quit drain race, session-creation port race.

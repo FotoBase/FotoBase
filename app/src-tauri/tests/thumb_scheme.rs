@@ -118,7 +118,7 @@ fn cached_hash_returns_the_cached_bytes() {
     let thumb = thumbnail(&src, &cache, ThumbOptions::default()).unwrap();
     let expected = std::fs::read(&thumb.path).unwrap();
 
-    let reply = resolve_thumb(&req1(&cache_key(&src)), &cache);
+    let reply = resolve_thumb(&req1(&cache_key(&src)), &cache, None);
 
     assert_eq!(reply.status, 200);
     assert_eq!(reply.content_type, "image/jpeg");
@@ -130,7 +130,7 @@ fn unknown_hash_returns_the_placeholder_never_an_error() {
     let tmp = TempDir::new().unwrap();
     let cache = tmp.path().join("thumbs"); // empty cache → guaranteed miss
 
-    let reply = resolve_thumb(&req1("e3b0c44298fc1c149afbf4c8996fb924"), &cache);
+    let reply = resolve_thumb(&req1("e3b0c44298fc1c149afbf4c8996fb924"), &cache, None);
 
     assert_eq!(reply.status, 200, "a miss must still be a displayable image");
     assert_eq!(reply.content_type, "image/png");
@@ -153,7 +153,7 @@ fn unreadable_cache_entry_degrades_to_placeholder() {
     std::fs::remove_file(&entry).unwrap();
     std::fs::create_dir(&entry).unwrap();
 
-    let reply = resolve_thumb(&req1(&hash), &cache);
+    let reply = resolve_thumb(&req1(&hash), &cache, None);
     assert_eq!(reply.status, 200);
     assert_eq!(reply.content_type, "image/png");
     assert_eq!(reply.body, PLACEHOLDER_PNG);
@@ -212,7 +212,7 @@ mod miss_jobs {
             }
         }
         // The render caches under the source's real content hash.
-        let reply = resolve_thumb(&req1(&cache_key(&src)), &cache);
+        let reply = resolve_thumb(&req1(&cache_key(&src)), &cache, None);
         assert_eq!(reply.content_type, "image/jpeg", "render job filled the cache");
         queue.close().await;
     }
@@ -258,7 +258,7 @@ mod miss_jobs {
                 other => panic!("coalesced render job must succeed, got {other:?}"),
             }
         }
-        assert_eq!(resolve_thumb(&req1(&cache_key(&src)), &cache).content_type, "image/jpeg");
+        assert_eq!(resolve_thumb(&req1(&cache_key(&src)), &cache, None).content_type, "image/jpeg");
         queue.close().await;
     }
 
@@ -313,6 +313,18 @@ mod miss_jobs {
             .filter(|n| n.ends_with(".jpg"))
             .collect();
         assert_eq!(entries.len(), 3, "one cache entry per display profile: {entries:?}");
+        // TASK-05-013: the scheme handler serves exactly what the render
+        // wrote under the same profile — a profile-blind lookup missed
+        // forever and turned every request into a re-render.
+        for profile in [Some(p3.as_slice()), Some(srgb.as_slice()), None] {
+            let reply = resolve_thumb(&req1(&cache_key(&src)), &cache, profile);
+            assert_eq!(
+                reply.content_type,
+                "image/jpeg",
+                "profile {:?} must hit",
+                profile.map(<[u8]>::len)
+            );
+        }
         queue.close().await;
     }
 }
@@ -411,7 +423,7 @@ mod video_thumbs {
         }
         // The video thumbnail landed under the shared key scheme, served by
         // the same thumb:// resolution — a hit, not the placeholder.
-        let reply = resolve_thumb(&req1(&cache_key(&video)), &cache);
+        let reply = resolve_thumb(&req1(&cache_key(&video)), &cache, None);
         assert_eq!(reply.content_type, "image/jpeg", "video thumbnail cached via thumb://");
         queue.close().await;
     }
@@ -531,7 +543,7 @@ mod video_thumbs {
             }
         }
         // The scheme layer serves the placeholder — never an error dialog.
-        let reply = resolve_thumb(&req1("ffffffffffffffffffffffffffffffff"), &cache);
+        let reply = resolve_thumb(&req1("ffffffffffffffffffffffffffffffff"), &cache, None);
         assert!(reply.body.starts_with(&[0x89, b'P', b'N', b'G']), "placeholder served");
         queue.close().await;
     }

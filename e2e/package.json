@@ -5,7 +5,8 @@
   "description": "End-to-end tests: WebdriverIO + tauri-driver driving the real Tauri app (PLAN §4).",
   "scripts": {
     "test": "wdio run wdio.conf.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "node --import tsx --test support/*.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22",

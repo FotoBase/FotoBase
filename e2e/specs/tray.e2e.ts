@@ -13,11 +13,11 @@
 // still what the spec proves.
 
 import { browser, expect } from "@wdio/globals";
-import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 import { makeLibrary, type Library } from "../support/library";
+import { APP, describeProcs, listProcs, matching } from "../support/procs";
 
 let lib: Library;
 
@@ -47,13 +47,7 @@ const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
   return reply.value;
 };
 
-const appProcesses = (): string =>
-  execSync(
-    "ps -eo comm,args | grep -E '/fotobase( |$)' | grep -v grep || true",
-    {
-      encoding: "utf8",
-    },
-  );
+const appProcesses = () => matching(listProcs(), APP);
 
 describe("tray background watching", () => {
   before(async () => {
@@ -81,7 +75,7 @@ describe("tray background watching", () => {
     await browser.waitUntil(async () => (await invoke("ping")) === "pong", {
       timeoutMsg: "app stopped answering IPC after window close",
     });
-    expect(appProcesses()).toContain("fotobase");
+    expect(appProcesses().length).toBeGreaterThan(0);
   });
 
   it("picks up new files while the window is closed", async () => {
@@ -120,18 +114,29 @@ describe("tray background watching", () => {
   it("quit fully exits the process", async () => {
     // Same function the tray menu's Quit item runs (tray::quit); the OS
     // tray itself is outside WebDriver's reach.
-    // Fire-and-forget: the app exits before it could reply, which would kill
-    // the WebDriver session mid-command.
+    // Fire-and-forget, deferred: the execute must return before the app
+    // starts exiting, or the exit races the reply and the command fails
+    // with "invalid session id" (TASK-05-013).
+    const before = appProcesses();
+    const started = Date.now();
     await browser.execute(() => {
-      (
+      const core = (
         window as unknown as {
           __TAURI__: { core: { invoke: (c: string) => Promise<unknown> } };
         }
-      ).__TAURI__.core.invoke("quit_from_tray");
+      ).__TAURI__.core;
+      setTimeout(() => void core.invoke("quit_from_tray"), 100);
     });
-    await browser.waitUntil(() => appProcesses().trim() === "", {
-      timeout: 10_000,
-      timeoutMsg: "fotobase process still alive after tray quit",
-    });
+    try {
+      await browser.waitUntil(() => appProcesses().length === 0, { timeout: 10_000 });
+    } catch {
+      // Name what is still alive and whose it is (this session's app vs a
+      // leftover from an earlier spec file): TASK-05-013.
+      throw new Error(
+        `fotobase process still alive after tray quit; before quit: ${describeProcs(before)}; now: ${describeProcs(appProcesses())}`,
+      );
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[e2e] tray quit: process gone after ${Date.now() - started}ms`);
   });
 });

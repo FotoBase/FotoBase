@@ -7,9 +7,12 @@ import { browser, expect, $, $$ } from "@wdio/globals";
 import fs from "node:fs";
 import path from "node:path";
 
+import { activate, installVitals, logVitals } from "../support/interact";
 import { makeLibrary, sha256, SOLO, type Library } from "../support/library";
 
 let lib: Library;
+// Spec start, for the vitals timeline (TASK-05-013).
+const t0 = Date.now();
 
 type Reply = { ok: true; value: unknown } | { ok: false; error: string };
 
@@ -36,24 +39,6 @@ const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
 };
 
 const cells = () => $$('[data-testid="grid-cell"]');
-
-// WebKitGTK intermittently reports an interactable-looking element as "not
-// interactable" (element re-rendered between lookup and click). Plain
-// clicks with bounded retries; the selector is named when giving up so
-// failures say what could not be clicked.
-async function clickTestId(testid: string): Promise<void> {
-  const sel = `[data-testid="${testid}"]`;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      const el = await $(sel);
-      await el.click();
-      return;
-    } catch {
-      await browser.pause(500);
-    }
-  }
-  throw new Error(`could not click ${sel}`);
-}
 
 // Sidecar polls: the debounced save lands ~250ms after the last edit, so
 // assert with a waitUntil instead of an instant read.
@@ -83,33 +68,6 @@ async function waitSidecarContains(fragment: string): Promise<void> {
   await browser.waitUntil(() => sidecarText().includes(fragment), {
     timeout: 10_000,
     timeoutMsg: `sidecar never contained ${fragment}; last value: ${sidecarText().slice(0, 500)}`,
-  });
-}
-
-// Click + verify + DOM-click fallback. WebKitGTK under xvfb intermittently
-// reports overlay elements as "not interactable" or dispatches the click at
-// coordinates nothing receives; the fallback fires the element's own click
-// handler directly, which is what these specs actually exercise.
-async function activate(
-  testid: string,
-  verify: () => Promise<boolean> | boolean,
-): Promise<void> {
-  const sel = `[data-testid="${testid}"]`;
-  await clickTestId(testid);
-  try {
-    await browser.waitUntil(verify, { timeout: 2000 });
-    return;
-  } catch {
-    // fall through to the DOM click
-  }
-  await browser.execute((selector: string) => {
-    const el = document.querySelector(selector) as HTMLElement | null;
-    if (!el) throw new Error(`${selector} not found`);
-    el.click();
-  }, sel);
-  await browser.waitUntil(verify, {
-    timeout: 8000,
-    timeoutMsg: `${sel} never took effect`,
   });
 }
 
@@ -160,6 +118,24 @@ describe("edit view", () => {
     );
     expect(error).toBeNull();
     await waitForCellCount(3);
+    await installVitals();
+    await logVitals("library loaded", t0);
+  });
+
+  afterEach(async function () {
+    await logVitals(`after "${this.currentTest?.title}"`, t0);
+  });
+
+  // Regression guard (TASK-05-013): a profile-blind thumb:// lookup missed
+  // forever and the backend emitted ~4000 `thumb-rendered` events per
+  // second, starving the WebView until WebDriver timed out. Three photos
+  // (two distinct contents) render a handful of times at most.
+  after(async () => {
+    const rendered = await browser.execute(
+      () => (window as unknown as { __fbVitals?: { thumbRendered: number } }).__fbVitals?.thumbRendered ?? -1,
+    );
+    expect(rendered).toBeGreaterThanOrEqual(0);
+    expect(rendered).toBeLessThan(50);
   });
 
   after(() => {
@@ -173,11 +149,14 @@ describe("edit view", () => {
     // selection re-render can swallow the dblclick), so use the keyboard
     // path: click selects, Enter opens.
     await $(`[data-testid="grid-cell"] img[alt="${SOLO}"]`).click();
+    await logVitals("solo selected", t0);
     await browser.keys(["Enter"]);
     await $('[data-testid="viewer"]').waitForDisplayed();
+    await logVitals("viewer open", t0);
     await activate("edit-open", () =>
       $('[data-testid="edit-view"]').isDisplayed(),
     );
+    await logVitals("edit view open", t0);
     await $('[data-testid="edit-view"]').waitForDisplayed();
     await $('[data-testid="edit-tab-basic"]').waitForDisplayed();
     await $('[data-testid="edit-tab-tuning"]').waitForDisplayed();
@@ -203,11 +182,10 @@ describe("edit view", () => {
     });
 
     // Tuning tab: Fill Light slider. WebKitGTK refuses sendKeys on range
-    // inputs and synthetic events are unreliable here, so try, in order: a
-    // real WebDriver click (the center of a 0..1 slider is exactly 0.5),
-    // keyboard steps on the focused input, and finally a dispatched input
-    // event — the panel's handler (clamping, op emission) is what the spec
-    // exercises, whichever interaction reaches it.
+    // inputs and its native click on the slider is one of the interactions
+    // that hangs under xvfb (TASK-05-013), so set the value and dispatch the
+    // input event once — the panel's handler (clamping, op emission) is what
+    // the spec exercises.
     await activate("edit-tab-tuning", async () => {
       try {
         return await $('[data-testid="tuning"]').isDisplayed();
@@ -238,22 +216,14 @@ describe("edit view", () => {
       )} sidecar(${sidecar.length})=${sidecar.slice(0, 400)}`;
     };
 
-    try {
-      await (await $('[data-testid="fill-light"]')).click();
-      await browser.waitUntil(fillSaved, { timeout: 3000 });
-    } catch {
-      // fall through
-    }
-    if (!fillSaved()) {
-      await browser.execute(() => {
-        const el = document.querySelector(
-          '[data-testid="fill-light"]',
-        ) as HTMLInputElement | null;
-        if (!el) throw new Error("fill-light slider not found");
-        el.value = "0.5";
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-      });
-    }
+    await browser.execute(() => {
+      const el = document.querySelector(
+        '[data-testid="fill-light"]',
+      ) as HTMLInputElement | null;
+      if (!el) throw new Error("fill-light slider not found");
+      el.value = "0.5";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     await browser.waitUntil(fillSaved, {
       timeout: 10_000,
       timeoutMsg: `fill_light never saved; ${await sliderDiagnostics()}`,

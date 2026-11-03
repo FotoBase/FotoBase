@@ -25,6 +25,8 @@ env:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    # A wedged webview must not hold a runner for the 6 h default.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +47,7 @@ jobs:
             libaom-dev \
             libraw-dev \
             webkit2gtk-driver \
+            gdb \
             xvfb
 
       - uses: dtolnay/rust-toolchain@stable
@@ -71,6 +74,10 @@ jobs:
       - name: Typecheck the suite
         working-directory: e2e
         run: npm run typecheck
+
+      - name: Unit-test the harness helpers
+        working-directory: e2e
+        run: npm run test:unit
 
       - name: Run e2e specs
         working-directory: e2e

@@ -2326,8 +2326,13 @@ pub fn run() {
             let state = ctx.app_handle().state::<AppState>();
             // `?s=2` selects the HiDPI (1024px) cache entry (TASK-01-024).
             let req = thumb::request_from_uri(request.uri());
+            // One profile snapshot for the lookup AND any render it triggers:
+            // both must use the same profile-tagged cache name (TASK-05-013).
+            let display_profile = state.display_profile.lock().ok().and_then(|g| g.clone());
             let reply = match &req {
-                Some(req) => thumb::resolve_thumb(req, &state.cache_dir()),
+                Some(req) => {
+                    thumb::resolve_thumb(req, &state.cache_dir(), display_profile.as_deref())
+                }
                 None => thumb::placeholder(),
             };
             // A real (cached) JPEG went out: the protocol's
@@ -2346,7 +2351,7 @@ pub fn run() {
                             cat,
                             &state.cache_dir(),
                             &state.thumbs,
-                            state.display_profile.lock().ok().and_then(|g| g.clone()),
+                            display_profile.clone(),
                             // TASK-02-004: videos extract via the shipped
                             // ffmpeg sidecar at background priority.
                             Some(state.video_extractor.clone()),

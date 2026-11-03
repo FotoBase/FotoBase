@@ -82,12 +82,16 @@ pub struct ThumbRequest {
     pub scale: u32,
 }
 
-/// Cache-file suffix for a scale variant: 1x keeps the legacy name (existing
-/// caches stay valid), 2x is tagged so both sizes coexist.
-fn cache_file(hash: &str, scale: u32) -> String {
+/// Cache-file name for a scale variant and display profile — exactly the
+/// name the render writes (`fotobase_render::thumbnail`): 1x keeps the
+/// legacy name, 2x is tagged `@2x`, and a display profile appends its
+/// `-p<fingerprint>` tag (TASK-02-001). Reading any other name misses
+/// forever (TASK-05-013).
+fn cache_file(hash: &str, scale: u32, display_profile: Option<&[u8]>) -> String {
+    let profile_tag = fotobase_render::thumb_profile_tag(display_profile);
     match scale {
-        1 => format!("{hash}.jpg"),
-        2 => format!("{hash}@2x.jpg"),
+        1 => format!("{hash}{profile_tag}.jpg"),
+        2 => format!("{hash}@2x{profile_tag}.jpg"),
         _ => unreachable!("request_from_uri only admits 1 and 2"),
     }
 }
@@ -135,11 +139,15 @@ pub fn request_from_uri(uri: &Uri) -> Option<ThumbRequest> {
 ///
 /// Hit → the cached JPEG bytes. Miss (or an unreadable entry) → the
 /// placeholder PNG. Both are displayable images: the UI never sees an error.
-pub fn resolve_thumb(req: &ThumbRequest, cache_dir: &Path) -> ThumbReply {
+pub fn resolve_thumb(
+    req: &ThumbRequest,
+    cache_dir: &Path,
+    display_profile: Option<&[u8]>,
+) -> ThumbReply {
     if !is_cache_key(&req.hash) {
         return placeholder();
     }
-    match std::fs::read(cache_dir.join(cache_file(&req.hash, req.scale))) {
+    match std::fs::read(cache_dir.join(cache_file(&req.hash, req.scale, display_profile))) {
         Ok(bytes) => ThumbReply { status: 200, content_type: "image/jpeg", body: bytes },
         Err(_) => placeholder(),
     }
@@ -334,13 +342,39 @@ mod tests {
         std::fs::write(dir.join(format!("{hash}@2x.jpg")), b"jpeg2x").unwrap();
 
         let req: tauri::http::Uri = format!("thumb://{hash}?s=2").parse().unwrap();
-        let reply = super::resolve_thumb(&super::request_from_uri(&req).unwrap(), &dir);
+        let reply = super::resolve_thumb(&super::request_from_uri(&req).unwrap(), &dir, None);
         assert_eq!(reply.body, b"jpeg2x".to_vec());
 
         // Misses still degrade to the placeholder, never an error.
         let miss: tauri::http::Uri = format!("thumb://{hash}").parse().unwrap();
-        let reply = super::resolve_thumb(&super::request_from_uri(&miss).unwrap(), &dir);
+        let reply = super::resolve_thumb(&super::request_from_uri(&miss).unwrap(), &dir, None);
         assert!(reply.body.starts_with(&[0x89, b'P', b'N', b'G']));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// TASK-05-013: with a display profile the render writes the
+    /// profile-tagged cache entry (`<hash>-p<fp>.jpg`, `<hash>@2x-p<fp>.jpg`);
+    /// the scheme handler must read that same entry. Reading the untagged
+    /// name missed forever: every request re-rendered and re-emitted
+    /// `thumb-rendered`, a storm that starved the WebView.
+    #[test]
+    fn profile_tagged_entries_resolve() {
+        let hash = "b".repeat(32);
+        let dir = std::env::temp_dir().join(format!("fb-thumb-tag-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let profile = fotobase_render::color::srgb_profile_bytes().unwrap();
+        let tag = fotobase_render::thumb_profile_tag(Some(&profile));
+        std::fs::write(dir.join(format!("{hash}{tag}.jpg")), b"jpeg1x").unwrap();
+        std::fs::write(dir.join(format!("{hash}@2x{tag}.jpg")), b"jpeg2x").unwrap();
+
+        let req1 = super::ThumbRequest { hash: hash.clone(), scale: 1 };
+        let req2 = super::ThumbRequest { hash: hash.clone(), scale: 2 };
+        assert_eq!(super::resolve_thumb(&req1, &dir, Some(&profile)).body, b"jpeg1x".to_vec());
+        assert_eq!(super::resolve_thumb(&req2, &dir, Some(&profile)).body, b"jpeg2x".to_vec());
+        // No profile: the untagged legacy names, which do not exist here.
+        assert!(super::resolve_thumb(&req1, &dir, None)
+            .body
+            .starts_with(&[0x89, b'P', b'N', b'G']));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

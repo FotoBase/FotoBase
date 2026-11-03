@@ -5,12 +5,15 @@
 // HOME, so every run is a cold start: empty catalog, empty thumbnail cache,
 // default settings.
 
-import { execFileSync, execSync, spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { browser } from "@wdio/globals";
+
+import { withDeadline } from "./support/interact";
+import { APP, DRIVER, NATIVE_DRIVER, describeProcs, homeOf, listProcs, matching, reap, threadStacksToFile } from "./support/procs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const appBinary =
@@ -19,6 +22,29 @@ const DRIVER_PORT = 4444;
 
 let driver: ChildProcess | undefined;
 let home: string | undefined;
+let stacksDumped = false;
+
+// Thread backtraces of this session's app and its web-content process into
+// the uploaded artifact (TASK-05-013). The page's JS runs in
+// WebKitWebProcess, so that is the stack that names a runaway script.
+function dumpAppStacks(label: string): void {
+  const mine = matching(listProcs(), /\/fotobase( |$)|WebKitWebProcess/).filter(
+    (p) => homeOf(p.pid) === home,
+  );
+  if (mine.length === 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[e2e] stack dump: no app process for this session; all: ${describeProcs(matching(listProcs(), APP))}`);
+    return;
+  }
+  const dir = path.join(import.meta.dirname, "screenshots");
+  fs.mkdirSync(dir, { recursive: true });
+  for (const p of mine) {
+    const file = path.join(dir, `${label}-stacks-${p.pid}.txt`);
+    threadStacksToFile(p.pid, file);
+    // eslint-disable-next-line no-console
+    console.log(`[e2e] stack dump started: ${p.args.split(" ")[0]} pid=${p.pid} -> ${path.basename(file)}`);
+  }
+}
 
 function driverListenFlag(): string {
   // tauri-driver renamed its listen flag between v1 and v2.
@@ -66,6 +92,28 @@ async function waitPortsFree(timeoutMs: number): Promise<void> {
   }
 }
 
+// Kill every driver and app instance (maxInstances is 1, so all of them are
+// leftovers at this point) and log what had to be killed: a leftover is the
+// first thing to look at when the next spec file misbehaves. Shell-free —
+// see support/procs.ts for why `pkill -f` in execSync never worked here.
+async function reapAll(phase: string): Promise<void> {
+  for (const [label, pattern] of [
+    ["app", APP],
+    ["WebKitWebDriver", NATIVE_DRIVER],
+    ["tauri-driver", DRIVER],
+  ] as const) {
+    const killed = await reap(pattern);
+    if (killed.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[e2e] ${phase}: reaped ${label}: ${killed
+          .map((k) => `pid=${k.pid} (${k.signal}) etime=${k.etime} ${k.args}`)
+          .join("; ")}`,
+      );
+    }
+  }
+}
+
 export const config: WebdriverIO.Config = {
   runner: "local",
   specs: ["./specs/**/*.e2e.ts"],
@@ -106,17 +154,22 @@ export const config: WebdriverIO.Config = {
     }
   },
 
-  async beforeSession() {
-    // The previous session's driver may not be fully gone yet (kill is async
-    // and WebKitWebDriver outlives tauri-driver). Wait for the ports to be
-    // released, or the new driver fails to bind and the session silently
-    // attaches to the stale one.
-    await waitPortsFree(30_000).catch(() => {
-      // A stale driver that never lets go is fatal for correctness: kill it.
-      execSync("pkill -f tauri-driver || true; pkill -f WebKitWebDriver || true");
+  async beforeSession(_config, _capabilities, specs, cid) {
+    // A previous session's driver or app can outlive it (a wedged webview
+    // never answers DELETE /session). Clear them out and wait for the ports
+    // to be released, or the new driver fails to bind and the session
+    // silently attaches to the stale one.
+    await reapAll("beforeSession");
+    await waitPortsFree(30_000).catch(async (e: Error) => {
+      // eslint-disable-next-line no-console
+      console.log(`[e2e] beforeSession: ${e.message}; reaping again`);
+      await reapAll("beforeSession (ports busy)");
       return waitPortsFree(10_000);
     });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "fb-e2e-home-"));
+    stacksDumped = false;
+    // Specs read this to tell their own app instance from leftovers.
+    process.env.FB_E2E_HOME = home;
     // The app inherits the driver's environment.
     driver = spawn("tauri-driver", [driverListenFlag(), String(DRIVER_PORT)], {
       stdio: ["ignore", "inherit", "inherit"],
@@ -128,36 +181,54 @@ export const config: WebdriverIO.Config = {
       },
     });
     await waitForPort(DRIVER_PORT, 30_000);
+    // Something answered on the port — make sure it is OUR driver, not a
+    // stale one while ours died failing to bind.
+    if (driver.exitCode !== null || driver.signalCode !== null) {
+      throw new Error(
+        `tauri-driver exited (${driver.exitCode ?? driver.signalCode}) right after start; port ${DRIVER_PORT} is held by another process`,
+      );
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      `[e2e] session start ${cid}: ${specs.map((s) => path.basename(s)).join(", ")} driver pid=${driver.pid} HOME=${home}`,
+    );
   },
 
   // A failing step leaves a screenshot of the app (uploaded by the workflow).
+  // Bounded and non-fatal: on a crashed or wedged webview the screenshot
+  // itself fails or hangs, and that must not bury the test's own error.
   async afterTest(test, _context, { passed }) {
     if (passed) return;
     fs.mkdirSync(path.join(import.meta.dirname, "screenshots"), { recursive: true });
     const name = test.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
-    await browser.saveScreenshot(path.join(import.meta.dirname, "screenshots", `${name}.png`));
+    try {
+      await withDeadline(
+        browser.saveScreenshot(path.join(import.meta.dirname, "screenshots", `${name}.png`)),
+        20_000,
+        "screenshot",
+      );
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.log(`[e2e] no screenshot for "${test.title}": ${String(e).split("\n")[0]}`);
+      // The webview did not answer: capture where the app is stuck, once
+      // per session (TASK-05-013).
+      if (!stacksDumped) {
+        stacksDumped = true;
+        dumpAppStacks(name);
+      }
+    }
   },
 
-  afterSession() {
+  async afterSession() {
     if (driver) {
-      // Kill the whole tree: WebKitWebDriver (the child tauri-driver spawns,
-      // holding DRIVER_PORT + 1) survives a plain SIGTERM to its parent and
-      // would poison the next session's port allocation.
-      try {
-        execSync(`pkill -P ${driver.pid} || true`);
-      } catch {
-        // no children — fine
-      }
       driver.kill();
       driver = undefined;
     }
-    // Belt and braces for the app itself (spawned by the driver, so not our
-    // child): a leftover instance would keep ports busy and HOME stale.
-    try {
-      execSync("pkill -f tauri-driver || true; pkill -f WebKitWebDriver || true; pkill -f '/fotobase( |$)' || true");
-    } catch {
-      // nothing left to kill — fine
-    }
+    // WebKitWebDriver survives a SIGTERM to tauri-driver, and the app
+    // (spawned by the driver, not our child) survives both when its webview
+    // is wedged. Anything still alive here is logged and killed.
+    await reapAll("afterSession");
+    if (process.env.FB_E2E_HOME === home) delete process.env.FB_E2E_HOME;
     // The app may still be flushing its cache as it exits: retry, never fail the run.
     if (home) {
       try {
