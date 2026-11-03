@@ -246,9 +246,11 @@ describe("batch edit", () => {
       if ((await dialogState()).state === "done") break;
       await browser.pause(200);
     }
-    if (await exists("batch-edit-cancel")) {
-      await domClick("batch-edit-cancel");
-    }
+    // Check-and-click in ONE script: the run can finish between a separate
+    // exists() and click (TASK-05-013), and a finished run is accepted.
+    await browser.execute(() => {
+      (document.querySelector('[data-testid="batch-edit-cancel"]') as HTMLElement | null)?.click();
+    });
 
     await browser.waitUntil(async () => (await dialogState()).state === "done", {
       timeout: 30_000,
