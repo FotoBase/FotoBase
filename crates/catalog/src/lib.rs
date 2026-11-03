@@ -7,6 +7,7 @@
 
 pub mod albums;
 pub mod datetime;
+pub mod duplicates;
 pub mod folder_ini;
 pub mod hidden;
 pub mod metadata_edit;
@@ -21,6 +22,7 @@ pub mod trash;
 
 pub use albums::AlbumInfo;
 pub use datetime::{AdjustError, AdjustFailure, AdjustReport, TimeAdjustment, TimePreview};
+pub use duplicates::{group_by_phash, DuplicateGroup, DEFAULT_DUPLICATE_THRESHOLD_BITS};
 pub use folder_ini::{FolderIniReport, FolderIniStatus};
 pub use metadata_edit::{FieldError, GpsEdit, MetadataEdit, MetadataField};
 pub use migrations::MIGRATIONS;

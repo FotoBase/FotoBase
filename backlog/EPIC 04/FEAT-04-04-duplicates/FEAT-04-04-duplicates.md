@@ -1,6 +1,6 @@
 # feat: duplicates
 
-**Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** planned
+**Epic:** [EPIC-04 — Edit & export](../EPIC-04.md) · **Status:** in review
 
 ## Acceptance criteria
 
@@ -8,8 +8,8 @@
 - Hashing runs as a background job on the 50k fixture without blocking the UI.
 - Known-duplicate fixture set achieves full recall with a tolerable false-positive rate (recorded numbers).
 
-- [ ] `04-019` (M) Near-duplicate finder: perceptual hash (`image_hasher`) across catalog; review UI with keep/suggest-delete.
+- [x] `04-019` (M) Near-duplicate finder: perceptual hash (`image_hasher`) across catalog; review UI with keep/suggest-delete.
 
 ## Tasks
 
-- [ ] [TASK-04-019-near-duplicate-finder.md](TASK-04-019-near-duplicate-finder.md) — build near-duplicate finder
+- [x] [TASK-04-019-near-duplicate-finder.md](TASK-04-019-near-duplicate-finder.md) — build near-duplicate finder

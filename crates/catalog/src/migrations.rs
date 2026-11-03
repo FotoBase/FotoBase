@@ -19,6 +19,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V10,
     MIGRATION_V11,
     MIGRATION_V12,
+    MIGRATION_V13,
 ];
 
 const MIGRATION_V1: &str = "
@@ -410,6 +411,13 @@ CREATE TABLE folder_ini_ingest (
     status      TEXT NOT NULL CHECK (status IN ('pending', 'declined', 'done')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+";
+
+/// TASK-04-019: the per-file perceptual hash — derived data (PLAN §5
+/// Authority), recomputable from the original, never written to sidecars.
+/// NULL until the background hashing job fills it in; images only.
+const MIGRATION_V13: &str = "
+ALTER TABLE files ADD COLUMN phash BLOB;
 ";
 
 /// Apply all pending migrations, in order, each in its own transaction.

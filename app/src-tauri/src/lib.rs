@@ -19,6 +19,7 @@ pub mod catalog_registry;
 pub mod codec;
 pub mod datetime_commands;
 pub mod display_profile;
+pub mod duplicates;
 pub mod edit;
 pub mod emit_pacer;
 pub mod export_dialog;
@@ -75,6 +76,10 @@ const EDIT_QUEUE_CAPACITY: usize = 8;
 /// Capacity of the batch-edit queue (TASK-04-011): bounded, per PLAN §3
 /// rule 4; one background batch at a time serializes sidecar writers.
 const BATCH_EDIT_QUEUE_CAPACITY: usize = 2;
+
+/// Capacity of the duplicate-hashing queue (TASK-04-019): bounded, per
+/// PLAN §3 rule 4; one background run at a time.
+const DUPES_QUEUE_CAPACITY: usize = 2;
 
 /// Sequence number for unique portable-export job keys.
 static EXPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -138,6 +143,9 @@ struct AppState {
     /// (TASK-04-011): `cancel_batch_edit` trips it, the running job
     /// observes the flag and stops between photos.
     batch_edit_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
+    /// Bounded queue for duplicate hashing runs (TASK-04-019): background
+    /// priority, the single worker serializes runs (PLAN §3 rule 4).
+    dupes: fotobase_jobs::Queue<duplicates::HashReport>,
     /// Cancel token of the most recently started import (TASK-01-017):
     /// `cancel_import` trips it, the running job observes the flag.
     import_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
@@ -1300,6 +1308,87 @@ fn delete_to_trash(file_id: i64, state: tauri::State<'_, AppState>) -> Result<()
     with_catalog_mut(&state, |cat| file_menu::delete_to_trash(file_id, &path, cat).map_err(err))
 }
 
+/// "Find near-duplicates" (TASK-04-019, PLAN §2 Tools menu): hash every
+/// image still missing a perceptual hash in the bounded job queue at
+/// background priority (§3 rule 4) — a 50k catalog never blocks the UI —
+/// then return the report. Groups are read separately via `duplicate_groups`
+/// so the review dialog re-queries cheaply while the user works.
+#[tauri::command]
+async fn find_duplicates(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<duplicates::HashReport, String> {
+    let queue = state.dupes.clone();
+    let job_app = app.clone();
+    let handle = queue
+        .try_enqueue(
+            duplicates::job_key(),
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |ctx| {
+                let app = job_app.clone();
+                async move {
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        // Own connection, not the shared one: a 50k hashing
+                        // pass must not hold the UI's catalog mutex (§9).
+                        let path = app.state::<AppState>().catalog_path().to_path_buf();
+                        let mut cat = Catalog::open(path).map_err(|e| e.to_string())?;
+                        // The queue's cancellation is the pass's cancel flag.
+                        let flag = std::sync::atomic::AtomicBool::new(ctx.is_cancelled());
+                        duplicates::hash_missing(&mut cat, &flag)
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(report)) => fotobase_jobs::Outcome::Done(report),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => {
+                            fotobase_jobs::Outcome::Failed(format!("duplicate hashing task: {e}"))
+                        }
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue duplicate hashing: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("duplicate hashing cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// The grouped near-duplicates (TASK-04-019). Cheap catalog query; called
+/// after `find_duplicates` (and again whenever the review refreshes).
+#[tauri::command]
+fn duplicate_groups(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<duplicates::DuplicateGroupInfo>, String> {
+    with_catalog(&state, |cat| {
+        cat.duplicate_groups(fotobase_catalog::DEFAULT_DUPLICATE_THRESHOLD_BITS)
+            .map(|groups| groups.into_iter().map(Into::into).collect())
+    })
+}
+
+/// Delete the user-confirmed subset of a duplicate group (TASK-04-019):
+/// each id routes through the file-menu "Delete from disk" path — OS trash
+/// first, catalog row dropped after. The UI's confirmation dialog is the
+/// gate; this command deletes exactly what it is handed, nothing "extra".
+#[tauri::command]
+fn delete_duplicate_files(
+    ids: Vec<i64>,
+    state: tauri::State<'_, AppState>,
+) -> Result<usize, String> {
+    let err = |e: String| fotobase_catalog::CatalogError::Corrupted(e);
+    let resolved =
+        with_catalog(&state, |cat| duplicates::resolve_for_deletion(cat, &ids).map_err(err))?;
+    with_catalog_mut(&state, |cat| {
+        let mut deleted = 0usize;
+        for (id, path) in resolved {
+            file_menu::delete_to_trash(id, &path, cat).map_err(err)?;
+            deleted += 1;
+        }
+        Ok(deleted)
+    })
+}
+
 /// "Refresh thumbnails" (Folder context menu): invalidate the folder's
 /// cached thumbnails, then re-queue their renders at background priority in
 /// the bounded queue (§3 rule 4). The queue is drained first so no in-flight
@@ -2174,6 +2263,9 @@ pub fn run() {
             let batch_edits = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(BATCH_EDIT_QUEUE_CAPACITY)
             });
+            let dupes = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(DUPES_QUEUE_CAPACITY)
+            });
             let persisted = settings::Settings::load(&data_dir);
             // Catalog registry (TASK-03-024): which catalog opens at launch
             // (the last-used one, functional spec). The default entry keeps
@@ -2205,6 +2297,7 @@ pub fn run() {
                 photo_exports,
                 edits,
                 batch_edits,
+                dupes,
                 batch_edit_cancel: Mutex::new(None),
                 import_cancel: Mutex::new(None),
                 settings: Mutex::new(persisted),
@@ -2371,6 +2464,9 @@ pub fn run() {
             remove_folder,
             reveal_path,
             delete_to_trash,
+            find_duplicates,
+            duplicate_groups,
+            delete_duplicate_files,
             refresh_folder_thumbnails,
             exit_app,
             start_import,
