@@ -1,6 +1,6 @@
 # task: implement hdbscan face clustering
 
-**Feature:** [FEAT-05-02-clustering-naming](FEAT-05-02-clustering-naming.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** todo
+**Feature:** [FEAT-05-02-clustering-naming](FEAT-05-02-clustering-naming.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-03)
 
 ## Description
 HDBSCAN clustering over face embeddings (`hdbscan`/`linfa` crate or in-house per §4), with cluster persistence in the catalog and incremental re-clustering as new faces arrive (PLAN §6 P3 People; §2G).
@@ -21,4 +21,4 @@ HDBSCAN clustering over face embeddings (`hdbscan`/`linfa` crate or in-house per
 - Unit: same embedding set clusters deterministically across runs.
 
 ## Acceptance criteria
-- [ ] 05-003: HDBSCAN clustering implemented with cluster persistence and incremental re-clustering.
+- [x] 05-003: HDBSCAN clustering implemented with cluster persistence and incremental re-clustering.

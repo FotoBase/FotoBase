@@ -21,6 +21,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V12,
     MIGRATION_V13,
     MIGRATION_V14,
+    MIGRATION_V15,
 ];
 
 const MIGRATION_V1: &str = "
@@ -448,6 +449,28 @@ CREATE TABLE embeddings (
     dim     INTEGER NOT NULL,
     vector  BLOB NOT NULL
 );
+";
+
+/// TASK-05-003: face clusters (PLAN §6 P3 People, §5 Authority — derived
+/// data, recomputable from embeddings). `faces.cluster` names the cluster a
+/// face belongs to (NULL = noise / unclustered); `face_clusters` holds the
+/// cluster's centroid for incremental assignment of newly embedded faces;
+/// `persons` is the naming layer (TASK-05-004): a cluster becomes a person
+/// when the user names it. `faces.person_id` stays NULL until then — the
+/// spec's "nullable for unnamed clusters".
+const MIGRATION_V15: &str = "
+ALTER TABLE faces ADD COLUMN cluster INTEGER REFERENCES face_clusters(id) ON DELETE SET NULL;
+CREATE TABLE face_clusters (
+    id       INTEGER PRIMARY KEY,
+    dim      INTEGER NOT NULL,
+    centroid BLOB NOT NULL,
+    size     INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE persons (
+    id      INTEGER PRIMARY KEY,
+    name    TEXT NOT NULL UNIQUE
+);
+ALTER TABLE faces ADD COLUMN person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL;
 ";
 
 /// Apply all pending migrations, in order, each in its own transaction.

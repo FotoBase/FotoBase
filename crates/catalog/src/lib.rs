@@ -8,6 +8,7 @@
 pub mod albums;
 pub mod datetime;
 pub mod duplicates;
+pub mod face_clusters;
 pub mod faces;
 pub mod folder_ini;
 pub mod hidden;
@@ -24,6 +25,7 @@ pub mod trash;
 pub use albums::AlbumInfo;
 pub use datetime::{AdjustError, AdjustFailure, AdjustReport, TimeAdjustment, TimePreview};
 pub use duplicates::{group_by_phash, DuplicateGroup, DEFAULT_DUPLICATE_THRESHOLD_BITS};
+pub use face_clusters::ClusterRow;
 pub use faces::{FaceRecord, FaceRow};
 pub use folder_ini::{FolderIniReport, FolderIniStatus};
 pub use metadata_edit::{FieldError, GpsEdit, MetadataEdit, MetadataField};
@@ -61,6 +63,8 @@ pub enum CatalogError {
     /// A portable export (TASK-03-023) that cannot be written.
     #[error("export failed: {0}")]
     Export(String),
+    #[error("clustering failed: {0}")]
+    Clustering(String),
     #[error(transparent)]
     Sql(#[from] rusqlite::Error),
     #[error(transparent)]
