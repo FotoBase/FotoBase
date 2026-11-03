@@ -126,24 +126,16 @@ describe("edit view", () => {
     await logVitals(`after "${this.currentTest?.title}"`, t0);
   });
 
-  // Wedge hunting (TASK-05-013): which thumbnail files exist on disk vs the
-  // catalog's hashes, so a looping `thumb-rendered` key can be matched.
+  // Regression guard (TASK-05-013): a profile-blind thumb:// lookup missed
+  // forever and the backend emitted ~4000 `thumb-rendered` events per
+  // second, starving the WebView until WebDriver timed out. Three photos
+  // (two distinct contents) render a handful of times at most.
   after(async () => {
-    const home = process.env.FB_E2E_HOME;
-    const jpgs: string[] = [];
-    const walk = (d: string): void => {
-      for (const ent of fs.readdirSync(d, { withFileTypes: true })) {
-        const p = path.join(d, ent.name);
-        if (ent.isDirectory()) walk(p);
-        else if (p.endsWith(".jpg")) jpgs.push(path.relative(home ?? "", p));
-      }
-    };
-    if (home && fs.existsSync(home)) walk(home);
-    const files = await invoke("list_files", {}).catch((e) => String(e));
-    // eslint-disable-next-line no-console
-    console.log(
-      `[e2e] cache files: ${jpgs.join(", ")}\n[e2e] catalog: ${JSON.stringify(files).slice(0, 1500)}`,
+    const rendered = await browser.execute(
+      () => (window as unknown as { __fbVitals?: { thumbRendered: number } }).__fbVitals?.thumbRendered ?? -1,
     );
+    expect(rendered).toBeGreaterThanOrEqual(0);
+    expect(rendered).toBeLessThan(50);
   });
 
   after(() => {
@@ -189,7 +181,6 @@ describe("edit view", () => {
       }
     });
 
-    await logVitals("bw applied", t0);
     // Tuning tab: Fill Light slider. WebKitGTK refuses sendKeys on range
     // inputs and its native click on the slider is one of the interactions
     // that hangs under xvfb (TASK-05-013), so set the value and dispatch the
@@ -238,7 +229,6 @@ describe("edit view", () => {
       timeoutMsg: `fill_light never saved; ${await sliderDiagnostics()}`,
     });
 
-    await logVitals("fill light saved", t0);
     // Basic Fixes tab: Auto Contrast.
     await activate("edit-tab-basic", async () => {
       try {
@@ -251,7 +241,6 @@ describe("edit view", () => {
       sidecarText().includes("auto_contrast"),
     );
 
-    await logVitals("auto contrast saved", t0);
     const after = await $('[data-testid="edit-preview"]').getAttribute("src");
     await browser.waitUntil(
       async () =>
@@ -265,7 +254,6 @@ describe("edit view", () => {
     );
     expect(after !== undefined).toBe(true);
 
-    await logVitals("edited preview shown", t0);
     // The recipe persisted through the sidecar write-through.
     await waitSidecarContains('"bw"');
     // eslint-disable-next-line no-console

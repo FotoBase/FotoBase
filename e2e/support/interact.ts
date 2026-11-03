@@ -69,19 +69,15 @@ export async function installVitals(): Promise<void> {
     };
     if (w.__fbVitals) return done();
     const c: Record<string, number> = { imgLoad: 0, imgError: 0, thumbRendered: 0 };
-    const byKey: Record<string, number> = {};
-    (w as unknown as { __fbThumbKeys: Record<string, number> }).__fbThumbKeys = byKey;
     w.__fbVitals = c;
     document.addEventListener("load", (e) => e.target instanceof HTMLImageElement && c.imgLoad++, true);
     document.addEventListener("error", (e) => e.target instanceof HTMLImageElement && c.imgError++, true);
     const listen = w.__TAURI__.event.listen as unknown as (
       e: string,
-      cb: (ev: { payload: { hash: string; scale: number } }) => void,
+      cb: () => void,
     ) => Promise<unknown>;
-    listen("thumb-rendered", (ev) => {
+    listen("thumb-rendered", () => {
       c.thumbRendered++;
-      const k = `${ev.payload.hash.slice(0, 12)}@${ev.payload.scale}`;
-      byKey[k] = (byKey[k] ?? 0) + 1;
     }).then(() => done(), () => done());
   });
 }
@@ -96,7 +92,6 @@ export async function logVitals(step: string, t0: number): Promise<void> {
       JSON.stringify({
         page: performance.timeOrigin,
         ...((window as unknown as { __fbVitals?: object }).__fbVitals ?? {}),
-        byKey: (window as unknown as { __fbThumbKeys?: object }).__fbThumbKeys ?? {},
       }),
     ),
     20_000,
