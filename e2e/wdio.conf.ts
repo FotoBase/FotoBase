@@ -27,7 +27,9 @@ let stacksDumped = false;
 // Thread backtraces of this session's app into the uploaded artifact, plus
 // the main thread (GTK/WebKit UI loop) inline in the log.
 function dumpAppStacks(label: string): void {
-  const mine = matching(listProcs(), APP).filter((p) => homeOf(p.pid) === home);
+  const mine = matching(listProcs(), /\/fotobase( |$)|WebKitWebProcess/).filter(
+    (p) => homeOf(p.pid) === home,
+  );
   if (mine.length === 0) {
     // eslint-disable-next-line no-console
     console.log(`[e2e] stack dump: no app process for this session; all: ${describeProcs(matching(listProcs(), APP))}`);
@@ -179,6 +181,12 @@ export const config: WebdriverIO.Config = {
         HOME: home,
         XDG_DATA_HOME: path.join(home, ".local", "share"),
         XDG_CONFIG_HOME: path.join(home, ".config"),
+        // xvfb has no DRI3, so WebKitGTK's DMA-BUF renderer falls back to
+        // software GL in the web process, which intermittently wedges
+        // mid-spec (TASK-05-013: screenshots and clicks time out while
+        // the app's main loop is idle). Test-environment only; the app
+        // itself is unchanged.
+        WEBKIT_DISABLE_DMABUF_RENDERER: "1",
       },
     });
     await waitForPort(DRIVER_PORT, 30_000);
