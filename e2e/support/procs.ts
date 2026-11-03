@@ -6,7 +6,7 @@
 // process still alive after tray quit"). Listing with `ps` (no shell) and
 // filtering in JS cannot match ourselves.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 
 export interface Proc {
@@ -124,17 +124,33 @@ export function describeProcs(procs: Proc[]): string {
     .join("; ");
 }
 
-/// All-thread backtraces of a live process (Linux CI, best effort): a wedged
-/// webview is otherwise a black box. Needs gdb and passwordless sudo (Ubuntu's
-/// ptrace_scope forbids attaching to a non-child); returns why not otherwise.
-export function threadStacks(pid: number): string {
+/// All-thread backtraces of a live process into `file` (Linux CI, best
+/// effort): a wedged webview is otherwise a black box. Runs detached because
+/// the first use downloads WebKit/JSC symbols from Ubuntu's debuginfod (can
+/// take minutes); the workflow uploads the file with the screenshots. Needs
+/// gdb and passwordless sudo (Ubuntu's ptrace_scope forbids attaching to a
+/// non-child).
+export function threadStacksToFile(pid: number, file: string): void {
+  const out = fs.openSync(file, "w");
   try {
-    return execFileSync(
+    spawn(
       "sudo",
-      ["-n", "gdb", "-p", String(pid), "-batch", "-ex", "thread apply all bt 30"],
-      { encoding: "utf8", timeout: 120_000, stdio: ["ignore", "pipe", "pipe"] },
-    );
-  } catch (e) {
-    return `no stacks for pid ${pid}: ${String(e).split("\n")[0]}`;
+      [
+        "-n",
+        "env",
+        "DEBUGINFOD_URLS=https://debuginfod.ubuntu.com",
+        "gdb",
+        "-iex",
+        "set debuginfod enabled on",
+        "-p",
+        String(pid),
+        "-batch",
+        "-ex",
+        "thread apply all bt 40",
+      ],
+      { stdio: ["ignore", out, out], detached: true },
+    ).unref();
+  } finally {
+    fs.closeSync(out);
   }
 }

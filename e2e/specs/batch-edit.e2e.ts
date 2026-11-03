@@ -115,6 +115,16 @@ async function fillTray(): Promise<void> {
     browser.execute(
       () => document.querySelector('[data-testid="tray-count"]')?.textContent?.trim() ?? "",
     );
+  // Page-reload detector: the tray store is module-global, so a count that
+  // drops back means the page reloaded (WebKit restarts a crashed or
+  // unresponsive web process) — TASK-05-013.
+  await browser.execute(() => {
+    (window as unknown as { __fbMarker?: number }).__fbMarker = 1;
+  });
+  const reloaded = async (): Promise<string> =>
+    (await browser.execute(() => (window as unknown as { __fbMarker?: number }).__fbMarker === 1))
+      ? "page NOT reloaded"
+      : "page RELOADED (marker gone)";
   const imgs = await $$('[data-testid="grid-cell"] img');
   let added = 0;
   for (const img of imgs) {
@@ -141,7 +151,7 @@ async function fillTray(): Promise<void> {
       });
     } catch {
       throw new Error(
-        `tray did not grow to ${added} after adding ${alt}; tray-count="${await trayCount()}" menu offered: ${offered.join(",")}`,
+        `tray did not grow to ${added} after adding ${alt}; tray-count="${await trayCount()}" ${await reloaded()}; menu offered: ${offered.join(",")}`,
       );
     }
   }
@@ -150,8 +160,12 @@ async function fillTray(): Promise<void> {
       const count = await $('[data-testid="tray-count"]').getText();
       return count.startsWith("3");
     },
-    { timeoutMsg: `tray never reached 3 photos (tray-count="${await trayCount()}")` },
-  );
+    { timeout: 10_000 },
+  ).catch(async () => {
+    throw new Error(
+      `tray never reached 3 photos (tray-count="${await trayCount()}", ${await reloaded()})`,
+    );
+  });
 }
 
 describe("batch edit", () => {

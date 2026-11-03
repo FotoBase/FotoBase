@@ -7,7 +7,7 @@ import { browser, expect, $, $$ } from "@wdio/globals";
 import fs from "node:fs";
 import path from "node:path";
 
-import { activate, installVitals, logVitals } from "../support/interact";
+import { activate, logVitals } from "../support/interact";
 import { makeLibrary, sha256, SOLO, type Library } from "../support/library";
 
 let lib: Library;
@@ -118,7 +118,6 @@ describe("edit view", () => {
     );
     expect(error).toBeNull();
     await waitForCellCount(3);
-    await installVitals();
     await logVitals("library loaded", t0);
   });
 
@@ -169,6 +168,7 @@ describe("edit view", () => {
       }
     });
 
+    await logVitals("bw applied", t0);
     // Tuning tab: Fill Light slider. WebKitGTK refuses sendKeys on range
     // inputs and its native click on the slider is one of the interactions
     // that hangs under xvfb (TASK-05-013), so set the value and dispatch the
@@ -217,6 +217,7 @@ describe("edit view", () => {
       timeoutMsg: `fill_light never saved; ${await sliderDiagnostics()}`,
     });
 
+    await logVitals("fill light saved", t0);
     // Basic Fixes tab: Auto Contrast.
     await activate("edit-tab-basic", async () => {
       try {
@@ -229,6 +230,7 @@ describe("edit view", () => {
       sidecarText().includes("auto_contrast"),
     );
 
+    await logVitals("auto contrast saved", t0);
     const after = await $('[data-testid="edit-preview"]').getAttribute("src");
     await browser.waitUntil(
       async () =>
@@ -242,6 +244,7 @@ describe("edit view", () => {
     );
     expect(after !== undefined).toBe(true);
 
+    await logVitals("edited preview shown", t0);
     // The recipe persisted through the sidecar write-through.
     await waitSidecarContains('"bw"');
     // eslint-disable-next-line no-console

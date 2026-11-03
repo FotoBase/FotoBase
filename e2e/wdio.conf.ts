@@ -13,7 +13,7 @@ import path from "node:path";
 import { browser } from "@wdio/globals";
 
 import { withDeadline } from "./support/interact";
-import { APP, DRIVER, NATIVE_DRIVER, describeProcs, homeOf, listProcs, matching, reap, threadStacks } from "./support/procs";
+import { APP, DRIVER, NATIVE_DRIVER, describeProcs, homeOf, listProcs, matching, reap, threadStacksToFile } from "./support/procs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const appBinary =
@@ -24,8 +24,9 @@ let driver: ChildProcess | undefined;
 let home: string | undefined;
 let stacksDumped = false;
 
-// Thread backtraces of this session's app into the uploaded artifact, plus
-// the main thread (GTK/WebKit UI loop) inline in the log.
+// Thread backtraces of this session's app and its web-content process into
+// the uploaded artifact (TASK-05-013). The page's JS runs in
+// WebKitWebProcess, so that is the stack that names a runaway script.
 function dumpAppStacks(label: string): void {
   const mine = matching(listProcs(), /\/fotobase( |$)|WebKitWebProcess/).filter(
     (p) => homeOf(p.pid) === home,
@@ -38,14 +39,10 @@ function dumpAppStacks(label: string): void {
   const dir = path.join(import.meta.dirname, "screenshots");
   fs.mkdirSync(dir, { recursive: true });
   for (const p of mine) {
-    const stacks = threadStacks(p.pid);
     const file = path.join(dir, `${label}-stacks-${p.pid}.txt`);
-    fs.writeFileSync(file, stacks);
-    const main = stacks.split(/\nThread /).find((t) => /^\d+ .*\(LWP (\d+)\)/.exec(t)?.[1] === String(p.pid));
+    threadStacksToFile(p.pid, file);
     // eslint-disable-next-line no-console
-    console.log(
-      `[e2e] stack dump pid=${p.pid} -> ${path.basename(file)}; main thread:\n${(main ?? stacks).slice(0, 6000)}`,
-    );
+    console.log(`[e2e] stack dump started: ${p.args.split(" ")[0]} pid=${p.pid} -> ${path.basename(file)}`);
   }
 }
 
