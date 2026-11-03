@@ -126,6 +126,26 @@ describe("edit view", () => {
     await logVitals(`after "${this.currentTest?.title}"`, t0);
   });
 
+  // Wedge hunting (TASK-05-013): which thumbnail files exist on disk vs the
+  // catalog's hashes, so a looping `thumb-rendered` key can be matched.
+  after(async () => {
+    const home = process.env.FB_E2E_HOME;
+    const jpgs: string[] = [];
+    const walk = (d: string): void => {
+      for (const ent of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, ent.name);
+        if (ent.isDirectory()) walk(p);
+        else if (p.endsWith(".jpg")) jpgs.push(path.relative(home ?? "", p));
+      }
+    };
+    if (home && fs.existsSync(home)) walk(home);
+    const files = await invoke("list_files", {}).catch((e) => String(e));
+    // eslint-disable-next-line no-console
+    console.log(
+      `[e2e] cache files: ${jpgs.join(", ")}\n[e2e] catalog: ${JSON.stringify(files).slice(0, 1500)}`,
+    );
+  });
+
   after(() => {
     fs.rmSync(lib.dir, { recursive: true, force: true });
   });
