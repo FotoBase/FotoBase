@@ -9,7 +9,7 @@
 
 ## feat: AI runtime & models
 
-- [ ] `05-001` (L) `ai` crate: `ort` (ONNX Runtime) integration, CPU default; opt-in model download flow (license manifest checked in CI — YuNet detect MIT, MobileFaceNet-class embed Apache-2.0, per §4 pins).
+- [x] `05-001` (L) `ai` crate: `ort` (ONNX Runtime) integration, CPU default; opt-in model download flow (license manifest checked in CI — YuNet detect MIT, MobileFaceNet-class embed Apache-2.0, per §4 pins).
 - [ ] `05-002` (M) Face detection (YuNet) + embedding as job-queue jobs; battery throttling hook.
 
 ## feat: clustering & naming

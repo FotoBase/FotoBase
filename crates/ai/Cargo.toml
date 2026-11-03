@@ -1,0 +1,27 @@
+[package]
+name = "fotobase-ai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "AI runtime: ort (ONNX Runtime) face detection/embedding, opt-in model downloads"
+
+[dependencies]
+fotobase-core = { path = "../core" }
+tracing.workspace = true
+thiserror.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+# TASK-05-001: `ort` with the CPU execution provider as the default
+# (PLAN §4). `download-binaries` fetches prebuilt onnxruntime at build time
+# so no system onnxruntime is required on Win/macOS/Linux; provider
+# features (coreml/directml/cuda) stay opt-in per §4.
+ort = { version = "2.0.0-rc.15", default-features = false, features = ["download-binaries", "tls-rustls", "std"] }
+
+[dev-dependencies]
+tempfile = "3"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+
+[lints]
+workspace = true

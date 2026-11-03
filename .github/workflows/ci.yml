@@ -103,6 +103,9 @@ jobs:
       - name: cargo clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Verify AI model license manifest (TASK-05-001, §10)
+        run: python3 tools/verify_model_licenses.py
+
       - name: cargo test
         run: cargo test --workspace
 
