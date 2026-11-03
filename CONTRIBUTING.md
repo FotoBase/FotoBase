@@ -21,7 +21,7 @@ Thanks for your interest in Fotobase — a lightweight, offline, cross-platform 
 - One task ≈ one PR. Tasks live in `backlog/EPIC XX/FEAT-XX-YY-name/TASK-*.md` — each has functional specs, technical specs, TDD testing criteria, and acceptance criteria. Work test-first: make the failing test, then implement.
 - Branch naming: `feat/<task-id>-slug`, `fix/<task-id>-slug`.
 - Keep PRs small and mapped to a backlog task; link the task file in the PR description.
-- Tests must pass on all three OSes (Windows 10 22H2+, macOS 12+, Ubuntu 22.04+) — CI runs the matrix.
+- Tests must pass on all three OSes (Windows 10 22H2+, macOS 12+, Ubuntu 24.04+) — CI runs the matrix.
 
 ## Decisions
 

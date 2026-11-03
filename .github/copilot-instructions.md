@@ -4,7 +4,7 @@ applyTo: "**"
 
 # Fotobase — ground rules for agents
 
-Fotobase is a local-first, cross-platform (Win 10 22H2+ / macOS 12+ / Ubuntu 22.04+), open-source Picasa successor photo organizer. GPL-3.0. The normative plan is `docs/PLAN.md`; decisions are recorded in `docs/adr/`. If a change contradicts an accepted ADR, it must first be superseded by a new ADR.
+Fotobase is a local-first, cross-platform (Win 10 22H2+ / macOS 12+ / Ubuntu 24.04+), open-source Picasa successor photo organizer. GPL-3.0. The normative plan is `docs/PLAN.md`; decisions are recorded in `docs/adr/`. If a change contradicts an accepted ADR, it must first be superseded by a new ADR.
 
 ## Communication — mandatory
 

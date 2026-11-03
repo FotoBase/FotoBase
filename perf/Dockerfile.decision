@@ -1,7 +1,10 @@
-# TASK-01-004 decision-run image: ubuntu:22.04 + WebKitGTK 2.40+ + toolchain
-# (docs/webkitgtk-perf-protocol.md §1). Build once on the Linux x64 host, then
-# run perf/decision-run.sh inside it — see perf/README.md "Decision run".
-FROM ubuntu:22.04
+# TASK-01-004 decision-run image: ubuntu:24.04 + WebKitGTK 2.44+ + toolchain
+# (docs/webkitgtk-perf-protocol.md §1; ADR-0014 moved the Linux floor to
+# Ubuntu 24.04 — decision runs recorded in ADR-0013 were captured on the
+# earlier ubuntu:22.04 image and are historical). Build once on the Linux x64
+# host, then run perf/decision-run.sh inside it — see perf/README.md
+# "Decision run".
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 

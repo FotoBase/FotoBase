@@ -143,7 +143,7 @@ fn release_workflow_is_wired() {
         "windows-latest",
         "macos-15",
         "macos-15-intel",
-        "ubuntu-22.04",    // ADR-0005 floor
+        "ubuntu-24.04",    // ADR-0014 Linux floor
         "contents: write", // publish the GitHub Release
     ] {
         assert!(yml.contains(needle), "release.yml must contain {needle:?}");

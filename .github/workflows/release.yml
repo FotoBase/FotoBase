@@ -39,13 +39,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # 00-003 floors (ADR-0005): Win 10 22H2+, macOS 12+, Ubuntu 22.04+.
+          # 00-003 floors (ADR-0005), amended by ADR-0014: Win 10 22H2+,
+          # macOS 12+, Ubuntu 24.04+ (ort prebuilts need glibc 2.38).
           # Same runner set as ci.yml; macOS 12/13 floors are enforced at
           # bundler level (bundle.macOS.minimumSystemVersion in tauri.conf.json).
           - os: windows-latest
           - os: macos-15 # arm64
           - os: macos-15-intel # x64
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

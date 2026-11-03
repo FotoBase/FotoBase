@@ -1,6 +1,6 @@
 # task: build ai crate with ort runtime and model downloads
 
-**Feature:** [FEAT-05-01-ai-runtime-models](FEAT-05-01-ai-runtime-models.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** todo
+**Feature:** [FEAT-05-01-ai-runtime-models](FEAT-05-01-ai-runtime-models.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-03)
 
 ## Description
 The `ai` crate: `ort` (ONNX Runtime) integration with CPU as default provider, plus the opt-in model download flow with checksums and a CI-checked license manifest — YuNet (MIT) for detection, MobileFaceNet-class (Apache-2.0) for embeddings, per the §4 pins.
@@ -12,6 +12,7 @@ The `ai` crate: `ort` (ONNX Runtime) integration with CPU as default provider, p
 
 ## Technical specs
 - `crates/ai` (§3 module layout); `ort` with CPU execution provider default, CoreML/DirectML/CUDA optional (§4).
+  - Note: the `ort` prebuilt ONNX Runtime binaries require glibc 2.38 / GCC 13 libstdc++; this raised the Linux floor to Ubuntu 24.04 ([ADR-0014](../../../docs/adr/adr-0014-linux-floor-ubuntu-24.md)).
 - Download: checksum-verified model files into the catalog location (§1 "catalog location" holds ML models).
 - License manifest per model checked in CI (§10 model-licensing risk); only MIT/Apache-2.0 weights.
 
@@ -21,5 +22,5 @@ The `ai` crate: `ort` (ONNX Runtime) integration with CPU as default provider, p
 - CI: license manifest fails the build if a model entry is missing or non-permissive.
 
 ## Acceptance criteria
-- [ ] 05-001: `ai` crate runs YuNet + embedding on CPU via `ort` with no GPU requirement.
-- [ ] 05-001: Opt-in download flow with checksum + CI-verified license manifest (MIT/Apache-2.0 only).
+- [x] 05-001: `ai` crate runs YuNet + embedding on CPU via `ort` with no GPU requirement.
+- [x] 05-001: Opt-in download flow with checksum + CI-verified license manifest (MIT/Apache-2.0 only).

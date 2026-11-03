@@ -81,7 +81,7 @@ describe("buildReport (protocol §3)", () => {
   it("emits the protocol-1 shape with computed `passed`", () => {
     const report = buildReport({
       fixture: { count: 1000, seed: 42 },
-      runner: { os: "ubuntu-22.04", webkitgtk: "2.48.0", cpu: "test", ram_gb: 8 },
+      runner: { os: "ubuntu-24.04", webkitgtk: "2.48.0", cpu: "test", ram_gb: 8 },
       renderer: "dom",
       metrics: passingMetrics(),
     });
@@ -95,7 +95,7 @@ describe("buildReport (protocol §3)", () => {
   it("`passed` is computed from the bars, never trusted from input", () => {
     const report = buildReport({
       fixture: { count: 50000, seed: 42 },
-      runner: { os: "ubuntu-22.04", webkitgtk: "2.48.0", cpu: "test", ram_gb: 8 },
+      runner: { os: "ubuntu-24.04", webkitgtk: "2.48.0", cpu: "test", ram_gb: 8 },
       renderer: "canvas",
       // Deliberately lying `passed: true` must be recomputed to false.
       metrics: { ...passingMetrics(), time_to_first_thumbnail_s: 5 },
@@ -108,7 +108,7 @@ describe("validateReport (CI smoke asserts schema validity)", () => {
   it("accepts a well-formed report", () => {
     const report = buildReport({
       fixture: { count: 1000, seed: 42 },
-      runner: { os: "ubuntu-22.04", webkitgtk: "2.48.0", cpu: "x86_64", ram_gb: 16 },
+      runner: { os: "ubuntu-24.04", webkitgtk: "2.48.0", cpu: "x86_64", ram_gb: 16 },
       renderer: "dom",
       metrics: passingMetrics(),
     });
@@ -118,7 +118,7 @@ describe("validateReport (CI smoke asserts schema validity)", () => {
   it("accepts the optional peak_ram_mb extension", () => {
     const report = buildReport({
       fixture: { count: 1000, seed: 42 },
-      runner: { os: "ubuntu-22.04", webkitgtk: "2.48.0", cpu: "x86_64", ram_gb: 16 },
+      runner: { os: "ubuntu-24.04", webkitgtk: "2.48.0", cpu: "x86_64", ram_gb: 16 },
       renderer: "dom",
       metrics: { ...passingMetrics(), peak_ram_mb: 180 },
     });
@@ -146,13 +146,13 @@ describe("validateReport (CI smoke asserts schema validity)", () => {
 
   it("rejects a fixture/runner shape violation", () => {
     expect(validateReport({ ...validReport(), fixture: { count: 1000 } })).not.toEqual([]);
-    expect(validateReport({ ...validReport(), runner: { os: "ubuntu-22.04" } })).not.toEqual([]);
+    expect(validateReport({ ...validReport(), runner: { os: "ubuntu-24.04" } })).not.toEqual([]);
   });
 
   function validReport(): Record<string, unknown> {
     return buildReport({
       fixture: { count: 1000, seed: 42 },
-      runner: { os: "ubuntu-22.04", webkitgtk: "2.48.0", cpu: "x86_64", ram_gb: 16 },
+      runner: { os: "ubuntu-24.04", webkitgtk: "2.48.0", cpu: "x86_64", ram_gb: 16 },
       renderer: "dom",
       metrics: passingMetrics(),
     }) as unknown as Record<string, unknown>;

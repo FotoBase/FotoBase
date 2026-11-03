@@ -32,17 +32,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # 00-003 floors (ADR-0005): Win 10 22H2+, macOS 12+, Ubuntu 22.04+.
-          # ubuntu-22.04 = the floor (WebKitGTK 2.40 era; the perf protocol
-          # pins the same runner); ubuntu-24.04 = current WebKitGTK, since the
-          # distro pins it and newer breakage is otherwise invisible to the
-          # floor leg. Windows: WebView2 is evergreen on user machines, so one
-          # leg covers it. macOS: no 12/13 runner exists and WKWebView is
-          # always newer on runners — floors enforced at bundler level
-          # (TASK-01-003); the WKWebView 12 floor gap is noted in ADR-0005.
-          - os: ubuntu-22.04
-          # - os: ubuntu-24.04
-          # - os: ubuntu-26.04
+          # 00-003 floors (ADR-0005), amended by ADR-0014 (2026-11-03): Win 10
+          # 22H2+, macOS 12+, Ubuntu 24.04+ — the Linux floor was raised from
+          # 22.04 because the ort/ONNX Runtime prebuilt binaries require glibc
+          # 2.38 and GCC 13 libstdc++ (_M_replace_cold, __isoc23_*). WebKitGTK
+          # is distro-pinned, so the runner pins the WebView version; the perf
+          # protocol tracks the same runner.
+          - os: ubuntu-24.04
           - os: windows-latest
           - os: macos-15 # arm64
           # - os: macos-15-intel  # x64
@@ -65,11 +61,13 @@ jobs:
         if: runner.os == 'Linux'
         # TASK-01-012: libde265-dev (HEIC/HEVC decode) + libaom-dev
         # (AVIF/AV1 decode) are the codec plugins the embedded libheif
-        # links against. AVIF goes through libaom here because ubuntu-22.04
-        # ships dav1d 0.9, whose API is incompatible with the dav1d plugin
-        # of embedded libheif 1.23 (needs dav1d >= 1.0); macOS gets dav1d
-        # via brew, which is new enough. libraw-dev: RAW decode via LibRaw
-        # (TASK-04-013, pkg-config `libraw_r`).
+        # links against. AVIF goes through libaom because the runner's dav1d
+        # is older than the dav1d plugin of embedded libheif 1.23 needs
+        # (dav1d >= 1.0); macOS gets dav1d via brew, which is new enough.
+        # libraw-dev: RAW decode via LibRaw (TASK-04-013, pkg-config `libraw_r`).
+        # libopenjp2-7-dev: the embedded libheif enables its OpenJPEG (JPEG 2000)
+        # codec plugin, which links `-lopenjp2` — the ubuntu-24.04 runner image
+        # ships only the runtime lib, not the dev symlink.
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -84,7 +82,8 @@ jobs:
             librsvg2-dev \
             libde265-dev \
             libaom-dev \
-            libraw-dev
+            libraw-dev \
+            libopenjp2-7-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -102,6 +101,9 @@ jobs:
 
       - name: cargo clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Verify AI model license manifest (TASK-05-001, §10)
+        run: python3 tools/verify_model_licenses.py
 
       - name: cargo test
         run: cargo test --workspace
