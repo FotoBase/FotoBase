@@ -1,6 +1,6 @@
 # task: implement name-a-cluster flow with suggestions
 
-**Feature:** [FEAT-05-02-clustering-naming](FEAT-05-02-clustering-naming.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in progress (2026-11-03)
+**Feature:** [FEAT-05-02-clustering-naming](FEAT-05-02-clustering-naming.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-03)
 
 ## Description
 Name a cluster once and get suggestions for remaining matches across the library (PLAN §2G Naming; §6 P3 People).
