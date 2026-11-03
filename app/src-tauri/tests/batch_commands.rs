@@ -134,6 +134,12 @@ fn rename_three_files_with_date_and_resolution_suffixes() {
         .unwrap();
     let ids = [ids[0], ids[1], three];
     with_resolution(&cat, 1920, 1080);
+    // Pin the catalog mtime: the `{date}` token falls back to the file's
+    // mtime for fixture bytes (no capture date), and a UTC/local midnight
+    // between the author's machine and CI flipped the literal (seen in CI
+    // as 11-02 vs 11-03). 1_700_000_000 = 2023-11-14, always the same.
+    cat.conn().execute("UPDATE files SET mtime = 1700000000.0", []).unwrap();
+    let d = fotobase_catalog::iso_date(1_700_000_000.0);
 
     let spec = RenameSpec { pattern: "trip-{date}-{res}-{n}".into(), start: 1, step: 1, pad: 2 };
     let moves = cmds::rename(&mut cat, &ids, &spec, CollisionPolicy::Refuse).unwrap();
@@ -143,7 +149,6 @@ fn rename_three_files_with_date_and_resolution_suffixes() {
         .map(|m| Path::new(&m.to).file_name().unwrap().to_string_lossy().into_owned())
         .collect();
     // Same date for all three, resolution suffix, numbered — no collisions.
-    let d = "2026-11-02";
     assert_eq!(names[0], format!("trip-{d}-1920x1080-01.jpg"), "{names:?}");
     assert_eq!(names[1], format!("trip-{d}-1920x1080-02.jpg"));
     assert_eq!(names[2], format!("trip-{d}-1920x1080-03.jpg"));
