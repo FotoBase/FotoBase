@@ -6,9 +6,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { $$, browser, expect } from "@wdio/globals";
+import { browser, expect } from "@wdio/globals";
 
-import { dispatchClick } from "../support/interact";
+import { withDeadline } from "../support/interact";
 import { makeLibrary, SOLO, type Library } from "../support/library";
 
 let lib: Library;
@@ -78,28 +78,63 @@ const stubConfirm = (answer: boolean): Promise<void> =>
       a;
   }, answer);
 
+// The context menu opens on the cell's `contextmenu` event; under xvfb +
+// WebKitWebDriver a native right-click hangs, so the whole flow — find the
+// solo cell (waiting for its thumbnail to render), dispatch the event, wait
+// for the menu item, click it — runs as ONE page task. Splitting it into
+// separate WebDriver calls let the menu close between them (native
+// context-menu grab) and raced the lazy thumbnail.
 const openMenuOnSolo = async (): Promise<void> => {
-  await browser.waitUntil(
-    async () => (await $$('[data-testid="grid-cell"]').length) === 3,
+  const why = await withDeadline(
+    browser.executeAsync(
+      (
+        alt: string,
+        done: (r: "ok" | "no-cell" | "no-menu") => void,
+      ): void => {
+        let tries = 0;
+        const attempt = (): void => {
+          const img = document.querySelector(`img[alt="${alt}"]`);
+          const cell =
+            img?.closest('[data-testid="grid-cell"]') ??
+            document.querySelector('[data-testid="grid-cell"]');
+          if (!cell) {
+            if (++tries > 100) return done("no-cell");
+            setTimeout(attempt, 100);
+            return;
+          }
+          cell.dispatchEvent(
+            new MouseEvent("contextmenu", {
+              bubbles: true,
+              cancelable: true,
+              clientX: 40,
+              clientY: 40,
+            }),
+          );
+          // The item renders synchronously once the menu is open; poll
+          // briefly in case a refresh re-renders the grid first.
+          let waits = 0;
+          const wait = (): void => {
+            const item = document.querySelector(
+              '[data-testid="menu-item-reset-faces"]',
+            ) as HTMLElement | null;
+            if (item) {
+              item.click();
+              return done("ok");
+            }
+            if (++waits > 50) return done("no-menu");
+            setTimeout(wait, 100);
+            return;
+          };
+          wait();
+        };
+        attempt();
+      },
+      SOLO,
+    ),
+    30_000,
+    "open menu on solo",
   );
-  // The context menu opens on the cell's `contextmenu` event; under xvfb +
-  // WebKitWebDriver a native right-click hangs, so dispatch one DOM event
-  // (the same handler the spec exercises).
-  await browser.execute((alt: string) => {
-    const img = document.querySelector(`img[alt="${alt}"]`);
-    const cell = img?.closest('[data-testid="grid-cell"]') ?? img;
-    cell?.dispatchEvent(
-      new MouseEvent("contextmenu", {
-        bubbles: true,
-        cancelable: true,
-        clientX: 40,
-        clientY: 40,
-      }),
-    );
-  }, SOLO);
-  await $('[data-testid="menu-item-reset-faces"]').waitForDisplayed({
-    timeout: 15_000,
-  });
+  if (why !== "ok") throw new Error(`open menu on solo: ${why}`);
 };
 
 describe("reset faces", () => {
@@ -122,7 +157,6 @@ describe("reset faces", () => {
   it("declining the confirmation leaves everything in place", async () => {
     await stubConfirm(false);
     await openMenuOnSolo();
-    await dispatchClick("menu-item-reset-faces");
     expect(await peopleCount()).toBe(1);
     const raw = fs.readFileSync(path.join(lib.dir, `${SOLO}.xmp`), "utf8");
     expect(raw).toContain('mwg-rs:Name="Anna"');
@@ -131,7 +165,6 @@ describe("reset faces", () => {
   it("confirming clears the person, the face row and the sidecar region", async () => {
     await stubConfirm(true);
     await openMenuOnSolo();
-    await dispatchClick("menu-item-reset-faces");
     await browser.waitUntil(async () => (await peopleCount()) === 0);
     const raw = fs.readFileSync(path.join(lib.dir, `${SOLO}.xmp`), "utf8");
     expect(raw).not.toContain('mwg-rs:Name="Anna"');
