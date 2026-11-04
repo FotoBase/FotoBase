@@ -164,7 +164,12 @@ describe("reset faces", () => {
 
   it("confirming clears the person, the face row and the sidecar region", async () => {
     await openMenuOnSolo(true);
-    await browser.waitUntil(async () => (await peopleCount()) === 0);
+    // The person row itself survives (a person may span several photos);
+    // what resets is Anna's face count, the sidecar region and the filter.
+    await browser.waitUntil(async () => {
+      const entries = (await invoke("people_manager_list")) as PersonEntry[];
+      return entries.every((e) => e.name !== "Anna" || e.face_count === 0);
+    });
     const raw = fs.readFileSync(path.join(lib.dir, `${SOLO}.xmp`), "utf8");
     expect(raw).not.toContain('mwg-rs:Name="Anna"');
     // The photo also leaves the "has faces" filter.
