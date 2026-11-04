@@ -16,8 +16,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PeopleManagerDialog from "./PeopleManagerDialog.svelte";
 import {
   entryThumbUri,
+  linkContact,
   peopleEntries,
   renamePerson,
+  searchContacts,
+  unlinkContact,
   type PeopleEntry,
   type QueueCluster,
 } from "./people";
@@ -27,11 +30,17 @@ vi.mock("./people", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./people")>()),
   peopleEntries: vi.fn(),
   renamePerson: vi.fn(),
+  searchContacts: vi.fn(),
+  linkContact: vi.fn(),
+  unlinkContact: vi.fn(),
 }));
 
 import {
   peopleEntries as entriesMock,
   renamePerson as renameMock,
+  searchContacts as searchMock,
+  linkContact as linkMock,
+  unlinkContact as unlinkMock,
 } from "./people";
 
 const REP: QueueCluster = {
@@ -51,6 +60,8 @@ const NAMED: PeopleEntry = {
   name: "Alice",
   face_count: 7,
   representative: REP,
+  contact_id: null,
+  contact: null,
 };
 const UNNAMED: PeopleEntry = {
   person_id: null,
@@ -65,6 +76,8 @@ const BARE: PeopleEntry = {
   name: "Lonely",
   face_count: 0,
   representative: null,
+  contact_id: null,
+  contact: null,
 };
 
 beforeEach(() => {
@@ -73,6 +86,19 @@ beforeEach(() => {
   vi.mocked(renameMock)
     .mockReset()
     .mockResolvedValue({ id: 5, name: "Alicia" });
+  vi.mocked(searchMock)
+    .mockReset()
+    .mockResolvedValue([
+      { id: "os-1", name: "Alice Example", email: "alice@example.local" },
+    ]);
+  vi.mocked(linkMock)
+    .mockReset()
+    .mockResolvedValue({
+      id: 5,
+      name: "Alice",
+      contact: { name: "Alice Example", email: "alice@example.local" },
+    });
+  vi.mocked(unlinkMock).mockReset().mockResolvedValue({ id: 5, name: "Alice" });
 });
 afterEach(cleanup);
 
@@ -182,5 +208,101 @@ describe("people manager", () => {
     );
     await fireEvent.click(screen.getByTestId("pm-review-queue"));
     expect(onOpenQueue).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---- Contacts link (TASK-05-011, PLAN §2G local contacts only) ----
+
+describe("people manager contacts link", () => {
+  it("links a person to a local contact and shows the resolved contact", async () => {
+    render(PeopleManagerDialog, {
+      open: true,
+      onchanged: () => {},
+      onOpenQueue: () => {},
+    });
+    await waitFor(() =>
+      expect(screen.getAllByTestId("pm-entry")).toHaveLength(3),
+    );
+
+    await fireEvent.click(screen.getAllByTestId("pm-link")[0]);
+    await fireEvent.input(screen.getByTestId("pm-contact-query"), {
+      target: { value: "alice" },
+    });
+    await fireEvent.click(screen.getByTestId("pm-contact-search"));
+    await waitFor(() => expect(searchMock).toHaveBeenCalledWith("alice"));
+
+    await fireEvent.click(screen.getAllByTestId("pm-contact-hit")[0]);
+    await waitFor(() => expect(linkMock).toHaveBeenCalledWith(5, "os-1"));
+    await waitFor(() =>
+      expect(screen.getByTestId("pm-contact").textContent).toBe(
+        "Alice Example <alice@example.local>",
+      ),
+    );
+    // The link button is replaced by unlink once a contact is linked
+    // (only Lonely's link button remains).
+    expect(screen.queryAllByTestId("pm-link")).toHaveLength(1);
+    expect(screen.getByTestId("pm-unlink")).toBeTruthy();
+  });
+
+  it("unlinks a person", async () => {
+    vi.mocked(entriesMock).mockResolvedValue([
+      {
+        ...NAMED,
+        contact_id: "os-1",
+        contact: { name: "Alice Example", email: "alice@example.local" },
+      },
+      UNNAMED,
+      BARE,
+    ]);
+    render(PeopleManagerDialog, {
+      open: true,
+      onchanged: () => {},
+      onOpenQueue: () => {},
+    });
+    await waitFor(() => expect(screen.getByTestId("pm-contact")).toBeTruthy());
+    await fireEvent.click(screen.getByTestId("pm-unlink"));
+    await waitFor(() => expect(unlinkMock).toHaveBeenCalledWith(5));
+    await waitFor(() => expect(screen.queryByTestId("pm-contact")).toBeNull());
+    expect(screen.getAllByTestId("pm-link")).toHaveLength(2);
+  });
+
+  it("shows an empty local search politely", async () => {
+    vi.mocked(searchMock).mockResolvedValue([]);
+    render(PeopleManagerDialog, {
+      open: true,
+      onchanged: () => {},
+      onOpenQueue: () => {},
+    });
+    await waitFor(() =>
+      expect(screen.getAllByTestId("pm-entry")).toHaveLength(3),
+    );
+    await fireEvent.click(screen.getAllByTestId("pm-link")[0]);
+    await fireEvent.input(screen.getByTestId("pm-contact-query"), {
+      target: { value: "nobody" },
+    });
+    await fireEvent.click(screen.getByTestId("pm-contact-search"));
+    await waitFor(() =>
+      expect(screen.getByTestId("pm-contact-empty")).toBeTruthy(),
+    );
+    expect(linkMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces link errors", async () => {
+    vi.mocked(linkMock).mockRejectedValue("no contact");
+    render(PeopleManagerDialog, {
+      open: true,
+      onchanged: () => {},
+      onOpenQueue: () => {},
+    });
+    await waitFor(() =>
+      expect(screen.getAllByTestId("pm-entry")).toHaveLength(3),
+    );
+    await fireEvent.click(screen.getAllByTestId("pm-link")[0]);
+    await fireEvent.input(screen.getByTestId("pm-contact-query"), {
+      target: { value: "alice" },
+    });
+    await fireEvent.click(screen.getByTestId("pm-contact-search"));
+    await fireEvent.click(screen.getAllByTestId("pm-contact-hit")[0]);
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
   });
 });

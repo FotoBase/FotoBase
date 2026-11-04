@@ -17,6 +17,7 @@ pub mod batch_commands;
 pub mod batch_edit;
 pub mod catalog_registry;
 pub mod codec;
+pub mod contacts;
 pub mod datetime_commands;
 pub mod display_profile;
 pub mod duplicates;
@@ -192,6 +193,11 @@ struct AppState {
     /// `stop_stream` kills them, a superseding request kills the previous
     /// one, and a janitor reaps idle stragglers as the backstop.
     streams: stream::StreamRegistry,
+    /// Local OS contacts store (TASK-05-011, PLAN §2G): strictly local,
+    /// behind the [`contacts::ContactsProvider`] trait. `None` where the
+    /// platform backend is not implemented — the People Manager hides the
+    /// link UI then.
+    contacts: Option<std::sync::Arc<dyn contacts::ContactsProvider>>,
 }
 
 impl AppState {
@@ -1560,13 +1566,21 @@ fn people_queue_bulk(
 
 /// The People Manager list (TASK-05-006, PLAN §2 Tools menu, §6 P3
 /// People): every named person and every unnamed cluster with a face count
-/// and representative face. Cheap catalog query — no image bytes over IPC
+/// and representative face, plus the locally resolved contact for linked
+/// people (TASK-05-011). Cheap catalog query — no image bytes over IPC
 /// (§3 rule 3).
 #[tauri::command]
 fn people_manager_list(
     state: tauri::State<'_, AppState>,
-) -> Result<Vec<fotobase_catalog::PeopleEntry>, String> {
-    with_catalog(&state, people::entries)
+) -> Result<Vec<people::EntryWithContact>, String> {
+    let provider = state.contacts.as_ref();
+    with_catalog(&state, |cat| match provider {
+        Some(p) => people::entries_with_contacts(cat, p.as_ref()),
+        None => Ok(people::entries(cat)?
+            .into_iter()
+            .map(|entry| people::EntryWithContact { entry, contact: None })
+            .collect()),
+    })
 }
 
 /// Rename a person (TASK-05-006): every confirmed face's sidecar MWG
@@ -1580,6 +1594,55 @@ fn people_manager_rename(
 ) -> Result<people::RenamedPerson, String> {
     with_catalog_mut(&state, |cat| {
         people::rename(cat, person_id, &name)
+            .map_err(|e| fotobase_catalog::CatalogError::Corrupted(e.to_string()))
+    })
+}
+
+// ---- Contacts link (TASK-05-011, PLAN §2G "Contacts link — local contacts
+// only"): the catalog stores the reference, the provider resolves it. All
+// three commands are strictly local — the provider trait has no network
+// client behind it (test-enforced).
+
+/// Search the local OS contacts store by name. Empty when the platform has
+/// no contacts backend.
+#[tauri::command]
+fn contacts_search(
+    query: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<contacts::Contact>, String> {
+    match state.contacts.as_ref() {
+        Some(provider) => people::search(provider.as_ref(), &query),
+        None => Ok(Vec::new()),
+    }
+}
+
+/// Link a person to a local contact (by reference; the contact data stays
+/// in the OS store). Returns the person and the resolved contact for the
+/// immediate UI update.
+#[tauri::command]
+fn people_link_contact(
+    person_id: i64,
+    contact_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(people::RenamedPerson, Option<people::LinkedContact>), String> {
+    let provider = state
+        .contacts
+        .as_ref()
+        .ok_or_else(|| "no contacts provider on this platform".to_string())?;
+    with_catalog_mut(&state, |cat| {
+        people::link(cat, provider.as_ref(), person_id, &contact_id)
+            .map_err(|e| fotobase_catalog::CatalogError::Corrupted(e.to_string()))
+    })
+}
+
+/// Remove a person's contact link.
+#[tauri::command]
+fn people_unlink_contact(
+    person_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<people::RenamedPerson, String> {
+    with_catalog_mut(&state, |cat| {
+        people::unlink(cat, person_id)
             .map_err(|e| fotobase_catalog::CatalogError::Corrupted(e.to_string()))
     })
 }
@@ -2554,6 +2617,7 @@ pub fn run() {
                 video_extractor: std::sync::Arc::new(fotobase_video::Ffmpeg::default()),
                 codec_support: Mutex::new(None),
                 streams: stream::StreamRegistry::new(),
+                contacts: contacts::system_provider(),
             });
             // Display-profile watcher (TASK-02-001): re-read the profile
             // every [`display_profile::POLL_INTERVAL`]; on a fingerprint
@@ -2680,6 +2744,9 @@ pub fn run() {
             people_queue_bulk,
             people_manager_list,
             people_manager_rename,
+            contacts_search,
+            people_link_contact,
+            people_unlink_contact,
             reset_faces,
             folder_ini_pending_folders,
             ingest_folder_ini,

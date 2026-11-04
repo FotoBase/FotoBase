@@ -56,6 +56,15 @@ tokio = { version = "1", features = ["rt", "time"] }
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
 
+# Local contacts link (TASK-05-011): macOS Contacts framework. Strictly
+# local — this is the only contacts access in the app, and it never touches
+# the network (PLAN §2G).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+objc2-contacts = { version = "0.3", features = ["CNContact", "CNContactStore", "block2"] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSPredicate", "NSString"] }
+
 [dev-dependencies]
 # Rating tests read the sidecar back (TASK-03-005).
 fotobase-metadata = { path = "../../crates/metadata" }

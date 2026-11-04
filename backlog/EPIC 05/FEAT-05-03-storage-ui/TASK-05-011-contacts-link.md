@@ -1,6 +1,6 @@
 # task: implement local contacts link
 
-**Feature:** [FEAT-05-03-storage-ui](FEAT-05-03-storage-ui.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** todo
+**Feature:** [FEAT-05-03-storage-ui](FEAT-05-03-storage-ui.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-04)
 
 ## Description
 Contacts link: map person names to local OS contacts only — no network calls, no telemetry (PLAN §2G "Contacts link — local contacts only"; §6 P3 People).
@@ -19,4 +19,4 @@ Contacts link: map person names to local OS contacts only — no network calls, 
 - Unit: contacts module performs zero network calls (no network client in dependency graph / mocked socket test).
 
 ## Acceptance criteria
-- [ ] 05-011: Contacts link maps names to local contacts only; no network calls, no telemetry.
+- [x] 05-011: Contacts link maps names to local contacts only; no network calls, no telemetry.

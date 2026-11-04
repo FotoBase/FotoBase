@@ -9,11 +9,17 @@
 <script lang="ts">
   import { t } from "./i18n.svelte.js";
   import {
+    canLink,
     canRename,
+    contactLabel,
     entryThumbUri,
     faceBox,
+    linkContact,
     peopleEntries,
     renamePerson,
+    searchContacts,
+    unlinkContact,
+    type ContactRef,
     type PeopleEntry,
   } from "./people";
 
@@ -37,6 +43,12 @@
   let renaming = $state<number | null>(null);
   /// The name typed for the entry being renamed.
   let renameName = $state("");
+  /// Entry being contact-linked, keyed by person id (TASK-05-011).
+  let linking = $state<number | null>(null);
+  /// The query typed into the local contacts search.
+  let contactQuery = $state("");
+  /// The local contacts store's hits for that query.
+  let contactHits = $state<ContactRef[]>([]);
 
   $effect(() => {
     if (!open) return;
@@ -44,6 +56,7 @@
     error = null;
     status = null;
     renaming = null;
+    linking = null;
     entries = [];
     void (async () => {
       try {
@@ -65,6 +78,67 @@
   function endRename(): void {
     renaming = null;
     renameName = "";
+  }
+
+  function beginLink(entry: PeopleEntry): void {
+    if (entry.person_id === null) return;
+    linking = entry.person_id;
+    contactQuery = "";
+    contactHits = [];
+  }
+
+  function endLink(): void {
+    linking = null;
+    contactQuery = "";
+    contactHits = [];
+  }
+
+  async function runContactSearch(): Promise<void> {
+    const q = contactQuery.trim();
+    if (!q) {
+      contactHits = [];
+      return;
+    }
+    try {
+      contactHits = await searchContacts(q);
+    } catch (e) {
+      error = t("people.managerError", { error: String(e) });
+    }
+  }
+
+  async function saveLink(entry: PeopleEntry, contactId: string): Promise<void> {
+    if (!canLink(contactId)) return;
+    error = null;
+    try {
+      const { contact } = await linkContact(entry.person_id ?? 0, contactId);
+      entries = entries.map((e) =>
+        e.person_id === entry.person_id
+          ? { ...e, contact_id: contact ? contactId : null, contact }
+          : e,
+      );
+      status = contact
+        ? t("people.linked", { name: contact.name })
+        : t("people.linkedNoContact");
+      onchanged();
+    } catch (e) {
+      error = t("people.managerError", { error: String(e) });
+    } finally {
+      endLink();
+    }
+  }
+
+  async function removeLink(entry: PeopleEntry): Promise<void> {
+    error = null;
+    try {
+      await unlinkContact(entry.person_id ?? 0);
+      entries = entries.map((e) =>
+        e.person_id === entry.person_id ? { ...e, contact_id: null, contact: null } : e,
+      );
+      status = t("people.unlinked");
+      onchanged();
+    } catch (e) {
+      error = t("people.managerError", { error: String(e) });
+    }
   }
 
   async function saveRename(entry: PeopleEntry): Promise<void> {
@@ -131,6 +205,52 @@
                   <p class="pm-name">{entry.name}</p>
                 {/if}
                 <p class="pm-count">{t("people.faces", { n: entry.face_count })}</p>
+                {#if entry.contact}
+                  <p class="pm-contact" data-testid="pm-contact">
+                    {contactLabel(entry.contact)}
+                  </p>
+                {/if}
+                {#if linking === entry.person_id}
+                  <div class="pm-linking">
+                    <input
+                      type="text"
+                      data-testid="pm-contact-query"
+                      placeholder={t("people.contactSearchPlaceholder")}
+                      value={contactQuery}
+                      oninput={(e) => (contactQuery = e.currentTarget.value)}
+                      onkeydown={(e) => {
+                        if (e.key === "Enter") void runContactSearch();
+                        if (e.key === "Escape") endLink();
+                      }}
+                    />
+                    <button
+                      type="button"
+                      data-testid="pm-contact-search"
+                      onclick={() => void runContactSearch()}
+                    >
+                      {t("people.contactSearch")}
+                    </button>
+                    {#if contactHits.length > 0}
+                      <ul class="pm-hits">
+                        {#each contactHits as hit (hit.id)}
+                          <li>
+                            <button
+                              type="button"
+                              data-testid="pm-contact-hit"
+                              onclick={() => void saveLink(entry, hit.id)}
+                            >
+                              {contactLabel({ name: hit.name, email: hit.email })}
+                            </button>
+                          </li>
+                        {/each}
+                      </ul>
+                    {:else}
+                      <p class="pm-empty-hits" data-testid="pm-contact-empty">
+                        {t("people.noContacts")}
+                      </p>
+                    {/if}
+                  </div>
+                {/if}
               </div>
               <div class="pm-actions">
                 {#if renaming === entry.person_id}
@@ -153,6 +273,23 @@
                   >
                     {t("people.rename")}
                   </button>
+                  {#if entry.contact}
+                    <button
+                      type="button"
+                      data-testid="pm-unlink"
+                      onclick={() => void removeLink(entry)}
+                    >
+                      {t("people.unlink")}
+                    </button>
+                  {:else}
+                    <button
+                      type="button"
+                      data-testid="pm-link"
+                      onclick={() => beginLink(entry)}
+                    >
+                      {t("people.linkContact")}
+                    </button>
+                  {/if}
                 {/if}
               </div>
             </li>
@@ -273,6 +410,26 @@
     font-weight: 600;
   }
   .pm-count {
+    font-size: 0.8rem;
+    color: var(--fb-muted, #6b6b6b);
+  }
+  .pm-contact {
+    font-size: 0.8rem;
+    color: var(--fb-accent, #2b6cb0);
+  }
+  .pm-linking {
+    display: grid;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+  }
+  .pm-hits {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.2rem;
+  }
+  .pm-empty-hits {
     font-size: 0.8rem;
     color: var(--fb-muted, #6b6b6b);
   }
