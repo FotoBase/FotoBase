@@ -25,6 +25,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V16,
     MIGRATION_V17,
     MIGRATION_V18,
+    MIGRATION_V19,
 ];
 
 const MIGRATION_V1: &str = "
@@ -703,6 +704,19 @@ CREATE VIRTUAL TABLE embeddings USING vec0(
 INSERT INTO embeddings (embedding_id, embedding)
     SELECT face_id, vector FROM embeddings_migrate;
 DROP TABLE embeddings_migrate;
+";
+
+/// TASK-05-011: contacts link (PLAN §2G "Contacts link — local contacts
+/// only"). `person_contacts` stores only the *reference* to a local OS
+/// contact (its provider identifier); the contact data itself is never
+/// copied (§5 — the catalog is a cache, and a contact is not our data).
+/// One contact maps to at most one person (`contact_id` UNIQUE) and one
+/// person to at most one contact (PRIMARY KEY).
+const MIGRATION_V19: &str = "
+CREATE TABLE person_contacts (
+    person_id  INTEGER PRIMARY KEY REFERENCES persons(id) ON DELETE CASCADE,
+    contact_id TEXT NOT NULL UNIQUE
+);
 ";
 
 /// Apply all pending migrations, in order, each in its own transaction.

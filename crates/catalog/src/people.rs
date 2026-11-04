@@ -474,7 +474,9 @@ impl Catalog {
 /// One People Manager entry: a named person (`person_id` set) or an unnamed
 /// cluster (`cluster_id` set), with a face count and a representative face
 /// for the `thumb://` URI. `representative` is `None` for a person with no
-/// confirmed faces.
+/// confirmed faces. `contact_id` is the local OS contact's reference
+/// (TASK-05-011) — the contact data itself is resolved by the app shell
+/// from the OS contacts store, never stored here.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PeopleEntry {
     pub person_id: Option<i64>,
@@ -482,6 +484,8 @@ pub struct PeopleEntry {
     pub name: Option<String>,
     pub face_count: i64,
     pub representative: Option<QueueFace>,
+    #[serde(default)]
+    pub contact_id: Option<String>,
 }
 
 impl Catalog {
@@ -494,7 +498,9 @@ impl Catalog {
         let mut entries = Vec::new();
 
         let mut named = self.conn().prepare_cached(
-            "SELECT p.id, p.name, COUNT(f.id), MIN(f.id) FROM persons p \
+            "SELECT p.id, p.name, COUNT(f.id), MIN(f.id), \
+             (SELECT pc.contact_id FROM person_contacts pc WHERE pc.person_id = p.id) \
+             FROM persons p \
              LEFT JOIN faces f ON f.person_id = p.id \
              GROUP BY p.id ORDER BY p.name COLLATE NOCASE",
         )?;
@@ -505,16 +511,18 @@ impl Catalog {
                     r.get::<_, String>(1)?,
                     r.get::<_, i64>(2)?,
                     r.get::<_, Option<i64>>(3)?,
+                    r.get::<_, Option<String>>(4)?,
                 ))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        for (person_id, name, face_count, rep) in heads {
+        for (person_id, name, face_count, rep, contact_id) in heads {
             entries.push(PeopleEntry {
                 person_id: Some(person_id),
                 cluster_id: None,
                 name: Some(name),
                 face_count,
                 representative: rep.and_then(|id| self.representative_face(id).ok().flatten()),
+                contact_id,
             });
         }
 
@@ -545,6 +553,7 @@ impl Catalog {
                 name: None,
                 face_count,
                 representative: rep.and_then(|id| self.representative_face(id).ok().flatten()),
+                contact_id: None,
             });
         }
         Ok(entries)
@@ -639,5 +648,68 @@ impl Catalog {
             rusqlite::params![new_name, person_id],
         )?;
         Ok(PersonRow { id: person_id, name: new_name.to_string() })
+    }
+
+    /// Link a person to a local OS contact (TASK-05-011, PLAN §2G "Contacts
+    /// link — local contacts only"). Only the contact's *reference* is
+    /// stored — the contact data itself lives in the OS contacts store and
+    /// is resolved by the app shell on display; nothing is copied, nothing
+    /// is written to sidecars (a contact mapping is app-local state, not
+    /// photo user data). One contact maps to at most one person and vice
+    /// versa; relinking replaces the previous reference. Refuses an unknown
+    /// person, a blank reference and a contact another person already uses.
+    pub fn link_contact(&mut self, person_id: i64, contact_id: &str) -> Result<PersonRow> {
+        let contact_id = contact_id.trim();
+        if contact_id.is_empty() {
+            return Err(CatalogError::InvalidQuery("contact reference is blank".into()));
+        }
+        let exists: Option<i64> = self
+            .conn()
+            .query_row("SELECT id FROM persons WHERE id = ?1", [person_id], |r| r.get(0))
+            .optional()?;
+        if exists.is_none() {
+            return Err(CatalogError::InvalidQuery(format!("no person {person_id}")));
+        }
+        let taken: Option<String> = self
+            .conn()
+            .query_row(
+                "SELECT p.name FROM person_contacts pc \
+                 JOIN persons p ON p.id = pc.person_id \
+                 WHERE pc.contact_id = ?1 AND pc.person_id != ?2",
+                rusqlite::params![contact_id, person_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if let Some(name) = taken {
+            return Err(CatalogError::InvalidQuery(format!(
+                "contact {contact_id:?} is already linked to {name:?}"
+            )));
+        }
+        self.conn().execute(
+            "INSERT INTO person_contacts (person_id, contact_id) VALUES (?1, ?2) \
+             ON CONFLICT(person_id) DO UPDATE SET contact_id = excluded.contact_id",
+            rusqlite::params![person_id, contact_id],
+        )?;
+        Ok(PersonRow { id: person_id, name: self.person_name(person_id) })
+    }
+
+    /// Remove a person's contact link. Unlinking an unlinked person is a
+    /// no-op; an unknown person id is refused.
+    pub fn unlink_contact(&mut self, person_id: i64) -> Result<()> {
+        let exists: Option<i64> = self
+            .conn()
+            .query_row("SELECT id FROM persons WHERE id = ?1", [person_id], |r| r.get(0))
+            .optional()?;
+        if exists.is_none() {
+            return Err(CatalogError::InvalidQuery(format!("no person {person_id}")));
+        }
+        self.conn().execute("DELETE FROM person_contacts WHERE person_id = ?1", [person_id])?;
+        Ok(())
+    }
+
+    fn person_name(&self, person_id: i64) -> String {
+        self.conn()
+            .query_row("SELECT name FROM persons WHERE id = ?1", [person_id], |r| r.get(0))
+            .unwrap_or_default()
     }
 }

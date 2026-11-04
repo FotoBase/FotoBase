@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <!-- Local contacts link (TASK-05-011): the TCC prompt for the Contacts
+         framework access. Strictly local — contacts never leave the machine. -->
+    <key>NSContactsUsageDescription</key>
+    <string>Fotobase links people in your library to your local contacts (name and email only). Your contacts never leave this machine.</string>
+  </dict>
+</plist>
