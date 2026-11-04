@@ -175,7 +175,7 @@ pub fn snapshot(cat: &Catalog) -> fotobase_catalog::Result<Snapshot> {
     }
 
     let mut albums = Vec::new();
-    for info in cat.list_albums()? {
+    for info in cat.list_albums()?.into_iter().filter(|a| a.person_id.is_none()) {
         albums.push(AlbumSnapshot {
             uuid: info.uuid,
             name: info.name,

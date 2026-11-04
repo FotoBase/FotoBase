@@ -402,7 +402,8 @@ fn list_files(
 /// view, live search text and the filter buttons / date slider AND-combine
 /// in a single catalog query. `starred` resolves to the rating threshold for
 /// the current rating mode; `taken_since` is the date slider's `YYYY-MM-DD`
-/// cutoff; `sort` is `path` (default) or `capture` (TASK-03-019: chronological,
+/// cutoff; `has_faces` keeps only photos with a detected or named face
+/// (TASK-05-007); `sort` is `path` (default) or `capture` (TASK-03-019: chronological,
 /// adjusted capture times included); `stack` (TASK-03-021) expands one stack
 /// instead of showing every stack as its top. Ids and metadata only — no
 /// image bytes over IPC.
@@ -416,6 +417,7 @@ fn query_files(
     album: Option<i64>,
     starred: Option<bool>,
     videos_only: Option<bool>,
+    has_faces: Option<bool>,
     taken_since: Option<String>,
     sort: Option<fotobase_catalog::FileSort>,
     stack: Option<String>,
@@ -432,6 +434,7 @@ fn query_files(
         album,
         min_rating,
         videos_only: videos_only == Some(true),
+        has_faces: has_faces == Some(true),
         taken_since,
         stack,
         sort: sort.unwrap_or_default(),

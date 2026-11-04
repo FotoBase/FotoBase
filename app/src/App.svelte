@@ -40,6 +40,7 @@
     removeFromAlbum,
     setAlbumCover,
     targetIds,
+    userAlbums,
     type Album,
   } from "./lib/albums";
   import { reportCodecSupport } from "./lib/codec-probe";
@@ -238,6 +239,7 @@
       query: gridState.searchQuery,
       starred: gridState.starredOnly,
       videosOnly: gridState.videosOnly,
+      hasFaces: gridState.facesOnly,
       takenSince: cutoffDate(gridState.dateStep),
       sort: gridState.sort,
     });
@@ -527,7 +529,7 @@
     { id: "view-slideshow", label: t("menu.viewSlideshow") },
     { id: "locate-on-disk", label: t("menu.locateOnDisk") },
     { id: "delete-from-disk", label: t("menu.deleteFromDisk") },
-    { id: "add-to-album", label: t("menu.addToAlbum"), disabled: albums.length === 0 },
+    { id: "add-to-album", label: t("menu.addToAlbum"), disabled: userAlbums(albums).length === 0 },
     { id: "adjust-date-time", label: t("menu.adjustDateTime") },
     { id: "batch-edit", label: t("menu.batchEdit") },
     { id: "export", label: t("menu.export") },
@@ -550,7 +552,7 @@
     photoMenu.item?.hidden
       ? { id: "unhide-photo", label: t("menu.unhide") }
       : { id: "hide-photo", label: t("menu.hide") },
-    ...(selectedAlbum !== null
+    ...(selectedAlbum !== null && albums.some((a) => a.id === selectedAlbum && a.person_id === null)
       ? [
           { id: "remove-from-album", label: t("albums.removeFromPicked") },
           { id: "set-album-cover", label: t("albums.setCover") },
@@ -567,7 +569,7 @@
   // The photo menu's "Add to album" opens this picker: one entry per album,
   // then "New album…" (which adds the photos to the album once created).
   const albumPickerItems = $derived<MenuItem[]>([
-    ...albums.map((a) => ({ id: `album:${a.id}`, label: a.name })),
+    ...userAlbums(albums).map((a) => ({ id: `album:${a.id}`, label: a.name })),
     { id: "new-album", label: t("albums.newEllipsis") },
   ]);
   let pendingAlbumIds = $state<number[]>([]);
@@ -794,6 +796,8 @@
   }
 
   function openAlbumMenu(e: { album: Album; x: number; y: number }): void {
+    // A person album is derived from faces: nothing to edit or delete.
+    if (e.album.person_id !== null) return;
     albumMenu = { open: true, x: e.x, y: e.y, album: e.album };
   }
 

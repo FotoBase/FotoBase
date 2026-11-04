@@ -263,8 +263,34 @@ fn migrating_an_older_catalog_makes_the_next_rebuild_reread_sidecars() {
     drop(cat);
     let conn = rusqlite::Connection::open(&db).unwrap();
     // Schema v9 is the one before the artist column (migration 10); the
-    // later stack columns (migration 11), folder ini table (migration 12)
-    // and face tables (migrations 14–15) go with it.
+    // later stack columns (migration 11), folder ini table (migration 12),
+    // face tables (migrations 14–15) and person albums / FTS people
+    // (migration 17) go with it.
+    conn.execute_batch(
+        "DROP TRIGGER person_album_face_insert;
+         DROP TRIGGER person_album_face_update;
+         DROP TRIGGER person_album_face_delete;
+         DROP TRIGGER person_album_rename;
+         DROP TRIGGER files_fts_people_insert;
+         DROP TRIGGER files_fts_people_update;
+         DROP TRIGGER files_fts_people_delete;
+         DROP TRIGGER files_fts_person_rename;
+         DROP TRIGGER files_fts_insert;
+         DROP TRIGGER files_fts_delete;
+         DROP TRIGGER files_fts_update;
+         DROP TRIGGER files_fts_caption_insert;
+         DROP TRIGGER files_fts_caption_update;
+         DROP TRIGGER files_fts_caption_delete;
+         DROP TRIGGER files_fts_tags_insert;
+         DROP TRIGGER files_fts_tags_delete;
+         DROP TABLE files_fts;
+         DROP INDEX idx_albums_person;
+         ALTER TABLE albums DROP COLUMN person_id;",
+    )
+    .unwrap();
+    // The v9 full-text table and triggers, as migration 9 creates them.
+    let v9 = fotobase_catalog::MIGRATIONS[8];
+    conn.execute_batch(v9.split_once("DROP TABLE files_fts;").unwrap().1).unwrap();
     conn.execute_batch(
         "DROP TABLE embeddings;
          DROP TABLE faces;

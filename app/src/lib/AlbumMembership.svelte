@@ -6,7 +6,7 @@
   fails.
 -->
 <script lang="ts">
-  import { addToAlbum, getFileAlbums, listAlbums, removeFromAlbum, type Album } from "./albums";
+  import { addToAlbum, getFileAlbums, listAlbums, removeFromAlbum, userAlbums, type Album } from "./albums";
   import { t } from "./i18n.svelte.js";
 
   interface Props {
@@ -31,7 +31,7 @@
       let all: Album[] = [];
       let mine: number[] = [];
       try {
-        all = await listAlbums();
+        all = userAlbums(await listAlbums());
         mine = id === null ? [] : await getFileAlbums(id);
       } catch {
         // Browser dev / backend down: nothing to show.

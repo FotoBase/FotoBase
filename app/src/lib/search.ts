@@ -20,6 +20,8 @@ export interface LibraryView {
   query: string;
   starred: boolean;
   videosOnly: boolean;
+  /// Only photos with a detected or named face (TASK-05-007).
+  hasFaces: boolean;
   /// `YYYY-MM-DD` cutoff from the date slider, `null` = all time.
   takenSince: string | null;
   sort: GridSort;
@@ -34,6 +36,7 @@ export async function queryLibraryItems(view: LibraryView): Promise<GridItem[]> 
     album: view.album,
     starred: view.starred,
     videosOnly: view.videosOnly,
+    hasFaces: view.hasFaces,
     takenSince: view.takenSince,
     sort: view.sort,
   });
