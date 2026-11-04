@@ -1,6 +1,6 @@
 # task: implement person albums and face filters
 
-**Feature:** [FEAT-05-02-clustering-naming](FEAT-05-02-clustering-naming.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in progress (2026-11-04)
+**Feature:** [FEAT-05-02-clustering-naming](FEAT-05-02-clustering-naming.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-04)
 
 ## Description
 Auto person albums, a "has faces" filter button, and person names searchable in FTS (PLAN §2G "Person albums"; §2C filter buttons; §6 P3 People).
