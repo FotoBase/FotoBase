@@ -72,25 +72,25 @@ const peopleCount = async (): Promise<number> =>
 
 // The e2e driver cannot answer the native confirm() dialog; it is part of
 // the flow under test, so stub it instead of bypassing the gate in app code.
-const stubConfirm = (answer: boolean): Promise<void> =>
-  browser.execute((a: boolean) => {
-    (window as unknown as { confirm: (m?: string) => boolean }).confirm = () =>
-      a;
-  }, answer);
-
 // The context menu opens on the cell's `contextmenu` event; under xvfb +
 // WebKitWebDriver a native right-click hangs, so the whole flow — find the
 // solo cell (waiting for its thumbnail to render), dispatch the event, wait
 // for the menu item, click it — runs as ONE page task. Splitting it into
 // separate WebDriver calls let the menu close between them (native
 // context-menu grab) and raced the lazy thumbnail.
-const openMenuOnSolo = async (): Promise<void> => {
+const openMenuOnSolo = async (answer: boolean): Promise<void> => {
   const why = await withDeadline(
     browser.executeAsync(
       (
         alt: string,
+        answer: boolean,
         done: (r: "ok" | "no-cell" | "no-menu") => void,
       ): void => {
+        // Stub confirm here, right before the click: a native confirm()
+        // dialog would block the flow forever, and a stub set in an earlier
+        // WebDriver call is lost when the webview reloads between tests.
+        (window as unknown as { confirm: (m?: string) => boolean }).confirm =
+          () => answer;
         let tries = 0;
         const attempt = (): void => {
           const img = document.querySelector(`img[alt="${alt}"]`);
@@ -130,6 +130,7 @@ const openMenuOnSolo = async (): Promise<void> => {
         attempt();
       },
       SOLO,
+      answer,
     ),
     30_000,
     "open menu on solo",
@@ -155,16 +156,14 @@ describe("reset faces", () => {
   });
 
   it("declining the confirmation leaves everything in place", async () => {
-    await stubConfirm(false);
-    await openMenuOnSolo();
+    await openMenuOnSolo(false);
     expect(await peopleCount()).toBe(1);
     const raw = fs.readFileSync(path.join(lib.dir, `${SOLO}.xmp`), "utf8");
     expect(raw).toContain('mwg-rs:Name="Anna"');
   });
 
   it("confirming clears the person, the face row and the sidecar region", async () => {
-    await stubConfirm(true);
-    await openMenuOnSolo();
+    await openMenuOnSolo(true);
     await browser.waitUntil(async () => (await peopleCount()) === 0);
     const raw = fs.readFileSync(path.join(lib.dir, `${SOLO}.xmp`), "utf8");
     expect(raw).not.toContain('mwg-rs:Name="Anna"');
