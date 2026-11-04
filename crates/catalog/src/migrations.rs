@@ -23,6 +23,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V14,
     MIGRATION_V15,
     MIGRATION_V16,
+    MIGRATION_V17,
 ];
 
 const MIGRATION_V1: &str = "
@@ -481,6 +482,201 @@ ALTER TABLE faces ADD COLUMN person_id INTEGER REFERENCES persons(id) ON DELETE 
 const MIGRATION_V16: &str = "
 ALTER TABLE faces ADD COLUMN rejected INTEGER NOT NULL DEFAULT 0;
 ";
+
+/// One `files_fts` row refreshed for the photo `$id` names (a trigger
+/// expression such as `NEW.id`): delete, then re-insert from the mirror
+/// rows. Inserts nothing when the `files` row is already gone.
+macro_rules! fts_refresh {
+    ($id:literal) => {
+        concat!(
+            "DELETE FROM files_fts WHERE rowid = ",
+            $id,
+            ";
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags, people)
+        SELECT f.id, f.filename, d.path, m.caption,
+               (SELECT group_concat(t.name, ' ') FROM file_tags ft
+                JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id),
+               (SELECT group_concat(name, ' ') FROM
+                (SELECT DISTINCT p.name AS name FROM faces fa
+                 JOIN persons p ON p.id = fa.person_id WHERE fa.file_id = f.id))
+        FROM files f JOIN folders d ON d.id = f.folder_id
+        LEFT JOIN metadata m ON m.file_id = f.id WHERE f.id = ",
+            $id,
+            ";"
+        )
+    };
+}
+
+/// TASK-05-007: person albums, face filter, person names in search (PLAN
+/// §2G "Person albums", §5 `files_fts` people column). Everything here is
+/// derived from `faces` / `persons` (sidecar `mwg-rs:Regions` is the source
+/// of truth), so it is trigger-maintained and rebuildable:
+/// - `albums.person_id` marks an auto album, one per person, holding the
+///   photos with a confirmed face of that person. It has no `uuid`, so it
+///   is never written to a sidecar's `fb:Albums` or to `albums.json`.
+/// - `files_fts` gains a `people` column (space-joined person names of the
+///   photo's confirmed faces). Same drop-and-rebuild as V9; every
+///   `faces.person_id` change and every rename refreshes the affected rows.
+/// - `idx_faces_person` backs the person joins and the "has faces" filter
+///   uses `idx_faces_file`.
+const MIGRATION_V17: &str = concat!(
+    "
+ALTER TABLE albums ADD COLUMN person_id INTEGER REFERENCES persons(id) ON DELETE CASCADE;
+CREATE UNIQUE INDEX idx_albums_person ON albums(person_id);
+CREATE INDEX idx_faces_person ON faces(person_id);
+
+INSERT INTO albums (name, person_id)
+    SELECT p.name, p.id FROM persons p
+    WHERE EXISTS (SELECT 1 FROM faces fa WHERE fa.person_id = p.id);
+INSERT OR IGNORE INTO album_files (album_id, file_id, position)
+    SELECT a.id, fa.file_id, 0 FROM faces fa
+    JOIN albums a ON a.person_id = fa.person_id;
+
+CREATE TRIGGER person_album_face_insert AFTER INSERT ON faces
+WHEN NEW.person_id IS NOT NULL BEGIN
+    INSERT OR IGNORE INTO albums (name, person_id)
+        SELECT name, id FROM persons WHERE id = NEW.person_id;
+    INSERT OR IGNORE INTO album_files (album_id, file_id, position)
+        SELECT id, NEW.file_id, 0 FROM albums WHERE person_id = NEW.person_id;
+END;
+
+CREATE TRIGGER person_album_face_update AFTER UPDATE OF person_id ON faces
+WHEN NEW.person_id IS NOT OLD.person_id BEGIN
+    DELETE FROM album_files
+    WHERE file_id = OLD.file_id
+      AND album_id = (SELECT id FROM albums WHERE person_id = OLD.person_id)
+      AND NOT EXISTS (SELECT 1 FROM faces
+                      WHERE file_id = OLD.file_id AND person_id = OLD.person_id);
+    DELETE FROM albums WHERE person_id = OLD.person_id
+      AND NOT EXISTS (SELECT 1 FROM album_files WHERE album_id = albums.id);
+    INSERT OR IGNORE INTO albums (name, person_id)
+        SELECT name, id FROM persons WHERE id = NEW.person_id;
+    INSERT OR IGNORE INTO album_files (album_id, file_id, position)
+        SELECT id, NEW.file_id, 0 FROM albums WHERE person_id = NEW.person_id;
+END;
+
+CREATE TRIGGER person_album_face_delete AFTER DELETE ON faces
+WHEN OLD.person_id IS NOT NULL BEGIN
+    DELETE FROM album_files
+    WHERE file_id = OLD.file_id
+      AND album_id = (SELECT id FROM albums WHERE person_id = OLD.person_id)
+      AND NOT EXISTS (SELECT 1 FROM faces
+                      WHERE file_id = OLD.file_id AND person_id = OLD.person_id);
+    DELETE FROM albums WHERE person_id = OLD.person_id
+      AND NOT EXISTS (SELECT 1 FROM album_files WHERE album_id = albums.id);
+END;
+
+CREATE TRIGGER person_album_rename AFTER UPDATE OF name ON persons BEGIN
+    UPDATE albums SET name = NEW.name WHERE person_id = NEW.id;
+END;
+
+DROP TRIGGER files_fts_insert;
+DROP TRIGGER files_fts_delete;
+DROP TRIGGER files_fts_update;
+DROP TRIGGER files_fts_caption_insert;
+DROP TRIGGER files_fts_caption_update;
+DROP TRIGGER files_fts_caption_delete;
+DROP TRIGGER files_fts_tags_insert;
+DROP TRIGGER files_fts_tags_delete;
+DROP TABLE files_fts;
+CREATE VIRTUAL TABLE files_fts USING fts5(filename, folder, caption, tags, people);
+
+CREATE TRIGGER files_fts_insert AFTER INSERT ON files BEGIN
+    ",
+    fts_refresh!("NEW.id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_delete AFTER DELETE ON files BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.id;
+END;
+
+CREATE TRIGGER files_fts_update AFTER UPDATE ON files BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.id;
+    ",
+    fts_refresh!("NEW.id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_caption_insert AFTER INSERT ON metadata
+WHEN NEW.caption IS NOT NULL BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_caption_update AFTER UPDATE OF caption ON metadata
+WHEN OLD.caption IS NOT NEW.caption BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_caption_delete AFTER DELETE ON metadata
+WHEN OLD.caption IS NOT NULL BEGIN
+    ",
+    fts_refresh!("OLD.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_tags_insert AFTER INSERT ON file_tags BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_tags_delete AFTER DELETE ON file_tags BEGIN
+    ",
+    fts_refresh!("OLD.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_people_insert AFTER INSERT ON faces
+WHEN NEW.person_id IS NOT NULL BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_people_update AFTER UPDATE OF person_id ON faces
+WHEN NEW.person_id IS NOT OLD.person_id BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_people_delete AFTER DELETE ON faces
+WHEN OLD.person_id IS NOT NULL BEGIN
+    ",
+    fts_refresh!("OLD.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_person_rename AFTER UPDATE OF name ON persons BEGIN
+    DELETE FROM files_fts WHERE rowid IN (SELECT file_id FROM faces WHERE person_id = NEW.id);
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags, people)
+        SELECT f.id, f.filename, d.path, m.caption,
+               (SELECT group_concat(t.name, ' ') FROM file_tags ft
+                JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id),
+               (SELECT group_concat(name, ' ') FROM
+                (SELECT DISTINCT p.name AS name FROM faces fa
+                 JOIN persons p ON p.id = fa.person_id WHERE fa.file_id = f.id))
+        FROM files f JOIN folders d ON d.id = f.folder_id
+        LEFT JOIN metadata m ON m.file_id = f.id
+        WHERE f.id IN (SELECT file_id FROM faces WHERE person_id = NEW.id);
+END;
+
+INSERT INTO files_fts(rowid, filename, folder, caption, tags, people)
+    SELECT f.id, f.filename, d.path, m.caption,
+           (SELECT group_concat(t.name, ' ') FROM file_tags ft
+            JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id),
+           (SELECT group_concat(name, ' ') FROM
+            (SELECT DISTINCT p.name AS name FROM faces fa
+             JOIN persons p ON p.id = fa.person_id WHERE fa.file_id = f.id))
+    FROM files f JOIN folders d ON d.id = f.folder_id
+    LEFT JOIN metadata m ON m.file_id = f.id;
+"
+);
 
 /// Apply all pending migrations, in order, each in its own transaction.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {

@@ -55,6 +55,10 @@ pub struct AlbumInfo {
     pub cover_file_id: Option<i64>,
     /// Content hash of the cover, the key of its `thumb://` URI.
     pub cover_hash: Option<String>,
+    /// Set for an auto album (TASK-05-007): the person whose confirmed
+    /// photos it holds. Derived from faces, so it is read-only for the user
+    /// and its `uuid` is the synthetic `person:<id>`, never a sidecar id.
+    pub person_id: Option<i64>,
 }
 
 // ---- albums.json ----------------------------------------------------------
@@ -130,7 +134,7 @@ fn persist_definitions(conn: &Connection, path: &Path) -> Result<()> {
     };
     let mut stmt = conn.prepare_cached(
         "SELECT uuid, name, date, place, description, cover_path, created_at
-         FROM albums WHERE uuid IS NOT NULL ORDER BY id",
+         FROM albums WHERE uuid IS NOT NULL AND person_id IS NULL ORDER BY id",
     )?;
     let defs = stmt
         .query_map([], |r| {
@@ -216,9 +220,13 @@ pub(crate) fn apply_membership(conn: &Connection, file_id: i64, uuids: &[String]
         }
     }
 
+    // Person albums are derived from faces, not from `fb:Albums`: the
+    // sidecar mirror must neither drop nor re-add their membership.
     let current: Vec<i64> = {
-        let mut stmt =
-            conn.prepare_cached("SELECT album_id FROM album_files WHERE file_id = ?1")?;
+        let mut stmt = conn.prepare_cached(
+            "SELECT af.album_id FROM album_files af JOIN albums a ON a.id = af.album_id
+             WHERE af.file_id = ?1 AND a.person_id IS NULL",
+        )?;
         let rows = stmt.query_map([file_id], |r| r.get(0))?;
         rows.collect::<std::result::Result<_, _>>()?
     };
@@ -287,7 +295,7 @@ fn clean_date(date: &str) -> SyncResult<String> {
 /// member total nor the cover pick unless "show hidden" is on.
 fn album_cols(not_hidden: &str) -> String {
     format!(
-        "a.id, a.uuid, a.name, a.date, a.place, a.description,
+        "a.id, COALESCE(a.uuid, 'person:' || a.person_id), a.name, a.date, a.place, a.description,
      (SELECT COUNT(*) FROM album_files af JOIN files f ON f.id = af.file_id
        WHERE af.album_id = a.id{not_hidden}),
      COALESCE(
@@ -295,7 +303,7 @@ fn album_cols(not_hidden: &str) -> String {
           WHERE af.album_id = a.id AND f.path = a.cover_path{not_hidden}),
         (SELECT af.file_id FROM album_files af JOIN files f ON f.id = af.file_id
           WHERE af.album_id = a.id{not_hidden}
-          ORDER BY af.position, af.file_id LIMIT 1))"
+          ORDER BY af.position, af.file_id LIMIT 1)), a.person_id"
     )
 }
 
@@ -310,6 +318,7 @@ fn album_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<AlbumInfo> {
         count: r.get(6)?,
         cover_file_id: r.get(7)?,
         cover_hash: None,
+        person_id: r.get(8)?,
     })
 }
 
@@ -402,7 +411,7 @@ impl Catalog {
         let name = clean_name(name)?;
         let date = clean_date(date)?;
         let (place, description) = (clean_optional(place), clean_optional(description));
-        self.album(album_id)?.ok_or(SyncError::UnknownAlbum(album_id))?;
+        self.user_album(album_id)?;
         let json = self.albums_json_path();
 
         let tx = self.conn_mut().transaction()?;
@@ -421,7 +430,7 @@ impl Catalog {
     /// already processed are already out of it), so the delete can be
     /// retried.
     pub fn delete_album(&mut self, album_id: i64) -> SyncResult<()> {
-        let album = self.album(album_id)?.ok_or(SyncError::UnknownAlbum(album_id))?;
+        let album = self.user_album(album_id)?;
         for file_id in self.album_file_ids(album_id)? {
             self.mutate_user_data(file_id, |sc| {
                 let rest = sc.albums().into_iter().filter(|u| *u != album.uuid).collect();
@@ -439,7 +448,7 @@ impl Catalog {
     /// Add photos to an album: one sidecar write per photo not already in
     /// it. Returns how many were added.
     pub fn add_to_album(&mut self, album_id: i64, file_ids: &[i64]) -> SyncResult<usize> {
-        let album = self.album(album_id)?.ok_or(SyncError::UnknownAlbum(album_id))?;
+        let album = self.user_album(album_id)?;
         let mut added = 0;
         for &file_id in file_ids {
             if self.is_member(album_id, file_id)? {
@@ -460,7 +469,7 @@ impl Catalog {
     /// Remove photos from an album (the photos themselves stay). Returns how
     /// many were removed.
     pub fn remove_from_album(&mut self, album_id: i64, file_ids: &[i64]) -> SyncResult<usize> {
-        let album = self.album(album_id)?.ok_or(SyncError::UnknownAlbum(album_id))?;
+        let album = self.user_album(album_id)?;
         let mut removed = 0;
         for &file_id in file_ids {
             if !self.is_member(album_id, file_id)? {
@@ -477,7 +486,7 @@ impl Catalog {
 
     /// Pick the album's cover. Only a member can be the cover.
     pub fn set_album_cover(&mut self, album_id: i64, file_id: i64) -> SyncResult<AlbumInfo> {
-        self.album(album_id)?.ok_or(SyncError::UnknownAlbum(album_id))?;
+        self.user_album(album_id)?;
         if !self.is_member(album_id, file_id)? {
             return Err(SyncError::NotInAlbum { album_id, file_id });
         }
@@ -490,6 +499,17 @@ impl Catalog {
         persist_definitions(&tx, &json)?;
         tx.commit()?;
         self.album(album_id)?.ok_or(SyncError::UnknownAlbum(album_id))
+    }
+
+    /// The album, refused when it is unknown or a derived person album
+    /// (TASK-05-007): user edits go to sidecars / `albums.json`, which an
+    /// auto album must never reach.
+    fn user_album(&self, album_id: i64) -> SyncResult<AlbumInfo> {
+        let album = self.album(album_id)?.ok_or(SyncError::UnknownAlbum(album_id))?;
+        if album.person_id.is_some() {
+            return Err(SyncError::PersonAlbum(album_id));
+        }
+        Ok(album)
     }
 
     /// Every album, newest date first (album-list UI, with counts).
@@ -598,9 +618,11 @@ impl Catalog {
         match read_doc(&json) {
             DocState::Invalid => Ok(()),
             DocState::Missing => {
-                let has_albums: bool =
-                    self.conn()
-                        .query_row("SELECT EXISTS(SELECT 1 FROM albums)", [], |r| r.get(0))?;
+                let has_albums: bool = self.conn().query_row(
+                    "SELECT EXISTS(SELECT 1 FROM albums WHERE person_id IS NULL)",
+                    [],
+                    |r| r.get(0),
+                )?;
                 if has_albums {
                     persist_definitions(self.conn(), &json)?;
                 }

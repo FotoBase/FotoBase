@@ -54,6 +54,9 @@ pub struct FileQuery {
     pub min_rating: Option<u8>,
     /// Videos-only filter (`files.media_type`).
     pub videos_only: bool,
+    /// "Has faces" filter (TASK-05-007): photos with at least one detected
+    /// or named face row.
+    pub has_faces: bool,
     /// Date-slider cutoff, `YYYY-MM-DD`, inclusive.
     pub taken_since: Option<String>,
     /// Expand one stack (TASK-03-021): its members, top first, instead of
@@ -128,6 +131,9 @@ impl Catalog {
         }
         if query.videos_only {
             conds.push_str(" AND f.media_type = 'video'");
+        }
+        if query.has_faces {
+            conds.push_str(" AND EXISTS (SELECT 1 FROM faces fa WHERE fa.file_id = f.id)");
         }
         if let Some(cutoff) = &query.taken_since {
             params.push(Box::new(cutoff.clone()));

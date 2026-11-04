@@ -70,6 +70,24 @@ describe("FilterBar", () => {
     expect(gridState.starredOnly).toBe(false);
   });
 
+  it("has-faces toggle flips the store and lights the filters-active state (TASK-05-007)", () => {
+    render(FilterBar);
+    const btn = screen.getByTestId("filter-faces");
+    expect(btn.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(btn);
+    flushSync();
+    expect(gridState.facesOnly).toBe(true);
+    expect(gridState.filtersActive).toBe(true);
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+    expect(gridState.videosOnly).toBe(false);
+
+    fireEvent.click(btn);
+    flushSync();
+    expect(gridState.facesOnly).toBe(false);
+    expect(gridState.filtersActive).toBe(false);
+  });
+
   it("debounces the slider into the store", () => {
     render(FilterBar);
     const slider = screen.getByTestId("filter-date");

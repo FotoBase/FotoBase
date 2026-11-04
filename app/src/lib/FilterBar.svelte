@@ -59,6 +59,15 @@
   >
     {t("filters.videos")}
   </button>
+  <button
+    type="button"
+    class="filter-toggle"
+    data-testid="filter-faces"
+    aria-pressed={gridState.facesOnly}
+    onclick={() => (gridState.facesOnly = !gridState.facesOnly)}
+  >
+    {t("filters.faces")}
+  </button>
   <label class="filter-sort">
     <span>{t("filters.sort")}</span>
     <select data-testid="filter-sort" value={gridState.sort} onchange={onsort}>

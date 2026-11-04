@@ -41,6 +41,7 @@ const album = (over: Partial<Album> = {}): Album => ({
   count: 2,
   cover_file_id: null,
   cover_hash: null,
+  person_id: null,
   ...over,
 });
 
@@ -317,6 +318,20 @@ describe("Album membership in the info pane (TASK-03-008)", () => {
 
     expect((screen.getByTestId("album-member-1") as HTMLInputElement).checked).toBe(true);
     expect((screen.getByTestId("album-member-2") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("lists no derived person album: its membership is not editable (TASK-05-007)", async () => {
+    invokeMock.mockImplementation(((cmd: string) => {
+      if (cmd === "list_albums") {
+        return Promise.resolve([album(), album({ id: 3, name: "Anna", person_id: 7 })]);
+      }
+      return Promise.resolve([]);
+    }) as unknown as typeof tauriCore.invoke);
+    render(AlbumMembership, { props: { photoId: 9 } });
+    await settle();
+
+    expect(screen.getByTestId("album-member-1")).toBeTruthy();
+    expect(screen.queryByTestId("album-member-3")).toBeNull();
   });
 
   it("checking a box adds the photo, unchecking removes it", async () => {

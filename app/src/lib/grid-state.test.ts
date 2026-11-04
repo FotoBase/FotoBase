@@ -83,9 +83,16 @@ describe("gridState", () => {
     expect(gridState.starredOnly).toBe(false);
     expect(gridState.dateStep).toBe(ALL_TIME);
 
+    gridState.facesOnly = true;
+    expect(gridState.filtersActive).toBe(true);
+    gridState.clearFilters();
+    expect(gridState.facesOnly).toBe(false);
+
     gridState.starredOnly = true;
+    gridState.facesOnly = true;
     resetGridState();
     expect(gridState.starredOnly).toBe(false);
+    expect(gridState.facesOnly).toBe(false);
   });
 
   it("bumps per-hash thumb versions monotonically and resets cleanly", () => {

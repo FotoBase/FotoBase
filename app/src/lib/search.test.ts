@@ -21,6 +21,7 @@ const view = (over: Partial<LibraryView> = {}): LibraryView => ({
   query: "",
   starred: false,
   videosOnly: false,
+  hasFaces: false,
   takenSince: null,
   sort: "path",
   ...over,
@@ -35,9 +36,15 @@ describe("queryLibraryItems", () => {
       album: null,
       starred: false,
       videosOnly: false,
+      hasFaces: false,
       takenSince: null,
       sort: "path",
     });
+  });
+
+  it("sends the has-faces filter (TASK-05-007)", async () => {
+    await queryLibraryItems(view({ hasFaces: true }));
+    expect(vi.mocked(invoke).mock.calls[0][1]).toMatchObject({ hasFaces: true });
   });
 
   it("sends the capture-time sort (TASK-03-019)", async () => {
@@ -73,6 +80,7 @@ describe("queryLibraryItems", () => {
       album: null,
       starred: true,
       videosOnly: true,
+      hasFaces: false,
       takenSince: "2026-01-01",
       sort: "path",
     });

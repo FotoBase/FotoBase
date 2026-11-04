@@ -243,6 +243,7 @@ impl Catalog {
     fn export_albums(&self) -> Result<Vec<ExportedAlbum>> {
         let mut stmt = self.conn().prepare(
             "SELECT id, uuid, name, date, place, description FROM albums
+             WHERE person_id IS NULL
              ORDER BY date DESC, name COLLATE NOCASE, id",
         )?;
         let rows = stmt.query_map([], |r| {

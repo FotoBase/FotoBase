@@ -16,6 +16,15 @@ export interface Album {
   cover_file_id: number | null;
   /// Content hash of the cover: the key of its `thumb://` URI.
   cover_hash: string | null;
+  /// Set for a derived person album (TASK-05-007): its photos are the
+  /// person's confirmed faces, so the user cannot edit or delete it.
+  person_id: number | null;
+}
+
+/// Albums the user manages (everything but derived person albums): the
+/// ones a photo can be added to / removed from.
+export function userAlbums(albums: readonly Album[]): Album[] {
+  return albums.filter((a) => a.person_id === null);
 }
 
 /// The editable fields of an album.

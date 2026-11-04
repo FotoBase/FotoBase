@@ -31,6 +31,8 @@ pub enum SyncError {
     UnknownAlbum(i64),
     #[error("file {file_id} is not in album {album_id}")]
     NotInAlbum { album_id: i64, file_id: i64 },
+    #[error("album {0} is a derived person album and cannot be edited")]
+    PersonAlbum(i64),
     #[error("no stack with id {0}")]
     UnknownStack(String),
     #[error("a stack needs at least two different photos")]
