@@ -13,15 +13,20 @@ fn add_photo(cat: &mut Catalog, dir: &std::path::Path, name: &str) -> i64 {
     let folder_id = cat.seed_folder(dir.to_str().unwrap()).unwrap();
     cat.conn()
         .execute(
-            "INSERT INTO files (folder_id, path, filename, size, mtime, media_type)
-             VALUES (?1, ?2, ?3, 10, 0.0, 'image')",
+            "INSERT INTO files (folder_id, path, filename, size, mtime, media_type, width, height)
+             VALUES (?1, ?2, ?3, 10, 0.0, 'image', 2000, 1000)",
             rusqlite::params![folder_id, original.to_str().unwrap(), name],
         )
         .unwrap();
     cat.conn().last_insert_rowid()
 }
 
-fn seed_cluster(cat: &mut Catalog, dir: &std::path::Path, center: [f32; 8], n: usize) -> Vec<i64> {
+fn seed_cluster(
+    cat: &mut Catalog,
+    dir: &std::path::Path,
+    center: [f32; 128],
+    n: usize,
+) -> Vec<i64> {
     let mut s = 7u64;
     let mut rnd = || {
         s ^= s << 13;
@@ -65,8 +70,8 @@ fn fixture() -> (tempfile::TempDir, tempfile::TempDir, Catalog) {
 #[test]
 fn entries_list_named_and_unnamed_and_rename_routes_through() {
     let (lib, _db, mut cat) = fixture();
-    let a = seed_cluster(&mut cat, lib.path(), [-1.0; 8], 5);
-    let b = seed_cluster(&mut cat, lib.path(), [1.0; 8], 5);
+    let a = seed_cluster(&mut cat, lib.path(), [-1.0; 128], 5);
+    let b = seed_cluster(&mut cat, lib.path(), [1.0; 128], 5);
     cat.cluster_faces(5).unwrap();
 
     // Nothing named yet: one unnamed cluster per group.

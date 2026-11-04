@@ -7,11 +7,12 @@
 //! a sidecar whose (mtime, size) changed since the last sync wins over the
 //! catalog — the catalog is a rebuildable cache.
 
+use std::path::Path;
 use std::path::PathBuf;
 
 use rusqlite::OptionalExtension;
 
-use fotobase_metadata::{FolderMetaError, Sidecar, SidecarError, StackMembership};
+use fotobase_metadata::{FaceRegion, FolderMetaError, Sidecar, SidecarError, StackMembership};
 
 use crate::{Catalog, CatalogError, Result};
 
@@ -99,6 +100,9 @@ struct UserData {
     stack: Option<StackMembership>,
     /// `fb:Recipe` present: an edited version (TASK-03-021).
     has_recipe: bool,
+    /// Named MWG face regions (TASK-05-008): user data, §5 — the sidecar
+    /// is authoritative for who is who.
+    faces: Vec<FaceRegion>,
 }
 
 impl UserData {
@@ -117,6 +121,7 @@ impl UserData {
             taken_at: sc.capture_time().map(|t| t.to_xmp()),
             stack: sc.stack(),
             has_recipe: sc.has_recipe(),
+            faces: sc.face_regions(),
         }
     }
 }
@@ -363,7 +368,7 @@ impl Catalog {
         sc.write(&sc_path)?;
 
         let data = UserData::from_sidecar(&sc);
-        let placeholders = apply_user_data(&tx, file_id, &data)?;
+        let placeholders = apply_user_data(&tx, file_id, &sc_path, &data)?;
         record_sidecar_stat(&tx, file_id, &sc_path)?;
         tx.commit()?;
         if placeholders {
@@ -492,7 +497,7 @@ impl Catalog {
         let sc = Sidecar::read(&sc_path)?;
         let data = UserData::from_sidecar(&sc);
         let tx = self.conn_mut().transaction()?;
-        let placeholders = apply_user_data(&tx, file_id, &data)?;
+        let placeholders = apply_user_data(&tx, file_id, &sc_path, &data)?;
         record_sidecar_stat(&tx, file_id, &sc_path)?;
         tx.commit()?;
         if placeholders {
@@ -520,8 +525,14 @@ fn sidecar_unchanged(md: &std::fs::Metadata, stored_size: i64, stored_mtime_nano
 
 /// Mirror one sidecar's user data into the catalog. Returns `true` when an
 /// album id without a definition forced a placeholder album (the caller
-/// re-persists `albums.json`).
-fn apply_user_data(tx: &rusqlite::Transaction<'_>, file_id: i64, data: &UserData) -> Result<bool> {
+/// re-persists `albums.json`). `sc_path` is the sidecar the data came from,
+/// used only to probe image dimensions for face-region conversion.
+fn apply_user_data(
+    tx: &rusqlite::Transaction<'_>,
+    file_id: i64,
+    sc_path: &Path,
+    data: &UserData,
+) -> Result<bool> {
     tx.execute("INSERT OR IGNORE INTO metadata (file_id) VALUES (?1)", [file_id])?;
     tx.execute(
         "UPDATE metadata SET rating = ?1, caption = ?2, latitude = ?3, longitude = ?4,
@@ -562,7 +573,167 @@ fn apply_user_data(tx: &rusqlite::Transaction<'_>, file_id: i64, data: &UserData
             [file_id, tag_id],
         )?;
     }
+    apply_named_faces(tx, file_id, sc_path, &data.faces)?;
     crate::albums::apply_membership(tx, file_id, &data.albums)
+}
+
+/// Normalized-coordinate tolerance, matching the sidecar writer's 6-decimal
+/// precision (`fotobase_metadata::FaceRegion::same_face`).
+const FACE_TOLERANCE: f64 = 1e-4;
+
+/// Mirror the sidecar's named face regions into the catalog (TASK-05-008,
+/// PLAN §5 Authority): a named face is user data, so the sidecar wins.
+///
+/// - A region without a matching face row restores one (the
+///   catalog-delete + rebuild path): pixel box from the region, full
+///   confidence, no landmarks and no embedding — those are derived,
+///   recomputable data.
+/// - A region matching an existing row (its normalized centre-point box is
+///   within [`FACE_TOLERANCE`]) re-points that row's person when the sidecar
+///   name resolves. A name that no `persons` row has yet only creates one
+///   for a *still-unnamed* face — mid-rename windows (the sidecar is
+///   rewritten before `persons` is) must not spawn shadow people.
+/// - A named face whose region disappeared loses its name — but never its
+///   detection row, which is derived data, not user data.
+///
+/// Regions whose photo dimensions are unknown cannot be converted and are
+/// skipped entirely (no unaming either): the next convergence after a
+/// re-scan fills in the dimensions and converges then.
+fn apply_named_faces(
+    tx: &rusqlite::Transaction<'_>,
+    file_id: i64,
+    sc_path: &Path,
+    regions: &[FaceRegion],
+) -> Result<()> {
+    // Only named regions are user data; an empty `mwg-rs:Name` is not.
+    let regions: Vec<&FaceRegion> = regions.iter().filter(|r| !r.name.trim().is_empty()).collect();
+    let dims: Option<(f64, f64)> = {
+        let (w, h): (Option<i64>, Option<i64>) =
+            tx.query_row("SELECT width, height FROM files WHERE id = ?1", [file_id], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?;
+        match (w, h) {
+            (Some(w), Some(h)) if w > 0 && h > 0 => Some((w as f64, h as f64)),
+            _ => imagesize::size(sc_path.with_extension("").as_path())
+                .ok()
+                .map(|s| (s.width as f64, s.height as f64))
+                .filter(|(w, h)| *w > 0.0 && *h > 0.0),
+        }
+    };
+    let Some((width, height)) = dims else {
+        return Ok(());
+    };
+    let existing: Vec<(i64, f64, f64, f64, f64)> = {
+        let mut stmt =
+            tx.prepare("SELECT id, x, y, width, height FROM faces WHERE file_id = ?1")?;
+        let rows = stmt.query_map([file_id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+        })?;
+        rows.flatten().collect()
+    };
+
+    let mut matched: Vec<i64> = Vec::with_capacity(regions.len());
+    for region in &regions {
+        // MWG: normalized centre-point; catalog: pixel top-left box.
+        let cx = region.x * width;
+        let cy = region.y * height;
+        let w = region.w * width;
+        let h = region.h * height;
+        let left = cx - w / 2.0;
+        let top = cy - h / 2.0;
+
+        let hit = existing.iter().find(|(_, x, y, fw, fh)| {
+            let fx = *x;
+            let fy = *y;
+            let fw = *fw;
+            let fh = *fh;
+            let ncx = fx + fw / 2.0;
+            let ncy = fy + fh / 2.0;
+            (ncx / width - region.x).abs() < FACE_TOLERANCE
+                && (ncy / height - region.y).abs() < FACE_TOLERANCE
+                && (fw / width - region.w).abs() < FACE_TOLERANCE
+                && (fh / height - region.h).abs() < FACE_TOLERANCE
+        });
+        let person_id = match tx
+            .query_row(
+                "SELECT id FROM persons WHERE name = ?1 COLLATE NOCASE",
+                [region.name.as_str()],
+                |r| r.get::<_, i64>(0),
+            )
+            .optional()?
+        {
+            Some(id) => Some(id),
+            None => {
+                let named: Option<Option<i64>> = match hit {
+                    Some((id, ..)) => tx
+                        .query_row("SELECT person_id FROM faces WHERE id = ?1", [id], |r| r.get(0))
+                        .optional()?,
+                    None => None,
+                };
+                match named {
+                    // Already named, but the sidecar's new name is unknown to
+                    // `persons` — the mid-rename window; do not spawn a
+                    // shadow person, the rename flow finishes the job.
+                    Some(Some(_)) => None,
+                    _ => {
+                        tx.execute(
+                            "INSERT OR IGNORE INTO persons (name) VALUES (?1)",
+                            [region.name.as_str()],
+                        )?;
+                        Some(tx.query_row(
+                            "SELECT id FROM persons WHERE name = ?1 COLLATE NOCASE",
+                            [region.name.as_str()],
+                            |r| r.get(0),
+                        )?)
+                    }
+                }
+            }
+        };
+        match hit {
+            Some((id, ..)) => {
+                if let Some(person_id) = person_id {
+                    tx.execute(
+                        "UPDATE faces SET person_id = ?1 WHERE id = ?2",
+                        rusqlite::params![person_id, id],
+                    )?;
+                }
+                matched.push(*id);
+            }
+            None => {
+                tx.execute(
+                    "INSERT INTO faces (file_id, x, y, width, height, landmarks, confidence, \
+                     person_id) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, NULL, 1.0, ?6)",
+                    rusqlite::params![file_id, left, top, w, h, person_id],
+                )?;
+                matched.push(tx.last_insert_rowid());
+            }
+        }
+    }
+
+    // Sidecar wins: named faces whose region is gone lose their name.
+    if matched.is_empty() {
+        tx.execute(
+            "UPDATE faces SET person_id = NULL WHERE file_id = ?1 AND person_id IS NOT NULL",
+            [file_id],
+        )?;
+    } else {
+        // Explicit indexes everywhere: mixing `?N` with auto-numbered `?`
+        // makes SQLite continue numbering past the highest explicit index.
+        let mut params: Vec<i64> = matched.clone();
+        params.push(file_id);
+        let slots: Vec<String> = (1..=matched.len()).map(|i| format!("?{i}")).collect();
+        tx.execute(
+            &format!(
+                "UPDATE faces SET person_id = NULL WHERE file_id = ?{idx} \
+                 AND person_id IS NOT NULL AND id NOT IN ({})",
+                slots.join(", "),
+                idx = matched.len() + 1
+            ),
+            rusqlite::params_from_iter(params),
+        )?;
+    }
+    Ok(())
 }
 
 /// Record (mtime, size) of the sidecar we just synced, so later reads can

@@ -9,6 +9,7 @@ members = [
     "crates/jobs",
     "crates/ai",
     "crates/video",
+    "crates/sqlite-vec-loader",
     "app/src-tauri",
 ]
 

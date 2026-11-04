@@ -9,9 +9,16 @@
 //! before scheduling — a disabled folder schedules nothing and its existing
 //! faces are left alone.
 
-use crate::{Catalog, Result};
+use crate::{Catalog, CatalogError, Result};
 
 use rusqlite::OptionalExtension;
+
+/// The face-embedding dimension: the SFace embedder (05-001) emits 128-
+/// dimensional vectors, and the sqlite-vec `embeddings` table (TASK-05-008,
+/// PLAN §5) is a fixed-width `float[128]` vec0 virtual table. Same number as
+/// the `float[128]` column in `migrations::MIGRATION_V18` — keep the two in
+/// sync.
+pub const EMBEDDING_DIM: usize = 128;
 
 /// One detected face, in the source image's pixel coordinates, ready to
 /// persist. `landmarks` are the five detector points (right eye, left eye,
@@ -114,12 +121,23 @@ impl Catalog {
     /// Store one detected face (and its embedding, when the embedder ran).
     /// Face row and embedding land in one transaction: a face without its
     /// embedding where one was expected would corrupt clustering later.
+    /// The embedding goes into the sqlite-vec virtual table keyed to
+    /// `faces.embedding_id` (TASK-05-008); anything but the model's
+    /// dimension is refused rather than stored as an unreadable row.
     pub fn record_face(
         &mut self,
         file_id: i64,
         face: &FaceRecord,
         embedding: Option<&[f32]>,
     ) -> Result<i64> {
+        if let Some(v) = embedding {
+            if v.len() != EMBEDDING_DIM {
+                return Err(CatalogError::InvalidQuery(format!(
+                    "face embedding must be {EMBEDDING_DIM}-dimensional, got {}",
+                    v.len()
+                )));
+            }
+        }
         let tx = self.conn_mut().transaction()?;
         let lm: Vec<u8> = face.landmarks.iter().flat_map(|f| f.to_le_bytes()).collect();
         tx.execute(
@@ -139,9 +157,10 @@ impl Catalog {
         if let Some(v) = embedding {
             let bytes: Vec<u8> = v.iter().flat_map(|f| f.to_le_bytes()).collect();
             tx.execute(
-                "INSERT INTO embeddings (face_id, dim, vector) VALUES (?1, ?2, ?3)",
-                rusqlite::params![face_id, v.len() as i64, bytes],
+                "INSERT INTO embeddings (embedding_id, embedding) VALUES (?1, ?2)",
+                rusqlite::params![face_id, bytes],
             )?;
+            tx.execute("UPDATE faces SET embedding_id = ?1 WHERE id = ?1", [face_id])?;
         }
         tx.commit()?;
         Ok(face_id)
@@ -181,14 +200,47 @@ impl Catalog {
 
     /// The stored embedding of one face: `(dim, vector)` or `None`.
     pub fn face_embedding(&self, face_id: i64) -> Result<Option<(i64, Vec<f32>)>> {
-        let row: Option<(i64, Vec<u8>)> = self
+        let row: Option<Vec<u8>> = self
             .conn
-            .query_row("SELECT dim, vector FROM embeddings WHERE face_id = ?1", [face_id], |r| {
-                Ok((r.get(0)?, r.get(1)?))
-            })
+            .query_row(
+                "SELECT e.embedding FROM embeddings e \
+                 JOIN faces f ON f.embedding_id = e.embedding_id WHERE f.id = ?1",
+                [face_id],
+                |r| r.get(0),
+            )
             .optional()?;
-        Ok(row.map(|(dim, bytes)| {
-            (dim, bytes.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)).collect())
+        Ok(row.map(|bytes| {
+            (
+                EMBEDDING_DIM as i64,
+                bytes.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)).collect(),
+            )
         }))
+    }
+
+    /// Delete the face rows (and their sqlite-vec embeddings) of the given
+    /// files. vec0 virtual tables do not participate in foreign-key
+    /// cascades, so the embedding cleanup is explicit — a deleted photo
+    /// must not leave orphan vectors behind. Runs in a SAVEPOINT, so it is
+    /// atomic on its own and nests inside the scanner's scan transaction.
+    /// Returns how many face rows were removed.
+    pub fn delete_faces_for_files(&mut self, file_ids: &[i64]) -> Result<usize> {
+        if file_ids.is_empty() {
+            return Ok(0);
+        }
+        let placeholders = "?,".repeat(file_ids.len()).trim_end_matches(',').to_string();
+        let sp = self.conn_mut().savepoint()?;
+        sp.execute(
+            &format!(
+                "DELETE FROM embeddings WHERE embedding_id IN \
+                 (SELECT id FROM faces WHERE file_id IN ({placeholders}))"
+            ),
+            rusqlite::params_from_iter(file_ids),
+        )?;
+        let removed = sp.execute(
+            &format!("DELETE FROM faces WHERE file_id IN ({placeholders})"),
+            rusqlite::params_from_iter(file_ids),
+        )?;
+        sp.commit()?;
+        Ok(removed)
     }
 }

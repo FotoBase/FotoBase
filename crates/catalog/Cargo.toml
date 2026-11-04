@@ -8,6 +8,10 @@ description = "SQLite catalog: schema, migrations, queries, FTS (rebuildable cac
 
 [dependencies]
 rusqlite = { version = "0.32", features = ["bundled"] }
+# TASK-05-008: face-embedding vector index (PLAN §5 `embeddings` virtual
+# table); the extension registration lives in `fotobase-sqlite-vec-loader`
+# (the workspace denies `unsafe_code`, which the one FFI call needs).
+fotobase-sqlite-vec-loader = { path = "../sqlite-vec-loader" }
 tracing.workspace = true
 thiserror.workspace = true
 serde = { version = "1", features = ["derive"] }
