@@ -13,6 +13,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 pub mod associations;
+pub mod basemap;
 pub mod batch_commands;
 pub mod batch_edit;
 pub mod catalog_registry;
@@ -2415,6 +2416,66 @@ async fn switch_to_catalog(
     Ok(())
 }
 
+// --- Offline basemap (TASK-06-001, PLAN §4 / ADR-0008) ----------------------
+
+/// Resolve the bundled basemap archive: the packaged resource in release,
+/// the crate-relative path in dev (Tauri does not copy resources to the
+/// target dir in dev runs). `None` keeps the scheme answering 404 — the
+/// map panel shows its empty state instead of erroring.
+fn bundled_basemap_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+    let packaged = app
+        .path()
+        .resolve("resources/basemap/world.pmtiles", tauri::path::BaseDirectory::Resource)
+        .ok();
+    if packaged.as_ref().is_some_and(|p| p.exists()) {
+        return packaged;
+    }
+    let dev = std::env::current_dir().ok()?.join("resources/basemap/world.pmtiles");
+    dev.exists().then_some(dev)
+}
+
+/// `basemap://` scheme handler (TASK-06-001, PLAN §4, ADR-0008): serves
+/// vector tiles from the local PMTiles archive — no tile server, no
+/// network access, ever. A miss (unknown tile, no archive) is a 404 the
+/// map renders around, never an error dialog.
+fn basemap_response(reply: basemap::BasemapReply) -> tauri::http::Response<Vec<u8>> {
+    tauri::http::Response::builder()
+        .status(reply.status)
+        .header("content-type", reply.content_type)
+        .header("access-control-allow-origin", "*")
+        // Tiles are immutable at a given address within an archive
+        // generation; the frontend cache-busts with `?v=` when a regional
+        // bundle replaces the bundled one.
+        .header("cache-control", "max-age=31536000, immutable")
+        .body(reply.body)
+        .expect("static basemap response parts are valid")
+}
+
+/// Map panel liveness (TASK-06-001): whether the offline basemap resolved
+/// at startup. The panel shows its empty state when it did not; the e2e
+/// no-network spec skips instead of proving a negative against a missing
+/// bundle.
+#[derive(serde::Serialize)]
+struct BasemapStatus {
+    available: bool,
+    /// Where the archive resolved from, for diagnostics only.
+    source: Option<String>,
+}
+
+#[tauri::command]
+fn basemap_status() -> BasemapStatus {
+    match basemap::paths() {
+        Some(paths) => {
+            let path = if paths.regional.is_some() { paths.regional } else { Some(paths.bundled) };
+            BasemapStatus {
+                available: path.as_ref().is_some_and(|p| p.exists()),
+                source: path.map(|p| p.display().to_string()),
+            }
+        }
+        None => BasemapStatus { available: false, source: None },
+    }
+}
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -2533,6 +2594,23 @@ pub fn run() {
                 });
             },
         )
+        // TASK-06-001 (PLAN §4, ADR-0008): offline basemap tiles from the
+        // local PMTiles archive. Synchronous handler: an mmap + directory
+        // lookup + gzip decode is microseconds — no thread hop needed.
+        .register_uri_scheme_protocol(basemap::BASEMAP_PROTOCOL, |_ctx, request| {
+            let reply = match (basemap::request_from_uri(request.uri()), basemap::paths()) {
+                (Some(req), Some(paths)) => {
+                    let path = paths.archive_for(&req).to_path_buf();
+                    tauri::async_runtime::block_on(basemap::resolve(&req, &path))
+                }
+                _ => basemap::BasemapReply {
+                    status: 404,
+                    content_type: basemap::MVT_CONTENT_TYPE,
+                    body: Vec::new(),
+                },
+            };
+            basemap_response(reply)
+        })
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -2585,6 +2663,18 @@ pub fn run() {
             let cache_dir = catalog_cache_dir(&entry.dir);
             std::fs::create_dir_all(&cache_dir)?;
             tracing::info!(catalog = %entry.name, "opening catalog");
+            // Offline basemap (TASK-06-001, ADR-0008): the bundled world
+            // archive ships in the installer; a user-consented regional
+            // download (a later task) lands catalog-adjacent and takes
+            // precedence per tile. Resolved once here — the scheme handler
+            // reads the installed paths per request.
+            let regional = catalog_cache_dir(&entry.dir).join("basemap/regional.pmtiles");
+            let regional = regional.exists().then_some(regional);
+            if let Some(bundled) = bundled_basemap_path(app.handle()) {
+                basemap::set_paths(basemap::BasemapPaths { bundled, regional });
+            } else {
+                tracing::warn!("no bundled basemap found; the map panel will show its empty state");
+            }
             // OS-opened files (TASK-01-025): whatever the OS passed on the
             // command line that is an existing supported image is parked
             // for the frontend to pick up and route into the viewer.
@@ -2814,7 +2904,8 @@ pub fn run() {
             switch_catalog,
             take_open_files,
             find_file_by_path,
-            perf_probe
+            perf_probe,
+            basemap_status
         ])
         .build(tauri::generate_context!())
         .expect("error while building fotobase")

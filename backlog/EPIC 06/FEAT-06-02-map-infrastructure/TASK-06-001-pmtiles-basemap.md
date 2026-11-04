@@ -1,6 +1,6 @@
 # task: set up offline pmtiles basemap
 
-**Feature:** [FEAT-06-02-map-infrastructure](FEAT-06-02-map-infrastructure.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** todo
+**Feature:** [FEAT-06-02-map-infrastructure](FEAT-06-02-map-infrastructure.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** in review (2026-11-04)
 
 ## Description
 MapLibre GL JS panel backed by a Protomaps PMTiles offline basemap, with a tile bundling strategy — fully offline, no network requests ever (PLAN §4 UI/shell "MapLibre GL JS + Protomaps PMTiles"; §6 P3 Places).
@@ -19,5 +19,5 @@ MapLibre GL JS panel backed by a Protomaps PMTiles offline basemap, with a tile 
 - Integration: instrument network stack during map session → zero external requests.
 
 ## Acceptance criteria
-- [ ] 06-001: MapLibre + PMTiles panel renders fully offline; bundling strategy implemented.
-- [ ] 06-001: No network requests ever (test-verified).
+- [x] 06-001: MapLibre + PMTiles panel renders fully offline; bundling strategy implemented.
+- [x] 06-001: No network requests ever (test-verified).

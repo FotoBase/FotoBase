@@ -29,6 +29,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": ["resources/basemap/*"],
     "icon": ["icons/icon.png", "icons/icon.ico"],
     "createUpdaterArtifacts": true,
     "macOS": {

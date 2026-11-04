@@ -8,7 +8,7 @@
 
 ## feat: map infrastructure
 
-- [ ] `06-001` (L) MapLibre GL JS panel + Protomaps PMTiles offline basemap; tile bundling strategy.
+- [x] `06-001` (L) MapLibre GL JS panel + Protomaps PMTiles offline basemap; tile bundling strategy.
 - [ ] `06-002` (M) Pins/clustering: markers cluster at low zoom, resolve to photo thumbnails on zoom-in.
 
 ## feat: map view & interaction

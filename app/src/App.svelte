@@ -15,6 +15,7 @@
   import FolderManagerDialog from "./lib/FolderManagerDialog.svelte";
   import FolderTree from "./lib/FolderTree.svelte";
   import ImportDialog from "./lib/ImportDialog.svelte";
+  import MapPanel from "./lib/MapPanel.svelte";
   import OptionsDialog from "./lib/OptionsDialog.svelte";
   import PhotoTray from "./lib/PhotoTray.svelte";
   import FolderIniDialog from "./lib/FolderIniDialog.svelte";
@@ -84,6 +85,8 @@
   // Unnamed people queue (TASK-05-005): opened from the toolbar; a bulk
   // action lands a named MWG region, so the shell re-reads the grid.
   let peopleOpen = $state(false);
+  // Offline map panel (TASK-06-001): the bundled world basemap.
+  let mapOpen = $state(false);
   let peopleManagerOpen = $state(false);
   let stackPicker = $state<{ open: boolean; stackId: string; x: number; y: number }>({
     open: false,
@@ -877,6 +880,11 @@
   >
     {t("app.peopleManager")}
   </button>
+  <!-- Offline map panel (TASK-06-001): the bundled world basemap through
+       the basemap:// scheme — tiles never touch the network. -->
+  <button type="button" onclick={() => (mapOpen = true)} data-testid="open-map">
+    {t("app.map")}
+  </button>
   {#if settings}
     <OptionsDialog
       bind:open={optionsOpen}
@@ -913,6 +921,7 @@
       peopleOpen = true;
     }}
   />
+  <MapPanel bind:open={mapOpen} />
   <StackPicker
     bind:open={stackPicker.open}
     stackId={stackPicker.stackId}
