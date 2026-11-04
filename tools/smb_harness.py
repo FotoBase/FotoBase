@@ -251,7 +251,7 @@ def cmd_disconnect(args: argparse.Namespace) -> int:
 
 
 def cmd_reconnect(args: argparse.Namespace) -> int:
-    """Simulate a replug: start smbd again and wait for it to answer."""
+    """Simulate a replug: start smbd again and wait for the share to be usable."""
     out = docker("exec", CONTAINER, "sh", "-c", "pgrep -f 'smbd --foreground' >/dev/null || smbd -D", check=False)
     if out.returncode != 0:
         print(f"cannot reconnect: {out.stderr.strip() or out.stdout.strip()}", file=sys.stderr)
@@ -270,12 +270,39 @@ def cmd_reconnect(args: argparse.Namespace) -> int:
             check=False,
         )
         if probe.returncode == 0:
-            state_file_write(**{**state_file_read(), "disconnected": False})
-            print(f"reconnected (smbd answering in {CONTAINER})")
-            return 0
+            break
         time.sleep(1)
-    print("smbd did not come back within 30s", file=sys.stderr)
-    return 1
+    else:
+        print("smbd did not come back within 30s", file=sys.stderr)
+        return 1
+    state_file_write(**{**state_file_read(), "disconnected": False})
+
+    # smbd answering inside the container is NOT the same as the host mount
+    # being usable: the kernel SMB/CIFS client re-establishes its session a
+    # few seconds after the server restarts, and until then host-side writes
+    # fail (EIO) even though smbd is up (CI 2026-11-04: "share not writable
+    # within 5s of reconnect" — smbd had answered 5s earlier). Everything
+    # downstream (the resumed scans, the tests' post-reconnect write)
+    # assumes a *usable* share, so make the reconnect promise end-to-end:
+    # probe a real write through the mountpoint before reporting success.
+    mp = mountpoint()
+    if mp.exists():
+        probe_file = mp / ".fb-harness-reconnect-probe"
+        for _ in range(30):
+            try:
+                probe_file.write_bytes(b"ok")
+                probe_file.unlink()
+            except OSError:
+                time.sleep(1)
+                continue
+            print(f"reconnected (share writable at {mp})")
+            return 0
+        print(f"share not writable at {mp} within 30s of smbd restart", file=sys.stderr)
+        return 1
+    # No mount (manual flows before `mount`): the in-container answer is all
+    # we can promise.
+    print(f"reconnected (smbd answering in {CONTAINER})")
+    return 0
 
 
 def cmd_state(args: argparse.Namespace) -> int:

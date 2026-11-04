@@ -284,14 +284,15 @@ fn reconnect_picks_up_files_added_during_disconnect() {
 
     // Disconnect, write a new file (impossible while paused — write it
     // after reconnect instead, which is the 02-008 poller scenario), then
-    // verify a fresh scan sees it. The client's SMB session may take a
-    // moment to re-establish after the server restarts, so retry the write
-    // briefly before giving up.
+    // verify a fresh scan sees it. A `reconnect` only reports success once
+    // the mount is writable end-to-end (the harness probes a real write),
+    // so the first attempt normally lands — the retries only cover manual
+    // environments that follow the doc protocol instead of the harness.
     let _ = harness_cmd("disconnect");
     assert!(harness_reconnect());
     let new_file = root.join("added-after-reconnect.jpg");
     let mut written = false;
-    for _ in 0..10 {
+    for _ in 0..20 {
         match std::fs::write(&new_file, vec![0xff; 42]) {
             Ok(()) => {
                 written = true;
@@ -300,7 +301,7 @@ fn reconnect_picks_up_files_added_during_disconnect() {
             Err(_) => std::thread::sleep(Duration::from_millis(500)),
         }
     }
-    assert!(written, "share not writable within 5s of reconnect");
+    assert!(written, "share not writable within 10s of reconnect");
 
     let second =
         scan_network_folder(&mut catalog, &root, &AtomicBool::new(false), &options, &|_| {})
