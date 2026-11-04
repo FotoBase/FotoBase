@@ -209,6 +209,22 @@ describe("markerModel", () => {
     ]);
   });
 
+  it("deduplicates wrapped-world copies of the same cluster and photo", () => {
+    const model = markerModel(
+      [
+        { geometry: { coordinates: [13.4, 52.5] }, properties: { cluster: true, point_count: 7, cluster_id: 1 } },
+        { geometry: { coordinates: -346.6 }, properties: { cluster: true, point_count: 7, cluster_id: 1 } },
+        { geometry: { coordinates: [1, 2] }, properties: { hash: "h1" } },
+        { geometry: { coordinates: [361, 2] }, properties: { hash: "h1" } },
+      ] as never,
+      10,
+    );
+    expect(model).toEqual([
+      { kind: "cluster", count: 7, lon: 13.4, lat: 52.5 },
+      { kind: "pin", hash: "h1", thumb: "thumb://h1", lon: 1, lat: 2 },
+    ]);
+  });
+
   it("caps the DOM marker count (a 50k library must not flood the page)", () => {
     const feats = Array.from({ length: 500 }, (_, i) => ({
       geometry: { coordinates: [i, i] },

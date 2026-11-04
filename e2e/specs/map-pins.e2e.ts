@@ -69,8 +69,10 @@ describe("map pin clustering", () => {
   });
 
   it("resolves clusters into thumbnail pins on zoom-in", async () => {
-    // Wheel-zoom past the cluster max zoom, centered on the cluster.
-    for (let i = 0; i < 12; i += 1) {
+    // Wheel-zoom past the cluster max zoom, centered on the cluster: many
+    // small steps, since each wheel event only bumps the zoom a fraction
+    // of a level (initial 1.4 -> max 12 needs ~10 levels).
+    for (let i = 0; i < 45; i += 1) {
       await browser.execute(() => {
         const holder = document.querySelector('[data-testid="map-holder"]');
         if (!holder) return;
@@ -83,7 +85,7 @@ describe("map pin clustering", () => {
           }),
         );
       });
-      await browser.pause(300);
+      await browser.pause(120);
     }
     await browser.waitUntil(
       async () => await $('[data-testid="map-pin"] img').isExisting(),

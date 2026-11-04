@@ -225,6 +225,11 @@ export function markerModel(
   limit: number,
 ): MarkerModel[] {
   const out: MarkerModel[] = [];
+  // MapLibre renders wrapped world copies at low zoom, so one cluster can
+  // be reported several times (same cluster_id); dedupe on it, and on a
+  // photo's hash for its own point copies.
+  const seenClusters = new Set<number>();
+  const seenHashes = new Set<string>();
   for (const f of features) {
     if (out.length >= limit) break;
     const coords = f.geometry?.coordinates;
@@ -233,8 +238,15 @@ export function markerModel(
     if (f.properties?.cluster) {
       const count = f.properties.point_count;
       if (typeof count !== "number") continue;
+      const id = f.properties.cluster_id;
+      if (typeof id === "number") {
+        if (seenClusters.has(id)) continue;
+        seenClusters.add(id);
+      }
       out.push({ kind: "cluster", count, lon, lat });
     } else if (typeof f.properties?.hash === "string" && f.properties.hash) {
+      if (seenHashes.has(f.properties.hash)) continue;
+      seenHashes.add(f.properties.hash);
       out.push({
         kind: "pin",
         hash: f.properties.hash,
