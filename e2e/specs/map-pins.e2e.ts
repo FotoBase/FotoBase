@@ -69,32 +69,42 @@ describe("map pin clustering", () => {
   });
 
   it("resolves clusters into thumbnail pins on zoom-in", async () => {
-    // Zoom in past the cluster max zoom. Wheel ticks only bump the zoom a
-    // fraction of a level, so drive both wheel events and the keyboard
-    // handler's full-level zoom ("+") until the pins resolve.
-    for (let i = 0; i < 30; i += 1) {
-      await browser.execute(() => {
-        const holder = document.querySelector('[data-testid="map-holder"]');
-        if (!holder) return;
-        // Zoom anchored on the cluster itself (wheel zoom keeps the cursor
-        // point fixed — zooming at a fixed offset would drift off it).
-        const cluster = document.querySelector('[data-testid="map-cluster"]');
-        const rect = (cluster ?? holder).getBoundingClientRect();
-        holder.dispatchEvent(
-          new WheelEvent("wheel", {
-            deltaY: -240,
-            clientX: rect.left + rect.width / 2,
-            clientY: rect.top + rect.height / 2,
-            bubbles: true,
-          }),
-        );
-        holder.dispatchEvent(
-          new KeyboardEvent("keydown", { key: "+", bubbles: true }),
-        );
-      });
-      await browser.pause(150);
-      if (await $('[data-testid="map-pin"] img').isExisting()) break;
-    }
+    // Synthetic wheel/key events don't reach MapLibre under
+    // WebKitWebDriver, so drive the map through its public API (the panel
+    // exposes the instance on the holder for the e2e specs). Zoom well
+    // past the cluster max zoom, centered on the cluster.
+    await browser.waitUntil(
+      async () =>
+        await browser.execute(() => {
+          const holder = document.querySelector(
+            '[data-testid="map-holder"]',
+          ) as
+            | (HTMLElement & {
+                __fbMap?: {
+                  getCenter(): [number, number];
+                  jumpTo(o: unknown): void;
+                };
+              })
+            | null;
+          return Boolean(holder?.__fbMap);
+        }),
+      { timeoutMsg: "map handle not exposed" },
+    );
+    await browser.execute(() => {
+      const holder = document.querySelector('[data-testid="map-holder"]') as
+        | (HTMLElement & {
+            __fbMap?: {
+              getCenter(): [number, number];
+              jumpTo(o: unknown): void;
+            };
+          })
+        | null;
+      const map = holder?.__fbMap;
+      if (!map) return;
+      // The fixture's grid is centered slightly NE of the initial view.
+      map.jumpTo({ center: [10.06, 25.07], zoom: 12 });
+    });
+    await browser.pause(1_000);
     await browser.waitUntil(
       async () => await $('[data-testid="map-pin"] img').isExisting(),
       {

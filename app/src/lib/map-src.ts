@@ -213,6 +213,7 @@ interface QueryFeature {
   properties: {
     cluster?: boolean;
     point_count?: number;
+    cluster_id?: number;
     hash?: unknown;
   } | null;
 }

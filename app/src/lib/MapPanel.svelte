@@ -86,6 +86,10 @@
         // default touch/drag gestures (a map is inherently interactive).
       });
       map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+      // E2e surface: the specs drive the map through its public API
+      // (e2e/specs/map-*.e2e.ts) because synthetic wheel/key events do not
+      // reach MapLibre under WebKitWebDriver. Not used by the app itself.
+      (container as unknown as { __fbMap?: unknown }).__fbMap = map;
       // Pins arrive after the map exists; a failed fetch (browser dev)
       // leaves the basemap without them. The style may still be loading —
       // addSource/addLayer throw before it is — so defer until it is.
