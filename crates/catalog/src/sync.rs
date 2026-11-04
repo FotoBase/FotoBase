@@ -52,6 +52,8 @@ pub enum SyncError {
     UnknownTrashEntry(i64),
     #[error("no folder {0} in the catalog")]
     UnknownFolder(String),
+    #[error("the photo's face regions have a structure Fotobase does not understand")]
+    FaceRegionsUnrecognised,
     #[error("malformed trash payload: {0}")]
     TrashPayload(String),
     #[error(transparent)]

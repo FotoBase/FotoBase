@@ -103,6 +103,13 @@ export function renamePerson(
   });
 }
 
+/// "Reset faces" for one photo (TASK-05-009, PLAN §2 Picture context
+/// menu): clear every detected/named face — sidecar MWG regions first,
+/// then the catalog rows. Returns how many face rows were removed.
+export function resetFaces(fileId: number): Promise<number> {
+  return call<number>("reset_faces", { fileId });
+}
+
 /// `thumb://` URI for an entry's representative face; empty without one.
 export function entryThumbUri(entry: PeopleEntry): string {
   return entry.representative ? faceThumbUri(entry.representative) : "";

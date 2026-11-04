@@ -23,7 +23,7 @@
 ## feat: storage & UI
 
 - [x] `05-008` (M) Face regions → MWG `mwg-rs:Regions` XMP write; sqlite-vec embeddings table.
-- [ ] `05-009` (S) "Reset faces" per photo (picture context menu).
+- [x] `05-009` (S) "Reset faces" per photo (picture context menu).
 - [x] `05-010` (S) Per-folder face-detection toggle in Folder Manager.
 - [ ] `05-011` (M) Contacts link (local contacts only) — name ↔ contact mapping.
 - [ ] `05-012` (M) Clustering precision/recall evaluation on labeled face set (§9); resource-cap tests on battery.

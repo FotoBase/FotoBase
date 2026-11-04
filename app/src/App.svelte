@@ -50,6 +50,7 @@
   import { gridState, pickRenderer } from "./lib/grid-state.svelte.js";
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadPhotoInfo } from "./lib/info-pane";
+  import { resetFaces } from "./lib/people";
   import { queryLibraryItems } from "./lib/search";
   import { findFileByPath, loadSettings, saveSettings, takeOpenFiles, type Settings } from "./lib/settings";
   import { captionModeFromSettings, settingsWithCaptionMode } from "./lib/captions";
@@ -531,6 +532,7 @@
     { id: "delete-from-disk", label: t("menu.deleteFromDisk") },
     { id: "add-to-album", label: t("menu.addToAlbum"), disabled: userAlbums(albums).length === 0 },
     { id: "adjust-date-time", label: t("menu.adjustDateTime") },
+    { id: "reset-faces", label: t("menu.resetFaces") },
     { id: "batch-edit", label: t("menu.batchEdit") },
     { id: "export", label: t("menu.export") },
     {
@@ -663,6 +665,18 @@
         // Backend down: the cover stays as it was.
       }
       await refreshAlbums();
+    } else if (id === "reset-faces") {
+      // TASK-05-009: destructive — clear all detected/named faces of the
+      // photo (sidecar regions + catalog rows). Confirmation first, like
+      // the other destructive menu entries.
+      if (confirm(t("confirm.resetFaces"))) {
+        try {
+          await resetFaces(item.id);
+          await refreshView();
+        } catch {
+          // Backend down or the sidecar refused the write: nothing cleared.
+        }
+      }
     } else if (id === "hide-photo" || id === "unhide-photo") {
       // Library-only: the photo's own sidecar flag, nothing on disk moves.
       // Hiding is soft-deleted into the trash, so it can be undone from there.

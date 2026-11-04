@@ -1,6 +1,6 @@
 # task: add reset faces action
 
-**Feature:** [FEAT-05-03-storage-ui](FEAT-05-03-storage-ui.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** todo
+**Feature:** [FEAT-05-03-storage-ui](FEAT-05-03-storage-ui.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-04)
 
 ## Description
 "Reset faces" per photo from the picture context menu: clear detected/named face regions for that photo (PLAN §2 Picture context menu "Reset faces"; §6 P3 People).
@@ -19,4 +19,4 @@
 - E2e: context menu → Reset faces → confirmation → state cleared.
 
 ## Acceptance criteria
-- [ ] 05-009: "Reset faces" clears detected/named face regions per photo via context menu.
+- [x] 05-009: "Reset faces" clears detected/named face regions per photo via context menu.

@@ -217,3 +217,90 @@ fn renaming_an_unrecognised_regions_structure_is_refused() {
     sc.write(&path).unwrap();
     assert!(std::fs::read_to_string(&path).unwrap().contains("Carol"));
 }
+
+// ---- TASK-05-009: "Reset faces" (sidecar half) ----
+
+/// Resetting removes every *face* region while everything else — non-face
+/// regions (a Pet region is not ours to destroy), unknown nodes, the rest
+/// of the sidecar — stays verbatim per docs/sidecar-merge-on-write.md §1/§3.
+/// When the last face leaves an otherwise-empty Regions block, the whole
+/// block goes.
+#[test]
+fn resetting_removes_all_face_regions_and_keeps_everything_else() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("p.jpg.xmp");
+    std::fs::write(&path, DIGIKAM_STYLE).unwrap();
+
+    let mut sc = Sidecar::read(&path).unwrap();
+    assert_eq!(sc.remove_face_regions(), Some(1));
+    sc.write(&path).unwrap();
+
+    let raw = std::fs::read_to_string(&path).unwrap();
+    assert!(!raw.contains("Carol"), "face region gone: {raw}");
+    assert!(raw.contains(r#"mwg-rs:Name="Fence""#), "non-face region kept: {raw}");
+    assert!(raw.contains("digiKam:Keep"), "unknown node kept: {raw}");
+
+    let back = Sidecar::read(&path).unwrap();
+    assert!(back.face_regions().is_empty());
+    // The reset must not have destroyed the rest of the sidecar: a rating
+    // written after the reset round-trips.
+    let mut after = Sidecar::read(&path).unwrap();
+    after.set_rating(4);
+    after.write(&path).unwrap();
+    assert_eq!(Sidecar::read(&path).unwrap().rating(), Some(4));
+}
+
+/// A Regions block holding nothing but face regions is removed entirely —
+/// an empty `RegionList` husk would be junk we then own forever.
+#[test]
+fn resetting_the_last_faces_removes_the_whole_regions_block() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("p.jpg.xmp");
+    let fence_at = DIGIKAM_STYLE.lines().position(|l| l.contains("Fence")).unwrap();
+    let faces_only = DIGIKAM_STYLE
+        .lines()
+        .enumerate()
+        .filter(|(i, _)| !(fence_at - 1..=fence_at + 3).contains(i))
+        .map(|(_, l)| l)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_ne!(faces_only, DIGIKAM_STYLE, "fixture edit must apply");
+    std::fs::write(&path, faces_only).unwrap();
+
+    let mut sc = Sidecar::read(&path).unwrap();
+    assert_eq!(sc.remove_face_regions(), Some(1));
+    sc.write(&path).unwrap();
+
+    let raw = std::fs::read_to_string(&path).unwrap();
+    assert!(!raw.contains("mwg-rs:Regions"), "block gone: {raw}");
+    assert!(Sidecar::read(&path).unwrap().face_regions().is_empty());
+}
+
+/// A sidecar without any `mwg-rs:Regions` is a no-op reset.
+#[test]
+fn resetting_a_sidecar_without_regions_is_a_no_op() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("p.jpg.xmp");
+    let mut sc = Sidecar::read(&path).unwrap();
+    // A fresh sidecar has no root to write; the no-op is about the return.
+    assert_eq!(sc.remove_face_regions(), Some(0));
+    assert!(sc.face_regions().is_empty());
+}
+
+/// An unrecognised `Regions` structure is never rewritten: the reset must
+/// not destroy XMP content it does not understand (docs/sidecar-merge-on-
+/// write.md §1).
+#[test]
+fn resetting_an_unrecognised_regions_structure_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("p.jpg.xmp");
+    let odd = DIGIKAM_STYLE
+        .replace("<mwg-rs:RegionList>", "<mwg-rs:Other>")
+        .replace("</mwg-rs:RegionList>", "</mwg-rs:Other>");
+    std::fs::write(&path, &odd).unwrap();
+    let mut sc = Sidecar::read(&path).unwrap();
+    assert_eq!(sc.remove_face_regions(), None);
+    sc.write(&path).unwrap();
+    let raw = std::fs::read_to_string(&path).unwrap();
+    assert!(raw.contains("Carol"), "kept verbatim: {raw}");
+}
