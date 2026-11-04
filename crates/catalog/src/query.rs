@@ -6,7 +6,7 @@
 //! sidecar is involved.
 
 use crate::{
-    file_info_row, fts_match_expr, Catalog, CatalogError, FileInfo, Result, FILE_INFO_COLS,
+    file_info_row, fts_match_expr, Catalog, CatalogError, FileInfo, MapPin, Result, FILE_INFO_COLS,
     STACK_COLLAPSED,
 };
 
@@ -165,5 +165,28 @@ impl Catalog {
         let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
         let rows = stmt.query_map(refs.as_slice(), file_info_row)?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
+    }
+
+    /// Every non-hidden photo with a complete GPS mirror, for the map's
+    /// clustered pins (TASK-06-002). The catalog is a rebuildable cache —
+    /// the coordinates mirror the sidecars, the source of truth (§3 rule 2).
+    pub fn geotagged_pins(&self) -> Result<Vec<MapPin>> {
+        let sql = format!(
+            "SELECT f.hash, m.latitude, m.longitude \
+             FROM files f JOIN metadata m ON m.file_id = f.id \
+             WHERE f.hash IS NOT NULL \
+               AND m.latitude IS NOT NULL AND m.longitude IS NOT NULL \
+               AND m.latitude BETWEEN -90.0 AND 90.0 \
+               AND m.longitude BETWEEN -180.0 AND 180.0{} \
+             ORDER BY f.path",
+            self.not_hidden()
+        );
+        let mut stmt = self.conn().prepare_cached(&sql)?;
+        let mut pins = Vec::new();
+        let mut rows = stmt.query([])?;
+        while let Some(r) = rows.next()? {
+            pins.push(MapPin { hash: r.get(0)?, latitude: r.get(1)?, longitude: r.get(2)? });
+        }
+        Ok(pins)
     }
 }

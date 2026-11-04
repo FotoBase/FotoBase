@@ -93,7 +93,11 @@ export function mapStyle(version: number) {
         source: "basemap",
         "source-layer": "landuse",
         minzoom: 2,
-        filter: ["in", ["get", "kind"], ["literal", ["urban", "residential", "commercial", "industrial"]]],
+        filter: [
+          "in",
+          ["get", "kind"],
+          ["literal", ["urban", "residential", "commercial", "industrial"]],
+        ],
         paint: { "fill-color": "#e8e2d8" },
       },
       {
@@ -123,4 +127,122 @@ export function mapStyle(version: number) {
       },
     ],
   } as const;
+}
+
+// --- Clustered photo pins (TASK-06-002) -------------------------------------
+//
+// Pins cluster through MapLibre's clustered GeoJSON source (50k points is
+// within its capability per the task's technical spec); the DOM-marker
+// layer on top reads the queried features and draws cluster counts and
+// `thumb://` photo thumbnails. Everything below is pure and IPC-free —
+// hashes only, never image bytes (§3 rule 3).
+
+/// One geotagged photo from the `map_pins` command (mirrors
+/// `fotobase_catalog::MapPin`).
+export interface MapPin {
+  hash: string;
+  latitude: number;
+  longitude: number;
+}
+
+/// Cluster radius in screen pixels and the zoom past which every point is
+/// its own pin. Pinned so the unit aggregation test (supercluster, the
+/// same engine MapLibre uses) verifies the exact values the panel runs.
+export const CLUSTER_RADIUS = 60;
+export const CLUSTER_MAX_ZOOM = 10;
+
+/// Upper bound on DOM markers per frame: MapLibre reports only on-screen
+/// features, but a dense high-zoom view could still spawn thousands of
+/// nodes. Past the cap the densest views simply show fewer markers —
+/// clustering has already done the heavy lifting below it.
+export const MARKER_LIMIT = 300;
+
+/// Ask the backend for the geotagged pins. `null` without a backend
+/// (browser dev) — the panel shows the basemap without pins, like the
+/// availability check above.
+export async function fetchPins(): Promise<MapPin[] | null> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<MapPin[]>("map_pins");
+  } catch {
+    return null;
+  }
+}
+
+/// The pin dataset for the clustered GeoJSON source: one Point feature per
+/// photo, keyed by content hash so the marker layer can build `thumb://`
+/// URIs from the queried features alone.
+export function pinsToGeoJson(pins: MapPin[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: pins.map((p) => ({
+      type: "Feature" as const,
+      geometry: {
+        type: "Point" as const,
+        coordinates: [p.longitude, p.latitude],
+      },
+      properties: { hash: p.hash },
+    })),
+  };
+}
+
+/// The clustered source config the panel adds under the id `photos`.
+export function photoClusterSource(pins: MapPin[]) {
+  return {
+    type: "geojson" as const,
+    data: pinsToGeoJson(pins),
+    cluster: true,
+    clusterRadius: CLUSTER_RADIUS,
+    clusterMaxZoom: CLUSTER_MAX_ZOOM,
+  };
+}
+
+/// The `thumb://` URI for a pin's photo (same scheme the grid uses).
+export function pinThumbUri(hash: string): string {
+  return `thumb://${hash}`;
+}
+
+/// What the marker layer draws for one queried feature: a counted cluster
+/// bubble or a thumbnail pin. Pure — the panel maps these onto DOM.
+export type MarkerModel =
+  | { kind: "cluster"; count: number; lon: number; lat: number }
+  | { kind: "pin"; hash: string; thumb: string; lon: number; lat: number };
+
+interface QueryFeature {
+  geometry: { coordinates: number[] } | null;
+  properties: {
+    cluster?: boolean;
+    point_count?: number;
+    hash?: unknown;
+  } | null;
+}
+
+/// Build the marker models from `map.querySourceFeatures("photos")`
+/// output, capped at `limit`. Features without geometry or a usable
+/// payload are skipped.
+export function markerModel(
+  features: QueryFeature[],
+  limit: number,
+): MarkerModel[] {
+  const out: MarkerModel[] = [];
+  for (const f of features) {
+    if (out.length >= limit) break;
+    const coords = f.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length !== 2) continue;
+    const [lon, lat] = coords;
+    if (f.properties?.cluster) {
+      const count = f.properties.point_count;
+      if (typeof count !== "number") continue;
+      out.push({ kind: "cluster", count, lon, lat });
+    } else if (typeof f.properties?.hash === "string" && f.properties.hash) {
+      out.push({
+        kind: "pin",
+        hash: f.properties.hash,
+        thumb: pinThumbUri(f.properties.hash),
+        lon,
+        lat,
+      });
+    }
+  }
+  return out;
 }
