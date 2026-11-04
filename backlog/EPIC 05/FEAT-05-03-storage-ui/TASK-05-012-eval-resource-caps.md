@@ -1,6 +1,6 @@
 # task: build clustering evaluation and resource-cap tests
 
-**Feature:** [FEAT-05-03-storage-ui](FEAT-05-03-storage-ui.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** todo
+**Feature:** [FEAT-05-03-storage-ui](FEAT-05-03-storage-ui.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-04)
 
 ## Description
 Evaluation harness: clustering precision/recall on a labeled face set, plus resource-cap tests for the face pipeline on battery (PLAN §9 AI row; §6 P3 acceptance).
@@ -18,5 +18,5 @@ Evaluation harness: clustering precision/recall on a labeled face set, plus reso
 - Integration: battery-state pipeline run → RSS stays ≤ 400 MB; jobs throttle.
 
 ## Acceptance criteria
-- [ ] 05-012: Precision/recall evaluation on labeled face set runs in CI with recorded numbers.
-- [ ] 05-012: Resource-cap tests on battery pass.
+- [x] 05-012: Precision/recall evaluation on labeled face set runs in CI with recorded numbers.
+- [x] 05-012: Resource-cap tests on battery pass.

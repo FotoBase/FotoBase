@@ -1,0 +1,9 @@
+{
+  "precision": 0.9414,
+  "recall": 1.0,
+  "precision_floor": 0.9,
+  "recall_floor": 0.95,
+  "_comment": "TASK-05-012 baseline, measured 2026-11-04 on the deterministic labeled set in tests/clustering_eval.rs (10 identities x 10 faces + 8 noise faces, min_cluster_size 5). The 8 noise faces coalesce into one spurious cluster, which is the 0.9414 precision — a clustering change that scores below precision_floor/recall_floor is a regression (PLAN §9 AI row).",
+  "_true_pairs": 450,
+  "_predicted_pairs": 478
+}

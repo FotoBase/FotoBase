@@ -1300,6 +1300,7 @@ dependencies = [
  "fotobase-scanner",
  "fotobase-video",
  "image",
+ "libc",
  "minisign-verify 0.2.5",
  "objc2",
  "objc2-contacts",
@@ -1319,6 +1320,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trash",
+ "windows-sys 0.59.0",
  "winreg 0.55.0",
 ]
 
