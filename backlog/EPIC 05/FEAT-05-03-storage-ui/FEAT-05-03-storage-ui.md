@@ -21,4 +21,4 @@
 - [x] [TASK-05-009-reset-faces.md](TASK-05-009-reset-faces.md) — add reset faces action
 - [x] [TASK-05-010-folder-face-toggle.md](TASK-05-010-folder-face-toggle.md) — add per-folder face-detection toggle
 - [x] [TASK-05-011-contacts-link.md](TASK-05-011-contacts-link.md) — implement local contacts link
-- [ ] [TASK-05-012-eval-resource-caps.md](TASK-05-012-eval-resource-caps.md) — build clustering evaluation and resource-cap tests
+- [x] [TASK-05-012-eval-resource-caps.md](TASK-05-012-eval-resource-caps.md) — build clustering evaluation and resource-cap tests
