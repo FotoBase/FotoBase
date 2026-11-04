@@ -15,6 +15,48 @@ use fotobase_metadata::FaceRegion;
 use crate::sync::SyncResult;
 use crate::{Catalog, CatalogError, Result};
 
+/// The catalog stores detected faces in *pixel* coordinates; MWG regions
+/// are normalized centre-point + size (docs/sidecar-merge-on-write.md §2).
+/// Convert with the photo's dimensions — the `files` row first, an image
+/// probe as fallback (the folder-ini precedent). Returns the region and
+/// the pixel dimensions for the region's `AppliedToDimensions`.
+fn region_for(
+    cat: &Catalog,
+    file_id: i64,
+    name: &str,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+) -> SyncResult<(FaceRegion, (u32, u32))> {
+    let (path, fw, fh): (String, Option<i64>, Option<i64>) = cat
+        .conn()
+        .query_row("SELECT path, width, height FROM files WHERE id = ?1", [file_id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })
+        .optional()?
+        .ok_or(crate::SyncError::UnknownFile(file_id))?;
+    let dims = match (fw, fh) {
+        (Some(w), Some(h)) if w > 0 && h > 0 => (w as u32, h as u32),
+        _ => imagesize::size(&path)
+            .ok()
+            .map(|s| (s.width as u32, s.height as u32))
+            .filter(|(w, h)| *w > 0 && *h > 0)
+            .ok_or_else(|| {
+                CatalogError::InvalidQuery(format!("image size of file {file_id} is unknown"))
+            })?,
+    };
+    let (dw, dh) = (f64::from(dims.0), f64::from(dims.1));
+    let region = FaceRegion {
+        name: name.to_string(),
+        x: (f64::from(x) + f64::from(w) / 2.0) / dw,
+        y: (f64::from(y) + f64::from(h) / 2.0) / dh,
+        w: f64::from(w) / dw,
+        h: f64::from(h) / dh,
+    };
+    Ok((region, dims))
+}
+
 /// One person: the name a user gave to a cluster.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct PersonRow {
@@ -49,23 +91,31 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
 }
 
 impl Catalog {
-    /// Name a cluster: create the person and stamp every face in the
-    /// cluster with it. Blank and already-taken names are refused.
-    pub fn name_cluster(&mut self, cluster_id: i64, name: &str) -> Result<PersonRow> {
+    /// Name a cluster: create the person, stamp every face in the cluster
+    /// with it and write each photo's sidecar a named MWG face region
+    /// (TASK-05-008, §5: a named face is user data — the sidecar is the
+    /// source of truth, so the stamp is not done without it). Blank and
+    /// already-taken names are refused; one transaction per face, so a
+    /// sidecar failure leaves the remaining faces unstamped but never
+    /// corrupts a written one.
+    pub fn name_cluster(&mut self, cluster_id: i64, name: &str) -> SyncResult<PersonRow> {
         let name = name.trim();
         if name.is_empty() {
-            return Err(CatalogError::InvalidQuery("person name is blank".into()));
+            return Err(CatalogError::InvalidQuery("person name is blank".into()).into());
         }
-        let tx = self.conn_mut().transaction()?;
-        let exists: bool = tx
-            .query_row("SELECT 1 FROM face_clusters WHERE id = ?1", [cluster_id], |r| r.get(0))
+        let exists: bool = self
+            .conn()
+            .query_row("SELECT 1 FROM face_clusters WHERE id = ?1", [cluster_id], |r| {
+                r.get::<_, i64>(0)
+            })
             .optional()?
-            .unwrap_or(false);
+            .is_some();
         if !exists {
-            return Err(CatalogError::InvalidQuery(format!("no cluster {cluster_id}")));
+            return Err(CatalogError::InvalidQuery(format!("no cluster {cluster_id}")).into());
         }
         // Same name on the same cluster is a no-op, not an error.
-        if let Some(existing) = tx
+        if let Some(existing) = self
+            .conn()
             .query_row(
                 "SELECT p.id, p.name FROM persons p \
                  JOIN faces f ON f.person_id = p.id WHERE f.cluster = ?1 LIMIT 1",
@@ -78,22 +128,49 @@ impl Catalog {
                 return Ok(existing);
             }
         }
-        let person_id = match tx.execute("INSERT INTO persons (name) VALUES (?1)", [name]) {
-            Ok(_) => tx.last_insert_rowid(),
+        let person_id = match self.conn().execute("INSERT INTO persons (name) VALUES (?1)", [name])
+        {
+            Ok(_) => self.conn().last_insert_rowid(),
             Err(rusqlite::Error::SqliteFailure(e, _))
                 if e.code == rusqlite::ErrorCode::ConstraintViolation =>
             {
                 return Err(CatalogError::InvalidQuery(format!(
                     "person name {name:?} is already in use"
-                )));
+                ))
+                .into());
             }
             Err(e) => return Err(e.into()),
         };
-        tx.execute(
-            "UPDATE faces SET person_id = ?1 WHERE cluster = ?2",
-            rusqlite::params![person_id, cluster_id],
-        )?;
-        tx.commit()?;
+
+        let faces = {
+            let mut stmt = self.conn().prepare_cached(
+                "SELECT id, file_id, x, y, width, height FROM faces \
+                 WHERE cluster = ?1 ORDER BY id",
+            )?;
+            let faces: Vec<_> = stmt
+                .query_map([cluster_id], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, f32>(2)?,
+                        r.get::<_, f32>(3)?,
+                        r.get::<_, f32>(4)?,
+                        r.get::<_, f32>(5)?,
+                    ))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            faces
+        };
+        for (face_id, file_id, x, y, w, h) in faces {
+            let (region, dims) = region_for(self, file_id, name, x, y, w, h)?;
+            self.mutate_user_data(file_id, |sc| {
+                sc.add_face_regions(&[region], Some(dims));
+            })?;
+            self.conn().execute(
+                "UPDATE faces SET person_id = ?1 WHERE id = ?2",
+                rusqlite::params![person_id, face_id],
+            )?;
+        }
         Ok(PersonRow { id: person_id, name: name.to_string() })
     }
 
@@ -189,18 +266,9 @@ impl Catalog {
             .query_row("SELECT name FROM persons WHERE id = ?1", [person_id], |r| r.get(0))
             .optional()?
             .ok_or(crate::SyncError::UnknownFile(person_id))?;
-
+        let (region, dims) = region_for(self, file_id, &name, x, y, w, h)?;
         self.mutate_user_data(file_id, |sc| {
-            sc.add_face_regions(
-                &[FaceRegion {
-                    name: name.clone(),
-                    x: x as f64,
-                    y: y as f64,
-                    w: w as f64,
-                    h: h as f64,
-                }],
-                None,
-            );
+            sc.add_face_regions(&[region], Some(dims));
         })?;
 
         self.conn().execute(
@@ -387,17 +455,9 @@ impl Catalog {
 
         let mut confirmed = 0;
         for (face_id, file_id, x, y, w, h) in faces {
+            let (region, dims) = region_for(self, file_id, name, x, y, w, h)?;
             self.mutate_user_data(file_id, |sc| {
-                sc.add_face_regions(
-                    &[FaceRegion {
-                        name: name.to_string(),
-                        x: x as f64,
-                        y: y as f64,
-                        w: w as f64,
-                        h: h as f64,
-                    }],
-                    None,
-                );
+                sc.add_face_regions(&[region], Some(dims));
             })?;
             self.conn().execute(
                 "UPDATE faces SET person_id = ?1 WHERE id = ?2",

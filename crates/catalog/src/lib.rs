@@ -41,6 +41,16 @@ pub use sync::{sidecar_path, SyncError, SyncStats, ORIGINALS_DIR};
 pub use trash::{TrashAction, TrashEntry, UndoReport, DEFAULT_TRASH_WINDOW_DAYS};
 
 use std::path::{Path, PathBuf};
+
+/// Register the sqlite-vec extension (TASK-05-008, PLAN §5 `embeddings`
+/// sqlite-vec virtual table) as a SQLite auto-extension: every connection
+/// opened after this call gets the `vec0` module. Idempotent, process-wide;
+/// the unsafe FFI call lives in `fotobase-sqlite-vec-loader` (the workspace
+/// denies `unsafe_code` from the command line).
+fn load_vec_extension() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(fotobase_sqlite_vec_loader::register);
+}
 use std::time::SystemTime;
 
 use rusqlite::{Connection, OptionalExtension};
@@ -283,6 +293,7 @@ impl Catalog {
     /// Open (or create) a catalog: WAL mode, foreign keys on, migrations
     /// applied forward-only, then a cheap `quick_check` for corruption.
     pub fn open(path: impl AsRef<Path>) -> Result<Catalog> {
+        load_vec_extension();
         let path = path.as_ref().to_path_buf();
         let conn = Connection::open(&path)?;
 
@@ -951,6 +962,19 @@ impl Catalog {
             .collect();
         drop(stmt);
 
+        // vec0 virtual tables do not participate in FK cascades: drop the
+        // doomed folders' face embeddings explicitly (TASK-05-008).
+        let file_ids: Vec<i64> = {
+            let placeholders = "?,".repeat(doomed.len()).trim_end_matches(',').to_string();
+            let ids: Vec<String> = doomed.iter().map(|id| id.to_string()).collect();
+            let mut stmt = self
+                .conn
+                .prepare(&format!("SELECT id FROM files WHERE folder_id IN ({placeholders})"))?;
+            let rows = stmt.query_map(rusqlite::params_from_iter(ids), |r| r.get(0))?;
+            rows.flatten().collect()
+        };
+        self.delete_faces_for_files(&file_ids)?;
+
         let mut removed = 0;
         for id in doomed {
             removed += self.conn.execute("DELETE FROM folders WHERE id = ?1", [id])?;
@@ -964,8 +988,35 @@ impl Catalog {
     /// index. The file on disk is the caller's business — this only drops
     /// the catalog entry. Returns `false` when no row has that id.
     pub fn remove_file(&mut self, file_id: i64) -> Result<bool> {
+        // vec0 virtual tables do not participate in FK cascades, so the
+        // photo's face embeddings are cleaned up explicitly (TASK-05-008).
+        self.delete_faces_for_files(&[file_id])?;
         let removed = self.conn.execute("DELETE FROM files WHERE id = ?1", [file_id])?;
         Ok(removed > 0)
+    }
+
+    /// Remove catalog rows by path (the scanner's vanished-file pass),
+    /// cleaning up faces and their sqlite-vec embeddings explicitly (no FK
+    /// cascade into virtual tables). Returns how many file rows were
+    /// removed.
+    pub fn remove_files_by_paths(&mut self, paths: &[&str]) -> Result<usize> {
+        if paths.is_empty() {
+            return Ok(0);
+        }
+        let placeholders = "?,".repeat(paths.len()).trim_end_matches(',').to_string();
+        let ids: Vec<i64> = {
+            let mut stmt = self
+                .conn
+                .prepare(&format!("SELECT id FROM files WHERE path IN ({placeholders})"))?;
+            let rows = stmt.query_map(rusqlite::params_from_iter(paths), |r| r.get(0))?;
+            rows.flatten().collect()
+        };
+        self.delete_faces_for_files(&ids)?;
+        let removed = self.conn.execute(
+            &format!("DELETE FROM files WHERE path IN ({placeholders})"),
+            rusqlite::params_from_iter(paths),
+        )?;
+        Ok(removed)
     }
 
     /// Catalog one on-disk media file (TASK-04-016): seeds the folder row,

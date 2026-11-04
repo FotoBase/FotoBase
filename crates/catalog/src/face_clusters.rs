@@ -8,6 +8,7 @@
 //! re-clustering rebuilds the partition from all embeddings; incremental
 //! assignment only touches new faces — existing rows keep their cluster.
 
+use crate::faces::EMBEDDING_DIM;
 use crate::{Catalog, CatalogError, Result};
 use hdbscan::{Center, DistanceMetric, Hdbscan, HdbscanHyperParams};
 use rusqlite::OptionalExtension;
@@ -41,29 +42,22 @@ fn dist(a: &[f32], b: &[f32]) -> f32 {
 }
 
 impl Catalog {
-    /// Load every face that has an embedding: `(face_id, dim, vector)`,
+    /// Load every face that has an embedding: `(face_id, vector)`,
     /// face-id ordered so runs are deterministic (the hdbscan crate is
     /// deterministic on fixed input order, and we always feed it this order).
     fn embedded_faces(&self) -> Result<Vec<(i64, Vec<f32>)>> {
         let mut stmt = self.conn.prepare(
-            "SELECT f.id, e.dim, e.vector FROM faces f \
-             JOIN embeddings e ON e.face_id = f.id ORDER BY f.id",
+            "SELECT f.id, e.embedding FROM faces f \
+             JOIN embeddings e ON e.embedding_id = f.embedding_id ORDER BY f.id",
         )?;
         let rows = stmt
             .query_map([], |r| {
                 let id: i64 = r.get(0)?;
-                let dim: i64 = r.get(1)?;
-                let blob: Vec<u8> = r.get(2)?;
-                Ok((id, dim, blob))
+                let blob: Vec<u8> = r.get(1)?;
+                Ok((id, blob))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(rows
-            .into_iter()
-            .map(|(id, dim, blob)| {
-                let v = blob_to_vec(&blob);
-                (id, v.into_iter().take(dim as usize).collect::<Vec<_>>())
-            })
-            .collect())
+        Ok(rows.into_iter().map(|(id, blob)| (id, blob_to_vec(&blob))).collect())
     }
 
     /// Full HDBSCAN pass over all embedded faces. Rebuilds the cluster table
@@ -76,7 +70,6 @@ impl Catalog {
         tx.execute("UPDATE faces SET cluster = NULL", [])?;
 
         if faces.len() >= min_cluster_size {
-            let dim = faces[0].1.len();
             let data: Vec<Vec<f32>> = faces.iter().map(|(_, v)| v.clone()).collect();
             // `min_samples = 2` keeps dense synthetic-quality embeddings
             // from reading as noise, and `allow_single_cluster` lets a
@@ -104,7 +97,10 @@ impl Catalog {
                 let cluster_id = *label_ids.entry(label).or_insert_with(|| {
                     tx.execute(
                         "INSERT INTO face_clusters (dim, centroid, size) VALUES (?1, ?2, 0)",
-                        rusqlite::params![dim as i64, vec_to_blob(&centroids[label as usize])],
+                        rusqlite::params![
+                            EMBEDDING_DIM as i64,
+                            vec_to_blob(&centroids[label as usize])
+                        ],
                     )
                     .expect("insert cluster");
                     tx.last_insert_rowid()

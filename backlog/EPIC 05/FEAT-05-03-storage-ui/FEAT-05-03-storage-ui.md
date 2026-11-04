@@ -9,7 +9,7 @@
 - Contacts link maps names to local contacts only — no network calls, no telemetry.
 - Precision/recall evaluation + on-battery resource-cap tests pass in CI (§9).
 
-- [ ] `05-008` (M) Face regions → MWG `mwg-rs:Regions` XMP write; sqlite-vec embeddings table.
+- [x] `05-008` (M) Face regions → MWG `mwg-rs:Regions` XMP write; sqlite-vec embeddings table.
 - [ ] `05-009` (S) "Reset faces" per photo (picture context menu).
 - [x] `05-010` (S) Per-folder face-detection toggle in Folder Manager.
 - [ ] `05-011` (M) Contacts link (local contacts only) — name ↔ contact mapping.
@@ -17,7 +17,7 @@
 
 ## Tasks
 
-- [ ] [TASK-05-008-mwg-regions-embeddings.md](TASK-05-008-mwg-regions-embeddings.md) — persist face regions as mwg xmp with sqlite-vec embeddings
+- [x] [TASK-05-008-mwg-regions-embeddings.md](TASK-05-008-mwg-regions-embeddings.md) — persist face regions as mwg xmp with sqlite-vec embeddings
 - [ ] [TASK-05-009-reset-faces.md](TASK-05-009-reset-faces.md) — add reset faces action
 - [x] [TASK-05-010-folder-face-toggle.md](TASK-05-010-folder-face-toggle.md) — add per-folder face-detection toggle
 - [ ] [TASK-05-011-contacts-link.md](TASK-05-011-contacts-link.md) — implement local contacts link

@@ -16,8 +16,8 @@ fn add_photo(cat: &mut Catalog, dir: &std::path::Path, name: &str) -> i64 {
     let folder_id = cat.seed_folder(dir.to_str().unwrap()).unwrap();
     cat.conn()
         .execute(
-            "INSERT INTO files (folder_id, path, filename, size, mtime, media_type)
-             VALUES (?1, ?2, ?3, 10, 0.0, 'image')",
+            "INSERT INTO files (folder_id, path, filename, size, mtime, media_type, width, height)
+             VALUES (?1, ?2, ?3, 10, 0.0, 'image', 2000, 1000)",
             rusqlite::params![folder_id, original.to_str().unwrap(), name],
         )
         .unwrap();
@@ -35,7 +35,7 @@ fn face(x: f32, y: f32) -> FaceRecord {
     }
 }
 
-fn blob(center: [f32; 8], n: usize, spread: f32, seed: u64) -> Vec<[f32; 8]> {
+fn blob(center: [f32; 128], n: usize, spread: f32, seed: u64) -> Vec<[f32; 128]> {
     let mut s = seed | 1;
     let mut rnd = || {
         s ^= s << 13;
@@ -46,7 +46,11 @@ fn blob(center: [f32; 8], n: usize, spread: f32, seed: u64) -> Vec<[f32; 8]> {
     (0..n)
         .map(|_| {
             let mut v = center;
-            for c in v.iter_mut() {
+            // Vary only the first 8 components: uniform noise across all
+            // 128 dims concentrates pairwise distances and fragments the
+            // synthetic clusters; real (unit-norm) embeddings live on a much
+            // lower-dimensional manifold.
+            for c in v.iter_mut().take(8) {
                 *c += rnd() * spread;
             }
             v
@@ -55,11 +59,11 @@ fn blob(center: [f32; 8], n: usize, spread: f32, seed: u64) -> Vec<[f32; 8]> {
 }
 
 /// Late-arrival faces: tight around `center`, like the clustering tests.
-fn more(n: usize, center: [f32; 8], seed: u64) -> Vec<[f32; 8]> {
+fn more(n: usize, center: [f32; 128], seed: u64) -> Vec<[f32; 128]> {
     blob(center, n, 0.01, seed)
 }
 
-fn seed_faces(cat: &mut Catalog, dir: &std::path::Path, embeddings: &[[f32; 8]]) -> Vec<i64> {
+fn seed_faces(cat: &mut Catalog, dir: &std::path::Path, embeddings: &[[f32; 128]]) -> Vec<i64> {
     let offset: i64 = cat.conn().query_row("SELECT COUNT(*) FROM files", [], |r| r.get(0)).unwrap();
     embeddings
         .iter()
@@ -71,8 +75,8 @@ fn seed_faces(cat: &mut Catalog, dir: &std::path::Path, embeddings: &[[f32; 8]])
         .collect()
 }
 
-const A: [f32; 8] = [-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0];
-const B: [f32; 8] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+const A: [f32; 128] = [-1.0; 128];
+const B: [f32; 128] = [1.0; 128];
 
 /// Naming a cluster creates a person and stamps every face in the cluster
 /// with that person id.
@@ -205,7 +209,10 @@ fn confirming_a_suggestion_writes_the_named_mwg_region() {
     let regions = sc.face_regions();
     assert_eq!(regions.len(), 1, "{regions:?}");
     assert_eq!(regions[0].name, "Alice");
-    assert!((regions[0].x - 0.1).abs() < 1e-4 && (regions[0].y - 0.2).abs() < 1e-4);
+    // MWG areas are normalized centre-points: the pixel box (0.1, 0.2,
+    // 0.2×0.25) on the 2000×1000 test image.
+    assert!((regions[0].x - 0.0001).abs() < 1e-6 && (regions[0].y - 0.000325).abs() < 1e-6);
+    assert!((regions[0].w - 0.0001).abs() < 1e-6 && (regions[0].h - 0.00025).abs() < 1e-6);
 
     // Rebuild the catalog from scratch: the sidecar (user data) still holds
     // the named region, proving the name survives a rebuild.

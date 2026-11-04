@@ -1,0 +1,11 @@
+[package]
+name = "fotobase-sqlite-vec-loader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Registers the sqlite-vec SQLite extension as an auto-extension"
+
+[dependencies]
+sqlite-vec = "0.1"
+rusqlite = "0.32"

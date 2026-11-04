@@ -1,6 +1,6 @@
 # task: persist face regions as mwg xmp with sqlite-vec embeddings
 
-**Feature:** [FEAT-05-03-storage-ui](FEAT-05-03-storage-ui.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** todo
+**Feature:** [FEAT-05-03-storage-ui](FEAT-05-03-storage-ui.md) · **Epic:** [EPIC-05 — People](../EPIC-05.md) · **Status:** in review (2026-11-04)
 
 ## Description
 Write face regions as MWG `mwg-rs:Regions` XMP so named faces survive catalog rebuild, and store embeddings in the sqlite-vec virtual table (PLAN §5 data model; §6 P3 People).
@@ -21,5 +21,5 @@ Write face regions as MWG `mwg-rs:Regions` XMP so named faces survive catalog re
 - Unit: embedding vector round-trips through sqlite-vec (store → query → same vector).
 
 ## Acceptance criteria
-- [ ] 05-008: Face regions written as MWG `mwg-rs:Regions` XMP; embeddings in sqlite-vec.
-- [ ] 05-008: Named faces survive catalog rebuild.
+- [x] 05-008: Face regions written as MWG `mwg-rs:Regions` XMP; embeddings in sqlite-vec.
+- [x] 05-008: Named faces survive catalog rebuild.

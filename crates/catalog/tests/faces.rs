@@ -122,6 +122,12 @@ fn processed_files_leave_the_candidate_set() {
     assert!(cat.face_candidates(&[1]).unwrap().is_empty());
 }
 
+/// A deterministic 128-dimensional embedding (TASK-05-008: the sqlite-vec
+/// table is fixed-width, the SFace dimension).
+fn e128(seed: u64) -> Vec<f32> {
+    (0..128).map(|i| ((i as u64 ^ seed) % 7) as f32 / 7.0 - 0.5).collect()
+}
+
 #[test]
 fn faces_and_embeddings_roundtrip() {
     let dir = tempfile::tempdir().unwrap();
@@ -129,7 +135,8 @@ fn faces_and_embeddings_roundtrip() {
     cat.seed_folder("/photos").unwrap();
     let a = add_photo(&mut cat, dir.path(), "a.jpg");
 
-    let id = cat.record_face(a, &FACE, Some(&[0.5, -0.5, 1.0])).unwrap();
+    let vector = e128(3);
+    let id = cat.record_face(a, &FACE, Some(&vector)).unwrap();
     assert!(id > 0);
 
     let rows = cat.faces_for_file(a).unwrap();
@@ -138,9 +145,9 @@ fn faces_and_embeddings_roundtrip() {
     assert_eq!(rows[0].confidence, FACE.confidence);
     assert_eq!(rows[0].landmarks, Some(FACE.landmarks.to_vec()));
 
-    let (dim, vector) = cat.face_embedding(id).unwrap().unwrap();
-    assert_eq!(dim, 3);
-    assert_eq!(vector, vec![0.5, -0.5, 1.0]);
+    let (dim, got) = cat.face_embedding(id).unwrap().unwrap();
+    assert_eq!(dim, 128);
+    assert_eq!(got, vector);
 
     // A face without an embedding is legal (detect succeeded, embed pending).
     let b = add_photo(&mut cat, dir.path(), "b.jpg");
@@ -149,13 +156,76 @@ fn faces_and_embeddings_roundtrip() {
     assert!(cat.faces_for_file(a).unwrap()[0].id != cat.faces_for_file(b).unwrap()[0].id);
 }
 
+/// TASK-05-008: the embeddings table is a sqlite-vec virtual table keyed to
+/// `faces.embedding_id` (PLAN §5), and a stored vector reads back unchanged
+/// (store → query → same vector).
 #[test]
-fn deleting_a_file_drops_its_faces() {
+fn embeddings_live_in_the_sqlite_vec_virtual_table() {
     let dir = tempfile::tempdir().unwrap();
     let mut cat = open(dir.path());
     cat.seed_folder("/photos").unwrap();
     let a = add_photo(&mut cat, dir.path(), "a.jpg");
-    cat.record_face(a, &FACE, Some(&[1.0])).unwrap();
-    cat.conn().execute("DELETE FROM files WHERE id = ?1", [a]).unwrap();
+
+    let vector = e128(9);
+    let id = cat.record_face(a, &FACE, Some(&vector)).unwrap();
+
+    let sql: String = cat
+        .conn()
+        .query_row("SELECT sql FROM sqlite_master WHERE name = 'embeddings'", [], |r| r.get(0))
+        .unwrap();
+    assert!(sql.contains("vec0"), "virtual table, not a plain BLOB table: {sql}");
+
+    let (embedding_id, stored): (i64, Vec<u8>) = cat
+        .conn()
+        .query_row(
+            "SELECT embedding_id, embedding FROM embeddings WHERE embedding_id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(embedding_id, id, "faces.embedding_id keys the vec0 row");
+    let stored: Vec<f32> =
+        stored.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)).collect();
+    assert_eq!(stored, vector, "store → query → same vector");
+
+    // Similarity search works over the virtual table (PLAN §5).
+    let probe: Vec<u8> = vector.iter().flat_map(|f| f.to_le_bytes()).collect();
+    let hits: Vec<(i64, f32)> = cat
+        .conn()
+        .prepare(
+            "SELECT embedding_id, distance FROM embeddings \
+                  WHERE embedding MATCH ?1 AND k = 5",
+        )
+        .unwrap()
+        .query_map(rusqlite::params![probe], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(hits.len(), 1, "{hits:?}");
+    assert_eq!(hits[0].0, id);
+    assert!(hits[0].1.abs() < 1e-5, "self-match distance ≈ 0: {hits:?}");
+}
+
+#[test]
+fn embeddings_must_match_the_model_dimension() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = open(dir.path());
+    cat.seed_folder("/photos").unwrap();
+    let a = add_photo(&mut cat, dir.path(), "a.jpg");
+
+    assert!(cat.record_face(a, &FACE, Some(&[0.5, -0.5, 1.0])).is_err());
+    assert!(cat.face_embedding(1).unwrap().is_none());
+}
+
+#[test]
+fn deleting_a_file_drops_its_faces_and_embeddings() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = open(dir.path());
+    cat.seed_folder("/photos").unwrap();
+    let a = add_photo(&mut cat, dir.path(), "a.jpg");
+    let id = cat.record_face(a, &FACE, Some(&e128(5))).unwrap();
+    assert!(cat.remove_file(a).unwrap());
     assert!(cat.faces_for_file(a).unwrap().is_empty());
+    // The vec0 table has no foreign-key cascade: the embedding row goes too.
+    assert!(cat.face_embedding(id).unwrap().is_none());
 }

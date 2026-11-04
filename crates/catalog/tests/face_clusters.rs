@@ -37,7 +37,7 @@ fn face(x: f32, y: f32) -> FaceRecord {
 
 /// Two tight gaussian blobs far apart — the canonical "two people" test set.
 /// Seeded so every run builds the same embeddings (determinism criterion).
-fn blob(center: [f32; 8], n: usize, spread: f32, seed: u64) -> Vec<[f32; 8]> {
+fn blob(center: [f32; 128], n: usize, spread: f32, seed: u64) -> Vec<[f32; 128]> {
     // xorshift64* — no external rng dependency, fully deterministic.
     let mut s = seed | 1;
     let mut rnd = || {
@@ -49,7 +49,11 @@ fn blob(center: [f32; 8], n: usize, spread: f32, seed: u64) -> Vec<[f32; 8]> {
     (0..n)
         .map(|_| {
             let mut v = center;
-            for c in v.iter_mut() {
+            // Vary only the first 8 components: uniform noise across all
+            // 128 dims concentrates pairwise distances and fragments the
+            // synthetic clusters; real (unit-norm) embeddings live on a much
+            // lower-dimensional manifold.
+            for c in v.iter_mut().take(8) {
                 *c += rnd() * spread;
             }
             v
@@ -58,7 +62,7 @@ fn blob(center: [f32; 8], n: usize, spread: f32, seed: u64) -> Vec<[f32; 8]> {
 }
 
 /// Seed `cat` with faces carrying the given embeddings. Returns the face ids.
-fn seed_faces(cat: &mut Catalog, dir: &std::path::Path, embeddings: &[[f32; 8]]) -> Vec<i64> {
+fn seed_faces(cat: &mut Catalog, dir: &std::path::Path, embeddings: &[[f32; 128]]) -> Vec<i64> {
     // Unique names across calls: each seeding batch starts after the
     // photos already in the catalog.
     let offset =
@@ -74,13 +78,13 @@ fn seed_faces(cat: &mut Catalog, dir: &std::path::Path, embeddings: &[[f32; 8]])
 }
 
 /// A third well-separated blob, used to grow the library incrementally.
-fn more_embeddings(n: usize, center: [f32; 8], seed: u64) -> Vec<[f32; 8]> {
+fn more_embeddings(n: usize, center: [f32; 128], seed: u64) -> Vec<[f32; 128]> {
     blob(center, n, 0.01, seed)
 }
 
-const A: [f32; 8] = [-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0];
-const B: [f32; 8] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
-const C: [f32; 8] = [4.0, -4.0, 4.0, -4.0, 4.0, -4.0, 4.0, -4.0];
+const A: [f32; 128] = [-1.0; 128];
+const B: [f32; 128] = [1.0; 128];
+const C: [f32; 128] = [4.0; 128];
 
 #[test]
 fn faces_in_same_blob_cluster_together() {
@@ -110,7 +114,7 @@ fn faces_in_same_blob_cluster_together() {
 
 #[test]
 fn clustering_is_deterministic_across_runs() {
-    let embeddings: Vec<[f32; 8]> = blob(A, 25, 0.01, 1)
+    let embeddings: Vec<[f32; 128]> = blob(A, 25, 0.01, 1)
         .into_iter()
         .chain(blob(B, 25, 0.01, 2))
         .chain(blob(C, 10, 0.01, 3))
@@ -171,14 +175,14 @@ fn incremental_update_touches_only_new_faces() {
     let dir = tempfile::tempdir().unwrap();
     let mut cat = open(dir.path());
 
-    let base: Vec<[f32; 8]> =
+    let base: Vec<[f32; 128]> =
         blob(A, 50, 0.01, 1).into_iter().chain(blob(B, 50, 0.01, 2)).collect();
     let base_ids = seed_faces(&mut cat, dir.path(), &base);
     cat.cluster_faces(5).unwrap();
     let before = cat.face_cluster_assignments(&base_ids).unwrap();
 
     // 10 new faces: 6 join blob A, 4 form a brand-new blob C.
-    let new: Vec<[f32; 8]> =
+    let new: Vec<[f32; 128]> =
         more_embeddings(6, A, 11).into_iter().chain(more_embeddings(4, C, 12)).collect();
     let new_ids = seed_faces(&mut cat, dir.path(), &new);
 
@@ -212,8 +216,8 @@ fn outliers_are_not_forced_into_clusters() {
 
     let mut embeddings = blob(A, 20, 0.01, 1);
     // Far-away singletons.
-    embeddings.push([-50.0, 50.0, -50.0, 50.0, -50.0, 50.0, -50.0, 50.0]);
-    embeddings.push([50.0, -50.0, 50.0, -50.0, 50.0, -50.0, 50.0, -50.0]);
+    embeddings.push([-50.0; 128]);
+    embeddings.push([50.0; 128]);
     let ids = seed_faces(&mut cat, dir.path(), &embeddings);
 
     cat.cluster_faces(5).unwrap();
@@ -239,7 +243,7 @@ fn labeled_set_separates_known_persons() {
     let mut cat = open(dir.path());
 
     // 30 A-faces, 30 B-faces, plus 20 A-faces that arrive by import later.
-    let labeled: Vec<[f32; 8]> =
+    let labeled: Vec<[f32; 128]> =
         blob(A, 30, 0.01, 5).into_iter().chain(blob(B, 30, 0.01, 6)).collect();
     let labeled_ids = seed_faces(&mut cat, dir.path(), &labeled);
     cat.cluster_faces(5).unwrap();
@@ -268,7 +272,7 @@ fn labeled_set_separates_known_persons() {
 fn clustering_is_idempotent() {
     let dir = tempfile::tempdir().unwrap();
     let mut cat = open(dir.path());
-    let embeddings: Vec<[f32; 8]> =
+    let embeddings: Vec<[f32; 128]> =
         blob(A, 20, 0.01, 1).into_iter().chain(blob(B, 20, 0.01, 2)).collect();
     let ids = seed_faces(&mut cat, dir.path(), &embeddings);
 

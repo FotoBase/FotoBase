@@ -407,8 +407,9 @@ fn process_directory(
         catalog.snapshot_missing(&vanished)?;
     }
     for path in &vanished {
-        catalog.conn().execute("DELETE FROM files WHERE path = ?1", [path.as_str()])?;
-        report.removed += 1;
+        // Removes the row plus its faces and sqlite-vec embeddings (no FK
+        // cascade into virtual tables, TASK-05-008).
+        report.removed += catalog.remove_files_by_paths(&[path.as_str()])?;
     }
 
     for entry in entries.iter().filter(|e| !e.is_dir) {

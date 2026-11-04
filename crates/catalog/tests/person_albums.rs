@@ -16,8 +16,8 @@ fn add_photo(cat: &mut Catalog, dir: &std::path::Path, name: &str) -> i64 {
     let folder_id = cat.seed_folder(dir.to_str().unwrap()).unwrap();
     cat.conn()
         .execute(
-            "INSERT INTO files (folder_id, path, filename, size, mtime, media_type)
-             VALUES (?1, ?2, ?3, 10, 0.0, 'image')",
+            "INSERT INTO files (folder_id, path, filename, size, mtime, media_type, width, height)
+             VALUES (?1, ?2, ?3, 10, 0.0, 'image', 2000, 1000)",
             rusqlite::params![folder_id, original.to_str().unwrap(), name],
         )
         .unwrap();
@@ -35,7 +35,7 @@ fn face() -> FaceRecord {
     }
 }
 
-fn blob(center: [f32; 8], n: usize, seed: u64) -> Vec<[f32; 8]> {
+fn blob(center: [f32; 128], n: usize, seed: u64) -> Vec<[f32; 128]> {
     let mut s = seed | 1;
     let mut rnd = || {
         s ^= s << 13;
@@ -46,7 +46,11 @@ fn blob(center: [f32; 8], n: usize, seed: u64) -> Vec<[f32; 8]> {
     (0..n)
         .map(|_| {
             let mut v = center;
-            for c in v.iter_mut() {
+            // Vary only the first 8 components: uniform noise across all
+            // 128 dims concentrates pairwise distances and fragments the
+            // synthetic clusters; real (unit-norm) embeddings live on a much
+            // lower-dimensional manifold.
+            for c in v.iter_mut().take(8) {
                 *c += rnd() * 0.01;
             }
             v
@@ -54,8 +58,8 @@ fn blob(center: [f32; 8], n: usize, seed: u64) -> Vec<[f32; 8]> {
         .collect()
 }
 
-const A: [f32; 8] = [-1.0; 8];
-const B: [f32; 8] = [1.0; 8];
+const A: [f32; 128] = [-1.0; 128];
+const B: [f32; 128] = [1.0; 128];
 
 struct Seeded {
     _dir: tempfile::TempDir,

@@ -24,6 +24,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V15,
     MIGRATION_V16,
     MIGRATION_V17,
+    MIGRATION_V18,
 ];
 
 const MIGRATION_V1: &str = "
@@ -677,6 +678,32 @@ INSERT INTO files_fts(rowid, filename, folder, caption, tags, people)
     LEFT JOIN metadata m ON m.file_id = f.id;
 "
 );
+
+/// TASK-05-008: face embeddings move into the sqlite-vec virtual table
+/// (PLAN §5 `embeddings` sqlite-vec virtual table). The plain BLOB table
+/// becomes a fixed-width `vec0` table — `float[128]`, the SFace dimension —
+/// keyed by the new `faces.embedding_id` column (the face row id), so
+/// similarity search runs inside SQLite (PLAN §5).
+///
+/// vec0 tables cannot be ALTERed, so the old table is copied out, dropped
+/// and recreated as a virtual table in one transaction. Rows whose `dim`
+/// does not match the model dimension are dropped without ceremony: they
+/// are derived data (recomputable from the originals, PLAN §5 Authority)
+/// and a wrong-dimension row could never join a vec0 column anyway.
+const MIGRATION_V18: &str = "
+ALTER TABLE faces ADD COLUMN embedding_id INTEGER;
+UPDATE faces SET embedding_id = id WHERE id IN (SELECT face_id FROM embeddings);
+CREATE TEMP TABLE embeddings_migrate AS
+    SELECT face_id, vector FROM embeddings WHERE dim = 128;
+DROP TABLE embeddings;
+CREATE VIRTUAL TABLE embeddings USING vec0(
+    embedding_id INTEGER PRIMARY KEY,
+    embedding float[128]
+);
+INSERT INTO embeddings (embedding_id, embedding)
+    SELECT face_id, vector FROM embeddings_migrate;
+DROP TABLE embeddings_migrate;
+";
 
 /// Apply all pending migrations, in order, each in its own transaction.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {

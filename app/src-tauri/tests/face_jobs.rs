@@ -52,7 +52,19 @@ impl FaceEngine for FakeEngine {
         _landmarks: &[f32; 10],
     ) -> Result<Vec<f32>, String> {
         let seed = rgb.first().copied().unwrap_or(0) as f32 / 255.0;
-        Ok(vec![seed, 1.0 - seed, 0.5])
+        // 128 dimensions: the sqlite-vec embeddings table (TASK-05-008) is
+        // fixed-width at the SFace dimension, same as the real engine.
+        Ok((0..128)
+            .map(|i| {
+                if i == 0 {
+                    seed
+                } else if i == 1 {
+                    1.0 - seed
+                } else {
+                    0.5
+                }
+            })
+            .collect())
     }
 }
 
@@ -122,8 +134,9 @@ fn enabled_folders_are_processed_and_the_toggle_gates_scheduling() {
 
     let rows = cat.faces_for_file(a).unwrap();
     assert_eq!(rows.len(), 1);
-    let (_, vector) = cat.face_embedding(rows[0].id).unwrap().unwrap();
-    assert_eq!(vector.len(), 3);
+    let (dim, vector) = cat.face_embedding(rows[0].id).unwrap().unwrap();
+    assert_eq!(dim, 128);
+    assert_eq!(vector.len(), 128);
 
     // The disabled folder's photo is untouched.
     assert!(cat.faces_for_file(b).unwrap().is_empty());
