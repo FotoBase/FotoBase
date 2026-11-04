@@ -174,7 +174,7 @@ describe("reset faces", () => {
     expect(raw).not.toContain('mwg-rs:Name="Anna"');
     // The photo also leaves the "has faces" filter.
     const hits = (await invoke("query_files", {
-      has_faces: true,
+      hasFaces: true,
     })) as unknown[];
     expect(hits.length).toBe(0);
   });
