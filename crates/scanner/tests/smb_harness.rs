@@ -245,7 +245,13 @@ fn scripted_cycle_passes_three_times_consecutively() {
         std::panic::catch_unwind(|| one_cycle(&root, &scratch, cycle))
             .map(|passed| passed as usize)
             .unwrap_or_else(|e| {
-                failures.push(format!("cycle {cycle} failed: {e:?}"));
+                // Unwrap the payload so CI shows the real message, not `Any{..}`.
+                let msg = e
+                    .downcast_ref::<&str>()
+                    .map(|s| (*s).to_string())
+                    .or_else(|| e.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "unknown panic".to_string());
+                failures.push(format!("cycle {cycle} failed: {msg}"));
                 0
             });
         let _ = harness_reconnect();

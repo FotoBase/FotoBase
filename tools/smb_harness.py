@@ -139,6 +139,15 @@ def cmd_mount(args: argparse.Namespace) -> int:
             return 1
 
     mp = mountpoint()
+    if not host_mount(mp):
+        return 1
+    state_file_write(mounted=True, mountpoint=str(mp), port=PORT, container=CONTAINER)
+    print(f"mounted at {mp}")
+    return 0
+
+
+def host_mount(mp: Path) -> bool:
+    """Mount the share on the host at `mp` (retrying briefly)."""
     mp.parent.mkdir(parents=True, exist_ok=True)
     # The mount target itself must exist (mount.cifs/mount_smbfs chdir into
     # it); on a fresh CI runner nothing created it yet.
@@ -167,16 +176,28 @@ def cmd_mount(args: argparse.Namespace) -> int:
                 )
             else:
                 print(f"unsupported platform for mount: {system}", file=sys.stderr)
-                return 1
-            break
+                return False
+            return True
         except subprocess.CalledProcessError as e:
             if attempt == 2:
                 print(f"mount failed: {e.stderr.strip()}", file=sys.stderr)
-                return 1
+                return False
             time.sleep(2)
-    state_file_write(mounted=True, mountpoint=str(mp), port=PORT, container=CONTAINER)
-    print(f"mounted at {mp}")
-    return 0
+    return False
+
+
+def host_unmount(mp: Path) -> None:
+    """Best-effort force unmount of the host mount (a stuck soft mount must
+    not take the remount down with it)."""
+    system = platform.system()
+    try:
+        if system == "Darwin":
+            run(["/usr/sbin/diskutil", "unmount", "force", str(mp)], check=False)
+        elif system == "Linux":
+            # -f forces, -l detaches even if a process still holds it.
+            run(["sudo", "umount", "-f", "-l", str(mp)], check=False)
+    except subprocess.CalledProcessError:
+        pass
 
 
 def container_running() -> bool:
@@ -278,17 +299,20 @@ def cmd_reconnect(args: argparse.Namespace) -> int:
     state_file_write(**{**state_file_read(), "disconnected": False})
 
     # smbd answering inside the container is NOT the same as the host mount
-    # being usable: the kernel SMB/CIFS client re-establishes its session a
-    # few seconds after the server restarts, and until then host-side writes
-    # fail (EIO) even though smbd is up (CI 2026-11-04: "share not writable
-    # within 5s of reconnect" — smbd had answered 5s earlier). Everything
-    # downstream (the resumed scans, the tests' post-reconnect write)
-    # assumes a *usable* share, so make the reconnect promise end-to-end:
-    # probe a real write through the mountpoint before reporting success.
+    # being usable: the kernel SMB/CIFS client re-establishes its own session
+    # after the server restarts, and until then host-side writes fail (EIO)
+    # even though smbd is up. That re-establishment is not bounded — with the
+    # soft CIFS mount it stayed dead for over 60s on CI (run 41830787888:
+    # "share not writable ... within 30s of smbd restart" twice in a row) —
+    # so waiting is not a fix. Everything downstream (the resumed scans, the
+    # tests' post-reconnect write) assumes a *usable* share, and a replug in
+    # the real world means a fresh connection anyway: give the kernel client
+    # a short grace period, then force a clean remount, which builds a new
+    # TCP/SMB session immediately because smbd is already answering.
     mp = mountpoint()
     if mp.exists():
         probe_file = mp / ".fb-harness-reconnect-probe"
-        for _ in range(30):
+        for _ in range(5):
             try:
                 probe_file.write_bytes(b"ok")
                 probe_file.unlink()
@@ -297,7 +321,22 @@ def cmd_reconnect(args: argparse.Namespace) -> int:
                 continue
             print(f"reconnected (share writable at {mp})")
             return 0
-        print(f"share not writable at {mp} within 30s of smbd restart", file=sys.stderr)
+        # Still dead: the client session is stuck. Drop the mount entirely
+        # and build a fresh one.
+        host_unmount(mp)
+        if not host_mount(mp):
+            print(f"remount of {mp} failed during reconnect", file=sys.stderr)
+            return 1
+        for _ in range(10):
+            try:
+                probe_file.write_bytes(b"ok")
+                probe_file.unlink()
+            except OSError:
+                time.sleep(1)
+                continue
+            print(f"reconnected (share writable at {mp} after remount)")
+            return 0
+        print(f"share not writable at {mp} even after remount", file=sys.stderr)
         return 1
     # No mount (manual flows before `mount`): the in-container answer is all
     # we can promise.
