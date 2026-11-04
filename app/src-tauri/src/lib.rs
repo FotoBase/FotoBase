@@ -1584,6 +1584,20 @@ fn people_manager_rename(
     })
 }
 
+/// "Reset faces" for one photo (TASK-05-009, PLAN §2 Picture context menu):
+/// clear every detected/named face — the sidecar's MWG face regions go
+/// first (merge-on-write per docs/sidecar-merge-on-write.md), then the
+/// face rows and embeddings; person albums, FTS and the "has faces" filter
+/// follow via the catalog's triggers. The UI's confirmation dialog is the
+/// gate. Returns how many face rows were removed.
+#[tauri::command]
+fn reset_faces(file_id: i64, state: tauri::State<'_, AppState>) -> Result<usize, String> {
+    with_catalog_mut(&state, |cat| {
+        cat.reset_faces(file_id)
+            .map_err(|e| fotobase_catalog::CatalogError::Corrupted(e.to_string()))
+    })
+}
+
 /// Delete the user-confirmed subset of a duplicate group (TASK-04-019):
 /// each id routes through the file-menu "Delete from disk" path — OS trash
 /// first, catalog row dropped after. The UI's confirmation dialog is the
@@ -2666,6 +2680,7 @@ pub fn run() {
             people_queue_bulk,
             people_manager_list,
             people_manager_rename,
+            reset_faces,
             folder_ini_pending_folders,
             ingest_folder_ini,
             decline_folder_ini,

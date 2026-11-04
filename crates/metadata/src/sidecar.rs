@@ -1314,6 +1314,43 @@ impl Sidecar {
         Some(renamed)
     }
 
+    /// Remove every face region from `mwg-rs:Regions` ("Reset faces",
+    /// TASK-05-009). Non-face regions (pets, barcodes, …), unknown nodes and
+    /// the rest of the sidecar stay verbatim; when the last face leaves the
+    /// block, the whole `Regions` node goes. Returns how many face regions
+    /// were removed, or `None` — nothing changed — when an existing
+    /// `Regions` has a structure we do not recognise, which we never
+    /// rewrite.
+    pub fn remove_face_regions(&mut self) -> Option<usize> {
+        let Some(d) = self.tree.description_mut() else { return Some(0) };
+        let Some(regions) = d.find_child_mut("mwg-rs", "Regions") else { return Some(0) };
+        let bag = region_bag_mut(regions)?;
+        let before = bag.children.len();
+        bag.children.retain(|c| match c {
+            Child::Element(li) => {
+                let node = match li.find_child("rdf", "Description") {
+                    Some(desc) => desc,
+                    None => li,
+                };
+                !node
+                    .child_text_or_attr("mwg-rs", "Type")
+                    .is_some_and(|t| t.trim().eq_ignore_ascii_case("face"))
+            }
+            _ => true,
+        });
+        let removed = before - bag.children.len();
+        let bag_has_elements = bag.children.iter().any(|c| matches!(c, Child::Element(_)));
+        if removed > 0 && !bag_has_elements {
+            // The whole block held nothing but faces (plus whitespace
+            // text): drop `Regions` so no empty husk is left behind.
+            d.children.retain(|c| match c {
+                Child::Element(el) => !(el.prefix == "mwg-rs" && el.local == "Regions"),
+                _ => true,
+            });
+        }
+        Some(removed)
+    }
+
     // ---- write path (merge-on-write, 00-010 §3) --------------------------
 
     /// Write back with merge-on-write discipline: backup previous version

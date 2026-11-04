@@ -233,6 +233,9 @@ const messages: Record<string, Dict> = {
     "batchEdit.error": "Batch edit failed: {error}",
     "batchEdit.close": "Close",
     "menu.adjustDateTime": "Adjust date/time…",
+    "menu.resetFaces": "Reset faces",
+    "confirm.resetFaces":
+      "Remove all detected and named faces from this photo? The face regions are deleted from its sidecar and the photo leaves any person albums. This cannot be undone.",
     "meta.title": "Details",
     "meta.edit": "Edit…",
     "meta.save": "Save",
@@ -744,6 +747,9 @@ const messages: Record<string, Dict> = {
     "batchEdit.error": "Stapelbearbeitung fehlgeschlagen: {error}",
     "batchEdit.close": "Schließen",
     "menu.adjustDateTime": "Datum/Uhrzeit anpassen…",
+    "menu.resetFaces": "Gesichter zurücksetzen",
+    "confirm.resetFaces":
+      "Alle erkannten und benannten Gesichter dieses Fotos entfernen? Die Gesichtsregionen werden aus der Seitendatei gelöscht und das Foto verlässt alle Personenalben. Dies kann nicht rückgängig gemacht werden.",
     "meta.title": "Details",
     "meta.edit": "Bearbeiten…",
     "meta.save": "Speichern",

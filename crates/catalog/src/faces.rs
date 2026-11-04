@@ -9,7 +9,9 @@
 //! before scheduling — a disabled folder schedules nothing and its existing
 //! faces are left alone.
 
+use crate::sync::{sidecar_path, SyncError, SyncResult};
 use crate::{Catalog, CatalogError, Result};
+use fotobase_metadata::Sidecar;
 
 use rusqlite::OptionalExtension;
 
@@ -242,5 +244,37 @@ impl Catalog {
         )?;
         sp.commit()?;
         Ok(removed)
+    }
+
+    /// "Reset faces" for one photo (TASK-05-009, PLAN §2 Picture context
+    /// menu): clear every detected/named face of the photo. Sidecar first
+    /// (the MWG face regions go, merge-on-write per
+    /// docs/sidecar-merge-on-write.md), then the `faces` rows and their
+    /// embeddings — the trigger-maintained derivations (person albums, FTS
+    /// `people`, the "has faces" filter) follow the row delete. An
+    /// unrecognised `Regions` structure is refused: the sidecar and the
+    /// catalog stay untouched rather than destroying XMP we do not
+    /// understand. Returns how many face rows were removed.
+    pub fn reset_faces(&mut self, file_id: i64) -> SyncResult<usize> {
+        let path: String = self
+            .conn()
+            .query_row("SELECT path FROM files WHERE id = ?1", [file_id], |r| r.get(0))
+            .optional()?
+            .ok_or(SyncError::UnknownFile(file_id))?;
+        let sc_path = sidecar_path(&path);
+        // Probe first: the reset must never CREATE a sidecar (cf.
+        // clear_recipe), and an unrecognised Regions structure must abort
+        // before anything is touched (sidecar-wins rule, §1).
+        let mut probe = Sidecar::read(&sc_path)?;
+        let regions_removed = match probe.remove_face_regions() {
+            None => return Err(SyncError::FaceRegionsUnrecognised),
+            Some(n) => n,
+        };
+        if regions_removed > 0 {
+            self.mutate_user_data(file_id, |sc| {
+                sc.remove_face_regions();
+            })?;
+        }
+        self.delete_faces_for_files(&[file_id]).map_err(SyncError::from)
     }
 }
