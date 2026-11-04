@@ -31,6 +31,7 @@ vi.mock("maplibre-gl", () => ({
       addLayer: vi.fn(),
       querySourceFeatures: vi.fn(() => []),
       on: vi.fn(),
+      once: vi.fn(),
       isStyleLoaded: vi.fn(() => true),
     };
   }),
@@ -60,6 +61,7 @@ function mapInstance(): {
   addSource: ReturnType<typeof vi.fn>;
   addLayer: ReturnType<typeof vi.fn>;
   querySourceFeatures: ReturnType<typeof vi.fn>;
+  once: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
 } {
@@ -109,6 +111,7 @@ describe("MapPanel", () => {
       addLayer: vi.fn(),
       querySourceFeatures: vi.fn(() => []),
       on: vi.fn(),
+      once: vi.fn(),
       isStyleLoaded: vi.fn(() => true),
     };
     (
@@ -143,6 +146,38 @@ describe("MapPanel — clustered pins", () => {
     expect(id).toBe("photos");
     expect(source.cluster).toBe(true);
     expect(source.data).toEqual(pinsToGeoJson(PINS));
+  });
+
+  it("defers pin wiring until the style has loaded (addSource throws before)", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValue(PINS);
+    (
+      MapMock as unknown as {
+        mockImplementationOnce: (f: () => unknown) => void;
+      }
+    ).mockImplementationOnce(function () {
+      return {
+        addControl: vi.fn(),
+        remove: vi.fn(),
+        addSource: vi.fn(),
+        addLayer: vi.fn(),
+        querySourceFeatures: vi.fn(() => []),
+        on: vi.fn(),
+        once: vi.fn(),
+        isStyleLoaded: vi.fn(() => false),
+      } as unknown as import("maplibre-gl").Map;
+    });
+    render(MapPanel, { props: { open: true } });
+    await waitFor(() => expect(MapMock).toHaveBeenCalled());
+    const map = mapInstance();
+    expect(map.addSource).not.toHaveBeenCalled();
+    const load = map.once.mock.calls.find((c) => c[0] === "load");
+    expect(load).toBeTruthy();
+    (load![1] as () => void)();
+    expect(map.addSource).toHaveBeenCalledWith(
+      "photos",
+      expect.objectContaining({ cluster: true }),
+    );
   });
 
   it("adds the pin layers so the clustered source actually loads", async () => {

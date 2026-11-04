@@ -87,31 +87,39 @@
       });
       map.addControl(new NavigationControl({ showCompass: false }), "top-right");
       // Pins arrive after the map exists; a failed fetch (browser dev)
-      // leaves the basemap without them.
+      // leaves the basemap without them. The style may still be loading —
+      // addSource/addLayer throw before it is — so defer until it is.
       const pins = await fetchPins();
       if (cancelled || !map) return;
       if (pins && pins.length > 0) {
-        map.addSource("photos", photoClusterSource(pins));
-        // Reference the source from layers so MapLibre actually loads its
-        // data (querySourceFeatures is only reliable for used sources).
-        for (const layer of pinLayers()) map.addLayer(layer as never);
-        const draw = (): void => {
+        const usePins = (): void => {
           if (!map) return;
-          for (const m of markers) m.remove();
-          markers = [];
-          for (const model of markerModel(
-            map.querySourceFeatures("photos") as unknown as Parameters<typeof markerModel>[0],
-            MARKER_LIMIT,
-          )) {
-            markers.push(new Marker({ element: markerElement(model) }).setLngLat([model.lon, model.lat]).addTo(map));
-          }
+          map.addSource("photos", photoClusterSource(pins));
+          // Reference the source from layers so MapLibre actually loads
+          // its data (querySourceFeatures is only reliable for used
+          // sources).
+          for (const layer of pinLayers()) map.addLayer(layer as never);
+          const draw = (): void => {
+            if (!map) return;
+            for (const m of markers) m.remove();
+            markers = [];
+            for (const model of markerModel(
+              map.querySourceFeatures("photos") as unknown as Parameters<typeof markerModel>[0],
+              MARKER_LIMIT,
+            )) {
+              markers.push(
+                new Marker({ element: markerElement(model) }).setLngLat([model.lon, model.lat]).addTo(map),
+              );
+            }
+          };
+          map.on("moveend", draw);
+          map.on("sourcedata", (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
+            if (e.sourceId === "photos" && e.isSourceLoaded) draw();
+          });
+          draw();
         };
-        map.on("moveend", draw);
-        map.on("sourcedata", (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
-          if (e.sourceId === "photos" && e.isSourceLoaded) draw();
-        });
-        if (map.isStyleLoaded()) draw();
-        else map.once("load", draw);
+        if (map.isStyleLoaded()) usePins();
+        else map.once("load", usePins);
       }
     })();
     return () => {
