@@ -113,14 +113,24 @@ describe("offline basemap", () => {
     const urls = await browser.execute(
       () => (window as unknown as { __fotobaseNetLog: string[] }).__fotobaseNetLog,
     );
-    // Zero http(s) requests while the map is open — the task's
+    // Zero real-network requests while the map is open — the task's
     // test-enforced no-network rule. A failure lists what was fetched.
-    const network = urls.filter((u) => /^https?:\/\//i.test(u));
+    // WebView2 maps custom schemes and Tauri IPC onto `http://*.localhost`
+    // URLs; those never leave the machine, so they are not network.
+    const network = urls.filter(
+      (u) => /^https?:\/\//i.test(u) && !/^https?:\/\/[^/]+\.localhost(\/|$)/i.test(u),
+    );
     if (network.length > 0) {
       throw new Error(`network requests observed while the map was open: ${network.join(", ")}`);
     }
-    // The only requests the frontend itself made are basemap tiles.
-    const nonBasemap = urls.filter((u) => !u.startsWith("basemap://"));
+    // Everything else the frontend fetched must be a basemap tile or
+    // Tauri's own IPC / scheme traffic.
+    const nonBasemap = urls.filter(
+      (u) =>
+        !u.startsWith("basemap://") &&
+        !u.startsWith("ipc://") &&
+        !/^https?:\/\/(basemap|thumb|preview|stream|ipc)\.localhost\//i.test(u),
+    );
     if (nonBasemap.length > 0) {
       throw new Error(`non-basemap frontend requests: ${nonBasemap.join(", ")}`);
     }
