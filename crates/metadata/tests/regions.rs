@@ -157,3 +157,63 @@ fn an_unrecognised_regions_structure_is_left_alone() {
     sc.write(&path).unwrap();
     assert!(!std::fs::read_to_string(&path).unwrap().contains("Anna"));
 }
+
+// ---- TASK-05-006: the People Manager rename (sidecar half) ----
+
+/// Renaming a person rewrites the `mwg-rs:Name` of every matching face
+/// region — same face box, new name — and leaves every other region and
+/// unknown node verbatim (docs/sidecar-merge-on-write.md §3).
+#[test]
+fn renaming_rewrites_matching_face_names_and_keeps_everything_else() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("p.jpg.xmp");
+    std::fs::write(&path, DIGIKAM_STYLE).unwrap();
+
+    let mut sc = Sidecar::read(&path).unwrap();
+    assert_eq!(sc.rename_face_regions("carol", "Carla"), Some(1));
+    sc.write(&path).unwrap();
+
+    let raw = std::fs::read_to_string(&path).unwrap();
+    assert!(raw.contains(r#"mwg-rs:Name="Carla""#), "renamed: {raw}");
+    assert!(!raw.contains("Carol"), "old name gone: {raw}");
+    assert!(raw.contains(r#"mwg-rs:Name="Fence""#), "non-face region kept: {raw}");
+    assert!(raw.contains("digiKam:Keep"), "unknown node kept: {raw}");
+    assert!(raw.contains(r#"stDim:w="800""#), "dimensions kept: {raw}");
+
+    let faces = Sidecar::read(&path).unwrap().face_regions();
+    assert_eq!(faces.len(), 1);
+    assert_eq!(faces[0].name, "Carla");
+    assert!((faces[0].x - 0.5).abs() < 1e-12, "box untouched: {faces:?}");
+}
+
+/// A name with no matching face region is a no-op: nothing is rewritten.
+#[test]
+fn renaming_an_unknown_name_changes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("p.jpg.xmp");
+    std::fs::write(&path, DIGIKAM_STYLE).unwrap();
+
+    let mut sc = Sidecar::read(&path).unwrap();
+    assert_eq!(sc.rename_face_regions("Nobody", "Someone"), Some(0));
+    sc.write(&path).unwrap();
+
+    let raw = std::fs::read_to_string(&path).unwrap();
+    assert!(!raw.contains("Someone"), "no match, no rewrite: {raw}");
+    assert!(raw.contains(r#"mwg-rs:Name="Carol""#), "kept verbatim: {raw}");
+    assert!(raw.contains(r#"mwg-rs:Name="Fence""#));
+}
+
+/// An unrecognised `Regions` structure is left alone, like `add_face_regions`.
+#[test]
+fn renaming_an_unrecognised_regions_structure_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("p.jpg.xmp");
+    let odd = DIGIKAM_STYLE
+        .replace("<mwg-rs:RegionList>", "<mwg-rs:Other>")
+        .replace("</mwg-rs:RegionList>", "</mwg-rs:Other>");
+    std::fs::write(&path, &odd).unwrap();
+    let mut sc = Sidecar::read(&path).unwrap();
+    assert_eq!(sc.rename_face_regions("Carol", "Carla"), None);
+    sc.write(&path).unwrap();
+    assert!(std::fs::read_to_string(&path).unwrap().contains("Carol"));
+}

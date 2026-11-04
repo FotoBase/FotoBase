@@ -4,7 +4,15 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { canConfirm, faceBox, faceThumbUri, type QueueCluster } from "./people";
+import {
+  canConfirm,
+  canRename,
+  entryThumbUri,
+  faceBox,
+  faceThumbUri,
+  type PeopleEntry,
+  type QueueCluster,
+} from "./people";
 
 const CLUSTER: QueueCluster = {
   cluster_id: 3,
@@ -43,5 +51,29 @@ describe("people queue rules", () => {
     vi.resetModules();
     await import("./people");
     expect(vi.mocked).toBeDefined();
+  });
+});
+
+// ---- People Manager (TASK-05-006) ----
+
+const ENTRY: PeopleEntry = {
+  person_id: 5,
+  cluster_id: null,
+  name: "Alice",
+  face_count: 7,
+  representative: CLUSTER,
+};
+
+describe("people manager rules", () => {
+  it("builds the thumb URI from the representative face", () => {
+    expect(entryThumbUri(ENTRY)).toBe("thumb://abc123?v=33");
+    expect(entryThumbUri({ ...ENTRY, representative: null })).toBe("");
+  });
+
+  it("gates renaming on a non-blank changed name", () => {
+    expect(canRename("Alice", "Alicia")).toBe(true);
+    expect(canRename("Alice", "   ")).toBe(false);
+    expect(canRename("Alice", "Alice")).toBe(false);
+    expect(canRename(null, "Ada")).toBe(true);
   });
 });

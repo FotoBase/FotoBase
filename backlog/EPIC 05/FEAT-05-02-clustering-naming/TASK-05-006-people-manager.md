@@ -19,4 +19,4 @@ People Manager dialog listing all people — named and unnamed clusters — with
 - Integration: rename a person → sidecar regions updated; catalog rebuild preserves new name.
 
 ## Acceptance criteria
-- [ ] 05-006: People Manager lists all named people and unnamed clusters with thumbnails/counts.
+- [x] 05-006: People Manager lists all named people and unnamed clusters with thumbnails/counts.

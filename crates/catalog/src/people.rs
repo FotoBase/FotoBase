@@ -408,3 +408,176 @@ impl Catalog {
         Ok((person, confirmed))
     }
 }
+
+// ---- TASK-05-006: the People Manager (PLAN §2 Tools menu, §6 P3 People) ---
+
+/// One People Manager entry: a named person (`person_id` set) or an unnamed
+/// cluster (`cluster_id` set), with a face count and a representative face
+/// for the `thumb://` URI. `representative` is `None` for a person with no
+/// confirmed faces.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct PeopleEntry {
+    pub person_id: Option<i64>,
+    pub cluster_id: Option<i64>,
+    pub name: Option<String>,
+    pub face_count: i64,
+    pub representative: Option<QueueFace>,
+}
+
+impl Catalog {
+    /// Every named person and every unnamed cluster, named entries first
+    /// (name-ordered), then unnamed clusters (cluster-id ordered, the queue
+    /// order). Fully rejected clusters stay listed — their faces are still
+    /// unnamed — but the unnamed queue's entry point covers the actionable
+    /// ones.
+    pub fn people_entries(&self) -> Result<Vec<PeopleEntry>> {
+        let mut entries = Vec::new();
+
+        let mut named = self.conn().prepare_cached(
+            "SELECT p.id, p.name, COUNT(f.id), MIN(f.id) FROM persons p \
+             LEFT JOIN faces f ON f.person_id = p.id \
+             GROUP BY p.id ORDER BY p.name COLLATE NOCASE",
+        )?;
+        let heads = named
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, Option<i64>>(3)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        for (person_id, name, face_count, rep) in heads {
+            entries.push(PeopleEntry {
+                person_id: Some(person_id),
+                cluster_id: None,
+                name: Some(name),
+                face_count,
+                representative: rep.and_then(|id| self.representative_face(id).ok().flatten()),
+            });
+        }
+
+        let mut unnamed = self.conn().prepare_cached(
+            "SELECT c.id, \
+             COALESCE(SUM(CASE WHEN f.rejected = 0 THEN 1 ELSE 0 END), 0), \
+             MIN(CASE WHEN f.rejected = 0 THEN f.id END), MIN(f.id) \
+             FROM face_clusters c \
+             JOIN faces f ON f.cluster = c.id \
+             WHERE f.person_id IS NULL \
+             GROUP BY c.id ORDER BY c.id",
+        )?;
+        let heads = unnamed
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, Option<i64>>(2)?,
+                    r.get::<_, i64>(3)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        for (cluster_id, face_count, actionable, any) in heads {
+            let rep = actionable.or(Some(any));
+            entries.push(PeopleEntry {
+                person_id: None,
+                cluster_id: Some(cluster_id),
+                name: None,
+                face_count,
+                representative: rep.and_then(|id| self.representative_face(id).ok().flatten()),
+            });
+        }
+        Ok(entries)
+    }
+
+    /// The representative face row by face id; `None` when the face is gone.
+    fn representative_face(&self, face_id: i64) -> Result<Option<QueueFace>> {
+        let mut stmt = self.conn().prepare_cached(
+            "SELECT f.id, f.file_id, f.x, f.y, f.width, f.height, fi.hash \
+             FROM faces f JOIN files fi ON fi.id = f.file_id WHERE f.id = ?1",
+        )?;
+        Ok(stmt
+            .query_row([face_id], |r| {
+                Ok(QueueFace {
+                    face_id: r.get(0)?,
+                    file_id: r.get(1)?,
+                    x: r.get(2)?,
+                    y: r.get(3)?,
+                    width: r.get(4)?,
+                    height: r.get(5)?,
+                    hash: r.get(6)?,
+                })
+            })
+            .optional()?)
+    }
+
+    /// Rename a person: the name lands in every confirmed face's sidecar
+    /// `mwg-rs:Regions` first (§5 — sidecar first, catalog mirror second,
+    /// one transaction per face so a failure never corrupts a written
+    /// sidecar), then the `persons` row is updated. Sidecars whose
+    /// `Regions` structure we do not recognise are left verbatim — a
+    /// Fotobase write never destroys XMP it does not understand. Refuses a
+    /// blank name, a name another person already uses (case-insensitively)
+    /// and an unknown person id before touching any sidecar.
+    pub fn rename_person(&mut self, person_id: i64, new_name: &str) -> SyncResult<PersonRow> {
+        let new_name = new_name.trim();
+        if new_name.is_empty() {
+            return Err(CatalogError::InvalidQuery("person name is blank".into()).into());
+        }
+        let exists: Option<String> = self
+            .conn()
+            .query_row("SELECT name FROM persons WHERE id = ?1", [person_id], |r| r.get(0))
+            .optional()?;
+        let old_name =
+            exists.ok_or_else(|| CatalogError::InvalidQuery(format!("no person {person_id}")))?;
+        if new_name.eq_ignore_ascii_case(&old_name) {
+            return Ok(PersonRow { id: person_id, name: new_name.to_string() });
+        }
+        let taken: bool = self
+            .conn()
+            .query_row(
+                "SELECT 1 FROM persons WHERE name = ?1 COLLATE NOCASE AND id != ?2",
+                rusqlite::params![new_name, person_id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(false);
+        if taken {
+            return Err(CatalogError::InvalidQuery(format!(
+                "person name {new_name:?} is already in use"
+            ))
+            .into());
+        }
+
+        let faces = {
+            let mut stmt = self.conn().prepare_cached(
+                "SELECT f.id, f.file_id, f.x, f.y, f.width, f.height FROM faces f \
+                 WHERE f.person_id = ?1 ORDER BY f.id",
+            )?;
+            let faces: Vec<_> = stmt
+                .query_map([person_id], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, f32>(2)?,
+                        r.get::<_, f32>(3)?,
+                        r.get::<_, f32>(4)?,
+                        r.get::<_, f32>(5)?,
+                    ))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            faces
+        };
+        for (_, file_id, ..) in &faces {
+            self.mutate_user_data(*file_id, |sc| {
+                sc.rename_face_regions(&old_name, new_name);
+            })?;
+        }
+
+        self.conn().execute(
+            "UPDATE persons SET name = ?1 WHERE id = ?2",
+            rusqlite::params![new_name, person_id],
+        )?;
+        Ok(PersonRow { id: person_id, name: new_name.to_string() })
+    }
+}
