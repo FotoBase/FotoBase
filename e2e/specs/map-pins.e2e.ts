@@ -60,17 +60,16 @@ describe("map pin clustering", () => {
       async () => await $('[data-testid="map-cluster"]').isExisting(),
       { timeoutMsg: "no cluster markers at the world zoom" },
     );
-    // Every photo is inside one of two tight groups, so with the pinned
-    // cluster radius the world view must not show a single pin.
+    // All photos sit in one tight grid, so the world view must show a
+    // single cluster carrying the whole library — the e2e form of the
+    // "counts match photo totals" gate.
     const clusters = await $$('[data-testid="map-cluster"]');
-    expect(clusters.length).toBeGreaterThanOrEqual(1);
-    for (const c of clusters) {
-      expect(Number(await c.getText())).toBeGreaterThan(1);
-    }
+    expect(clusters.length).toBe(1);
+    expect(Number(await clusters[0].getText())).toBe(COUNT);
   });
 
   it("resolves clusters into thumbnail pins on zoom-in", async () => {
-    // Wheel-zoom well past the cluster max zoom, centered on the map.
+    // Wheel-zoom past the cluster max zoom, centered on the cluster.
     for (let i = 0; i < 12; i += 1) {
       await browser.execute(() => {
         const holder = document.querySelector('[data-testid="map-holder"]');

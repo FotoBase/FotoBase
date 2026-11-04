@@ -50,19 +50,19 @@ export function makeLibrary(): Library {
 }
 
 // TASK-06-002: a geotagged library for the map-pin specs. `count` tiny
-// JPEGs, split between two far-apart spots so the world view shows
-// clusters and a zoom-in resolves them. GPS lives in `.xmp` sidecars —
-// the source of truth (PLAN §5) — as plain decimal degrees, which the
-// sidecar reader accepts.
+// JPEGs in one tight cluster around the panel's initial center
+// (map-src.ts MAP_INITIAL_CENTER), so the world view shows a single
+// cluster carrying every photo and a zoom-in resolves it. GPS lives in
+// `.xmp` sidecars — the source of truth (PLAN §5) — as plain decimal
+// degrees, which the sidecar reader accepts.
 export function makeGeotaggedLibrary(count = 40): Library {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fb-e2e-geo-"));
   const jpeg = Buffer.from(TINY_JPEG_BASE64, "base64");
   const checksums: Record<string, string> = {};
   for (let i = 0; i < count; i += 1) {
-    // Half the photos around Berlin, half around Sydney — two clusters.
-    const north = i % 2 === 0;
-    const lat = (north ? 52.5 : -33.9) + (i % 10) * 0.01;
-    const lon = (north ? 13.4 : 151.2) + (i % 10) * 0.01;
+    // One tight grid around central Europe (the panel's initial view).
+    const lat = 25 + (i % 8) * 0.02;
+    const lon = 10 + Math.floor(i / 8) * 0.02;
     const name = `geo_${String(i).padStart(3, "0")}.jpg`;
     fs.writeFileSync(path.join(dir, name), jpeg);
     fs.writeFileSync(
