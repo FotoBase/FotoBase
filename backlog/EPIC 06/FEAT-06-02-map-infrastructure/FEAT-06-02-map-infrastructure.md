@@ -8,7 +8,7 @@
 - 50k-photo geotagged library: clustered pins render and pan/zoom without jank (epic acceptance).
 - Clusters resolve into photo thumbnails as zoom increases, down to individual pins.
 
-- [ ] `06-001` (L) MapLibre GL JS panel + Protomaps PMTiles offline basemap; tile bundling strategy.
+- [x] `06-001` (L) MapLibre GL JS panel + Protomaps PMTiles offline basemap; tile bundling strategy.
 - [ ] `06-002` (M) Pins/clustering: markers cluster at low zoom, resolve to photo thumbnails on zoom-in.
 
 ## Tasks

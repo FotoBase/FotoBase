@@ -51,6 +51,11 @@ thiserror.workspace = true
 # Display-profile watcher (TASK-02-001): the poll loop sleeps on tokio time
 # inside tauri::async_runtime.
 tokio = { version = "1", features = ["rt", "time"] }
+# Offline basemap (TASK-06-001): mmap PMTiles reading only — no HTTP feature,
+# so nothing here can fetch the network.
+pmtiles = { version = "0.26", default-features = false, features = ["mmap-async-tokio"] }
+# Gzip decode of scheme-served tiles (module-level, no tokio dep needed).
+flate2 = "1"
 
 # File associations (TASK-01-025): HKCU\Software\Classes registration.
 [target.'cfg(windows)'.dependencies]

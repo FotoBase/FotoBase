@@ -109,3 +109,41 @@ fn contacts_modules_import_nothing_networky() {
         assert!(!src.contains("TcpStream") && !src.contains("UdpSocket"), "{rel} opens sockets");
     }
 }
+
+// TASK-06-001: the offline basemap (PLAN §4 "MapLibre GL JS + Protomaps
+// PMTiles", ADR-0008 "No silent network fetches, ever"). The map's tile
+// path must add no network dependency and no fetch call — tiles come from
+// the local PMTiles archive through the `basemap://` scheme handler.
+#[test]
+fn no_network_client_in_the_basemap_path() {
+    let basemap_crates: &[&str] = &["fotobase", "fotobase-catalog"];
+    let lock = std::fs::read_to_string(workspace_root().join("Cargo.lock")).unwrap();
+    let reachable = closure(&lock, basemap_crates);
+    let offenders: Vec<_> = BANNED.iter().filter(|b| reachable.contains(**b)).collect();
+    assert!(
+        offenders.is_empty(),
+        "network client crates reachable from the basemap path: {offenders:?}"
+    );
+}
+
+#[test]
+fn basemap_module_fetches_nothing() {
+    let root = workspace_root();
+    let src = std::fs::read_to_string(root.join("app/src-tauri/src/basemap.rs")).unwrap();
+    for banned in BANNED {
+        assert!(!src.contains(banned), "basemap.rs references network client crate {banned}");
+    }
+    assert!(!src.contains("TcpStream") && !src.contains("UdpSocket"), "basemap.rs opens sockets");
+    // The pmtiles dependency must be capability-pinned: no HTTP/S3 backend
+    // feature may be enabled, so the crate itself cannot fetch.
+    let toml = std::fs::read_to_string(root.join("app/src-tauri/Cargo.toml")).unwrap();
+    let line = toml.lines().find(|l| l.trim_start().starts_with("pmtiles")).expect("pmtiles dep");
+    assert!(
+        line.contains("default-features = false"),
+        "pmtiles must be pinned without default features: {line}"
+    );
+    assert!(
+        !line.contains("http-async") && !line.contains("aws"),
+        "pmtiles must not enable network backends: {line}"
+    );
+}

@@ -6,6 +6,10 @@ and picker, switch the top, unstack, originals byte-identical;
 `specs/tray.e2e.ts` (TASK-03-025) — close the window and watching continues,
 a file dropped while hidden still lands in the catalog, quit fully exits.
 
+`specs/map-basemap.e2e.ts` (TASK-06-001) — the map panel opens on the
+bundled offline PMTiles basemap, pans and zooms, and the instrumented
+fetch/XHR stack records zero http(s) requests.
+
 ## Platforms
 
 `tauri-driver` has no macOS support, so the suite runs on Linux (CI, or a Linux

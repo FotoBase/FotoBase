@@ -13,6 +13,8 @@
     "@tanstack/virtual-core": "^3.19.6",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.8.4",
+    "maplibre-gl": "^4.7.1",
+    "pmtiles": "^4.5.0",
     "svelte": "^5.0.0"
   },
   "devDependencies": {
