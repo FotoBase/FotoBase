@@ -69,23 +69,31 @@ describe("map pin clustering", () => {
   });
 
   it("resolves clusters into thumbnail pins on zoom-in", async () => {
-    // Wheel-zoom past the cluster max zoom, centered on the cluster: many
-    // small steps, since each wheel event only bumps the zoom a fraction
-    // of a level (initial 1.4 -> max 12 needs ~10 levels).
-    for (let i = 0; i < 45; i += 1) {
+    // Zoom in past the cluster max zoom. Wheel ticks only bump the zoom a
+    // fraction of a level, so drive both wheel events and the keyboard
+    // handler's full-level zoom ("+") until the pins resolve.
+    for (let i = 0; i < 30; i += 1) {
       await browser.execute(() => {
         const holder = document.querySelector('[data-testid="map-holder"]');
         if (!holder) return;
+        // Zoom anchored on the cluster itself (wheel zoom keeps the cursor
+        // point fixed — zooming at a fixed offset would drift off it).
+        const cluster = document.querySelector('[data-testid="map-cluster"]');
+        const rect = (cluster ?? holder).getBoundingClientRect();
         holder.dispatchEvent(
           new WheelEvent("wheel", {
             deltaY: -240,
-            clientX: 300,
-            clientY: 200,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2,
             bubbles: true,
           }),
         );
+        holder.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "+", bubbles: true }),
+        );
       });
-      await browser.pause(120);
+      await browser.pause(150);
+      if (await $('[data-testid="map-pin"] img').isExisting()) break;
     }
     await browser.waitUntil(
       async () => await $('[data-testid="map-pin"] img').isExisting(),
