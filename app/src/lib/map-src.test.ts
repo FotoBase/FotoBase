@@ -28,6 +28,7 @@ import {
   markerModel,
   photoClusterSource,
   pinThumbUri,
+  pinLayers,
   pinsToGeoJson,
   type MapPin,
 } from "./map-src";
@@ -225,6 +226,22 @@ describe("markerModel", () => {
       10,
     );
     expect(model).toEqual([]);
+  });
+});
+
+describe("pinLayers", () => {
+  it("keeps the photos source loaded with transparent circles only", () => {
+    const layers = pinLayers();
+    expect(layers.map((l) => l.source)).toEqual(["photos", "photos"]);
+    for (const l of layers) {
+      expect(l.paint["circle-opacity"]).toBe(0);
+      expect(JSON.stringify(l)).not.toMatch(/text-field|icon-image/);
+    }
+    // Together the two filters cover every feature (clusters + points).
+    expect(layers.map((l) => l.filter)).toEqual([
+      ["has", "point_count"],
+      ["!", ["has", "point_count"]],
+    ]);
   });
 });
 

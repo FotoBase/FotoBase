@@ -22,6 +22,7 @@
     mapStyle,
     markerModel,
     photoClusterSource,
+    pinLayers,
     type BasemapAvailability,
     type MarkerModel,
   } from "./map-src";
@@ -91,6 +92,9 @@
       if (cancelled || !map) return;
       if (pins && pins.length > 0) {
         map.addSource("photos", photoClusterSource(pins));
+        // Reference the source from layers so MapLibre actually loads its
+        // data (querySourceFeatures is only reliable for used sources).
+        for (const layer of pinLayers()) map.addLayer(layer as never);
         const draw = (): void => {
           if (!map) return;
           for (const m of markers) m.remove();

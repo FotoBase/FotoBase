@@ -246,3 +246,28 @@ export function markerModel(
   }
   return out;
 }
+
+/// Layers that keep the `photos` source loaded and rendered. The visible
+/// markers are DOM elements (cluster counts need text, and symbol text
+/// would require a glyphs URL the no-network rule forbids), but MapLibre
+/// only guarantees data/tile loads for sources its layers reference —
+/// without these the marker layer's `querySourceFeatures` can come back
+/// empty. The circles are fully transparent; the DOM markers paint on top.
+export function pinLayers() {
+  return [
+    {
+      id: "photo-clusters",
+      type: "circle" as const,
+      source: "photos",
+      filter: ["has", "point_count"],
+      paint: { "circle-opacity": 0 },
+    },
+    {
+      id: "photo-points",
+      type: "circle" as const,
+      source: "photos",
+      filter: ["!", ["has", "point_count"]],
+      paint: { "circle-opacity": 0 },
+    },
+  ];
+}

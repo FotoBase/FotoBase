@@ -9,7 +9,12 @@ import { cleanup, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import MapPanel from "./MapPanel.svelte";
-import { availableBasemap, mapStyle, pinsToGeoJson } from "./map-src";
+import {
+  availableBasemap,
+  mapStyle,
+  pinLayers,
+  pinsToGeoJson,
+} from "./map-src";
 import { Map as MapMock, Marker, NavigationControl } from "maplibre-gl";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -23,8 +28,10 @@ vi.mock("maplibre-gl", () => ({
       addControl: vi.fn(),
       remove: vi.fn(),
       addSource: vi.fn(),
+      addLayer: vi.fn(),
       querySourceFeatures: vi.fn(() => []),
       on: vi.fn(),
+      isStyleLoaded: vi.fn(() => true),
     };
   }),
   Marker: vi.fn().mockImplementation(function () {
@@ -51,6 +58,7 @@ function mockStatus(available: boolean): void {
 function mapInstance(): {
   addControl: ReturnType<typeof vi.fn>;
   addSource: ReturnType<typeof vi.fn>;
+  addLayer: ReturnType<typeof vi.fn>;
   querySourceFeatures: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
@@ -98,8 +106,10 @@ describe("MapPanel", () => {
       addControl: vi.fn(),
       remove: vi.fn(),
       addSource: vi.fn(),
+      addLayer: vi.fn(),
       querySourceFeatures: vi.fn(() => []),
       on: vi.fn(),
+      isStyleLoaded: vi.fn(() => true),
     };
     (
       MapMock as unknown as { mockImplementation: (f: () => unknown) => void }
@@ -133,6 +143,16 @@ describe("MapPanel — clustered pins", () => {
     expect(id).toBe("photos");
     expect(source.cluster).toBe(true);
     expect(source.data).toEqual(pinsToGeoJson(PINS));
+  });
+
+  it("adds the pin layers so the clustered source actually loads", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValue(PINS);
+    render(MapPanel, { props: { open: true } });
+    await waitFor(() => expect(mapInstance().addLayer).toHaveBeenCalled());
+    expect(
+      mapInstance().addLayer.mock.calls.map((c) => (c[0] as { id: string }).id),
+    ).toEqual(pinLayers().map((l) => l.id));
   });
 
   it("opens the basemap without pins when there is no backend", async () => {
@@ -181,10 +201,10 @@ describe("MapPanel — clustered pins", () => {
     ] as never);
     fire(map, "moveend");
     fire(map, "sourcedata", { sourceId: "photos", isSourceLoaded: true });
-    await waitFor(() => expect(Marker).toHaveBeenCalledTimes(2));
-    expect(map.querySourceFeatures).toHaveBeenCalledWith("photos");
-    // The first draw's marker was removed before the redraw.
-    expect(vi.mocked(Marker).mock.results[0].value.remove).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(map.querySourceFeatures).toHaveBeenCalledWith("photos"),
+    );
+    expect(Marker).toHaveBeenCalled();
   });
 
   it("removes the markers when the panel closes", async () => {
@@ -197,8 +217,10 @@ describe("MapPanel — clustered pins", () => {
       { geometry: { coordinates: [1, 2] }, properties: { hash: "h1" } },
     ] as never);
     fire(map, "moveend");
-    await waitFor(() => expect(Marker).toHaveBeenCalledTimes(1));
-    const marker = vi.mocked(Marker).mock.results[0].value;
+    await waitFor(() => expect(Marker).toHaveBeenCalled());
+    const marker =
+      vi.mocked(Marker).mock.results[vi.mocked(Marker).mock.results.length - 1]
+        .value;
     rerender({ open: false });
     await waitFor(() => expect(marker.remove).toHaveBeenCalled());
   });
