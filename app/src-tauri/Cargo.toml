@@ -79,6 +79,15 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 sha2 = "0.10"
 tempfile = "3"
 tokio = { version = "1", features = ["rt", "macros"] }
+# Resource-cap tests (TASK-05-012): peak RSS via getrusage.
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"
+# Resource-cap tests (TASK-05-012): peak working set on Windows.
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+] }
 
 [lints]
 workspace = true
