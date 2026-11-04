@@ -292,7 +292,8 @@ fn migrating_an_older_catalog_makes_the_next_rebuild_reread_sidecars() {
     let v9 = fotobase_catalog::MIGRATIONS[8];
     conn.execute_batch(v9.split_once("DROP TABLE files_fts;").unwrap().1).unwrap();
     conn.execute_batch(
-        "DROP TABLE embeddings;
+        "DROP TABLE person_contacts;
+         DROP TABLE embeddings;
          DROP TABLE faces;
          DROP TABLE face_clusters;
          DROP TABLE persons;
