@@ -1,6 +1,6 @@
 # task: implement map pin clustering
 
-**Feature:** [FEAT-06-02-map-infrastructure](FEAT-06-02-map-infrastructure.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** todo
+**Feature:** [FEAT-06-02-map-infrastructure](FEAT-06-02-map-infrastructure.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** in progress (2026-11-04)
 
 ## Description
 Marker clustering: pins cluster at low zoom and resolve into photo thumbnails as zoom increases, down to individual pins — smooth on a 50k-photo library (PLAN §2D Map view; §6 P3 Places epic acceptance).
