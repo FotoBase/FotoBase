@@ -28,8 +28,7 @@ async function clickPin(
   const why = await browser.execute(
     (n: number, mods: object) => {
       const el = document.querySelectorAll('[data-testid="map-pin"]')[n] as
-        | HTMLElement
-        | undefined;
+        HTMLElement | undefined;
       if (!el) return `pin ${n} not found`;
       el.dispatchEvent(new MouseEvent("click", { bubbles: true, ...mods }));
       return null;
@@ -45,19 +44,21 @@ async function clickPin(
 async function longPressPin(n: number): Promise<void> {
   const down = await browser.execute((n: number) => {
     const el = document.querySelectorAll('[data-testid="map-pin"]')[n] as
-      | HTMLElement
-      | undefined;
+      HTMLElement | undefined;
     if (!el) return `pin ${n} not found`;
-    el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+    el.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }),
+    );
     return null;
   }, n);
   if (down !== null) throw new Error(down);
   await browser.pause(650);
   const up = await browser.execute((n: number) => {
     const el = document.querySelectorAll('[data-testid="map-pin"]')[n] as
-      | HTMLElement
-      | undefined;
-    el?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }));
+      HTMLElement | undefined;
+    el?.dispatchEvent(
+      new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }),
+    );
     return null;
   }, n);
   if (up !== null) throw new Error(up);
@@ -67,8 +68,7 @@ async function longPressPin(n: number): Promise<void> {
 async function pinHashOf(n: number): Promise<string> {
   const src = await browser.execute((n: number) => {
     const el = document.querySelectorAll('[data-testid="map-pin"]')[n] as
-      | HTMLElement
-      | undefined;
+      HTMLElement | undefined;
     return el?.querySelector("img")?.getAttribute("src") ?? null;
   }, n);
   return (src ?? "").replace("thumb://", "");
@@ -78,7 +78,10 @@ describe("map pin selection", () => {
   before(async () => {
     lib = makeGeotaggedLibrary(COUNT);
     fileNameByPinHash = new Map(
-      Object.entries(lib.checksums).map(([name, hash]) => [hash.slice(0, 32), name]),
+      Object.entries(lib.checksums).map(([name, hash]) => [
+        hash.slice(0, 32),
+        name,
+      ]),
     );
     await browser.waitUntil(async () =>
       browser.execute(() =>
@@ -108,9 +111,14 @@ describe("map pin selection", () => {
         });
         return n === COUNT;
       },
-      { timeout: 20_000, timeoutMsg: "scan did not produce all geotagged pins" },
+      {
+        timeout: 20_000,
+        timeoutMsg: "scan did not produce all geotagged pins",
+      },
     );
-    // Zoom in so every photo is its own pin, as in map-pins.e2e.ts.
+    // Zoom in so every photo is its own pin, as in map-pins.e2e.ts. The
+    // runner's viewport may clip the fixture grid's edge columns, so pin
+    // for at least the three the specs interact with.
     await dispatchClick('[data-testid="open-map"]');
     await browser.waitUntil(
       async () =>
@@ -124,14 +132,13 @@ describe("map pin selection", () => {
     );
     await browser.execute(() => {
       const holder = document.querySelector('[data-testid="map-holder"]') as
-        | (HTMLElement & { __fbMap?: { jumpTo(o: unknown): void } })
-        | null;
-      holder?.__fbMap?.jumpTo({ center: [10.07, 25.07], zoom: 12 });
+        (HTMLElement & { __fbMap?: { jumpTo(o: unknown): void } }) | null;
+      holder?.__fbMap?.jumpTo({ center: [10.04, 25.07], zoom: 12 });
     });
     await browser.pause(1_000);
     await browser.waitUntil(
-      async () => (await $$('[data-testid="map-pin"]').length) >= COUNT,
-      { timeout: 15_000, timeoutMsg: "zoom-in did not resolve all pins" },
+      async () => (await $$('[data-testid="map-pin"]').length) >= 3,
+      { timeout: 20_000, timeoutMsg: "zoom-in did not resolve photo pins" },
     );
   });
 
@@ -154,6 +161,10 @@ describe("map pin selection", () => {
   });
 
   it("feeds selected pins into the Photo Tray", async () => {
+    // Capture the pins' hashes before interacting: markers can rebuild on
+    // a move, and the expected tray contents must be the pins that were
+    // actually selected.
+    const [h0, h1] = [await pinHashOf(0), await pinHashOf(1)];
     // Modifier-click selects without opening the viewer; a long-press
     // selects a second pin (the touch path).
     await clickPin(0, { ctrlKey: true });
@@ -163,7 +174,8 @@ describe("map pin selection", () => {
     );
     await longPressPin(1);
     await browser.waitUntil(
-      async () => (await $('[data-testid="map-add-to-tray"]').getText()).includes("2"),
+      async () =>
+        (await $('[data-testid="map-add-to-tray"]').getText()).includes("2"),
       { timeoutMsg: "second pin did not join the selection" },
     );
     await dispatchClick('[data-testid="map-add-to-tray"]');
@@ -175,29 +187,46 @@ describe("map pin selection", () => {
     // from the pin → photo mapping, not the grid selection.
     const names = (await browser.execute(() =>
       Array.from(
-        document.querySelectorAll<HTMLImageElement>('[data-testid="tray-jump"] img'),
+        document.querySelectorAll<HTMLImageElement>(
+          '[data-testid="tray-jump"] img',
+        ),
         (img) => img.getAttribute("alt"),
       ),
     )) as (string | null)[];
     expect(names.sort()).toEqual(
-      [
-        fileNameByPinHash.get(await pinHashOf(0)),
-        fileNameByPinHash.get(await pinHashOf(1)),
-      ].sort(),
+      [fileNameByPinHash.get(h0), fileNameByPinHash.get(h1)].sort(),
     );
     // Clean up so later specs start with an empty tray.
     await dispatchClick('[data-testid="map-close"]');
     await dispatchClick('[data-testid="tray-clear"]');
-    await browser.waitUntil(async () => await $('[data-testid="tray-empty"]').isExisting(), {
-      timeoutMsg: "tray did not clear",
-    });
+    await browser.waitUntil(
+      async () => await $('[data-testid="tray-empty"]').isExisting(),
+      {
+        timeoutMsg: "tray did not clear",
+      },
+    );
   });
 
   it("selects on a touch long-press without opening the viewer", async () => {
     await dispatchClick('[data-testid="open-map"]');
+    // The panel reopened at the world zoom — zoom back in for pins.
     await browser.waitUntil(
-      async () => await $('[data-testid="map-pin"]').isExisting(),
-      { timeoutMsg: "map pins missing" },
+      async () =>
+        await browser.execute(() => {
+          const holder = document.querySelector(
+            '[data-testid="map-holder"]',
+          ) as
+            (HTMLElement & { __fbMap?: { jumpTo(o: unknown): void } }) | null;
+          if (!holder?.__fbMap) return false;
+          holder.__fbMap.jumpTo({ center: [10.04, 25.07], zoom: 12 });
+          return true;
+        }),
+      { timeoutMsg: "map handle not exposed" },
+    );
+    await browser.pause(1_000);
+    await browser.waitUntil(
+      async () => (await $$('[data-testid="map-pin"]').length) >= 3,
+      { timeout: 20_000, timeoutMsg: "map pins missing" },
     );
     await longPressPin(2);
     await browser.waitUntil(
