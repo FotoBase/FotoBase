@@ -457,6 +457,41 @@ fn map_pins(state: tauri::State<'_, AppState>) -> Result<Vec<fotobase_catalog::M
     with_catalog(&state, |cat| cat.geotagged_pins())
 }
 
+/// Geotagged pins of the current view (TASK-06-003): the same filter
+/// arguments the grid's `query_files` command takes, applied to the GPS set
+/// so the map always mirrors the grid's filtered view. Hashes and
+/// coordinates only — no image bytes over IPC (§3 rule 3).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+fn map_pins_filtered(
+    text: Option<String>,
+    folders: Option<Vec<i64>>,
+    album: Option<i64>,
+    starred: Option<bool>,
+    videos_only: Option<bool>,
+    has_faces: Option<bool>,
+    taken_since: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::MapPin>, String> {
+    let min_rating = if starred == Some(true) {
+        Some(rating::starred_threshold(ratings_enabled(&state)?))
+    } else {
+        None
+    };
+    let query = fotobase_catalog::FileQuery {
+        text,
+        folders,
+        album,
+        min_rating,
+        videos_only: videos_only == Some(true),
+        has_faces: has_faces == Some(true),
+        taken_since,
+        stack: None,
+        sort: Default::default(),
+    };
+    with_catalog(&state, |cat| cat.geotagged_pins_filtered(&query))
+}
+
 fn ratings_enabled(state: &AppState) -> Result<bool, String> {
     let guard = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
     Ok(guard.ratings_enabled)
@@ -2830,6 +2865,7 @@ pub fn run() {
             list_files,
             query_files,
             map_pins,
+            map_pins_filtered,
             set_rating,
             get_caption,
             set_caption,

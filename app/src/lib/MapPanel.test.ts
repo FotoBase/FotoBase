@@ -29,6 +29,7 @@ vi.mock("maplibre-gl", () => ({
       remove: vi.fn(),
       addSource: vi.fn(),
       addLayer: vi.fn(),
+      getSource: vi.fn().mockImplementation((() => { const src = { setData: vi.fn() }; return () => src; })()),
       querySourceFeatures: vi.fn(() => []),
       on: vi.fn(),
       once: vi.fn(),
@@ -60,6 +61,7 @@ function mapInstance(): {
   addControl: ReturnType<typeof vi.fn>;
   addSource: ReturnType<typeof vi.fn>;
   addLayer: ReturnType<typeof vi.fn>;
+  getSource: ReturnType<typeof vi.fn>;
   querySourceFeatures: ReturnType<typeof vi.fn>;
   once: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
@@ -109,6 +111,7 @@ describe("MapPanel", () => {
       remove: vi.fn(),
       addSource: vi.fn(),
       addLayer: vi.fn(),
+      getSource: vi.fn().mockImplementation((() => { const src = { setData: vi.fn() }; return () => src; })()),
       querySourceFeatures: vi.fn(() => []),
       on: vi.fn(),
       once: vi.fn(),
@@ -161,6 +164,7 @@ describe("MapPanel — clustered pins", () => {
         remove: vi.fn(),
         addSource: vi.fn(),
         addLayer: vi.fn(),
+        getSource: vi.fn().mockImplementation((() => { const src = { setData: vi.fn() }; return () => src; })()),
         querySourceFeatures: vi.fn(() => []),
         on: vi.fn(),
         once: vi.fn(),
@@ -171,9 +175,11 @@ describe("MapPanel — clustered pins", () => {
     await waitFor(() => expect(MapMock).toHaveBeenCalled());
     const map = mapInstance();
     expect(map.addSource).not.toHaveBeenCalled();
-    const load = map.once.mock.calls.find((c) => c[0] === "load");
-    expect(load).toBeTruthy();
-    (load![1] as () => void)();
+    await waitFor(() => {
+      const load = map.once.mock.calls.find((c) => c[0] === "load");
+      expect(load).toBeTruthy();
+      (load![1] as () => void)();
+    });
     expect(map.addSource).toHaveBeenCalledWith(
       "photos",
       expect.objectContaining({ cluster: true }),
@@ -204,7 +210,7 @@ describe("MapPanel — clustered pins", () => {
     render(MapPanel, { props: { open: true } });
     await waitFor(() => expect(MapMock).toHaveBeenCalled());
     const map = mapInstance();
-    expect(map.on).toHaveBeenCalled();
+    await waitFor(() => expect(map.on).toHaveBeenCalled());
     map.querySourceFeatures.mockReturnValue([
       {
         geometry: { coordinates: [13.4, 52.5] },
@@ -230,7 +236,7 @@ describe("MapPanel — clustered pins", () => {
     render(MapPanel, { props: { open: true } });
     await waitFor(() => expect(MapMock).toHaveBeenCalled());
     const map = mapInstance();
-    expect(map.on).toHaveBeenCalled();
+    await waitFor(() => expect(map.on).toHaveBeenCalled());
     map.querySourceFeatures.mockReturnValue([
       { geometry: { coordinates: [1, 2] }, properties: { hash: "h1" } },
     ] as never);
@@ -248,6 +254,7 @@ describe("MapPanel — clustered pins", () => {
     const { rerender } = render(MapPanel, { props: { open: true } });
     await waitFor(() => expect(MapMock).toHaveBeenCalled());
     const map = mapInstance();
+    await waitFor(() => expect(map.on).toHaveBeenCalled());
     map.querySourceFeatures.mockReturnValue([
       { geometry: { coordinates: [1, 2] }, properties: { hash: "h1" } },
     ] as never);
@@ -258,5 +265,75 @@ describe("MapPanel — clustered pins", () => {
         .value;
     rerender({ open: false });
     await waitFor(() => expect(marker.remove).toHaveBeenCalled());
+  });
+});
+
+// TASK-06-003: the map's pins mirror the grid's filtered view. The panel
+// queries the filtered pin set and re-queries (debounced) when the active
+// search/filter state changes, updating the clustered source in place.
+describe("MapPanel — filtered pins", () => {
+  beforeEach(() => {
+    mockStatus(true);
+  });
+
+  const view = {
+    folders: [1],
+    album: null,
+    query: "berlin",
+    starred: true,
+    videosOnly: false,
+    hasFaces: false,
+    takenSince: "2024-01-01",
+    sort: "path" as const,
+  };
+
+  it("queries the filtered pin set for the current view", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValue([PINS[0]]);
+    render(MapPanel, { props: { open: true, view } });
+    await waitFor(() => expect(mapInstance().addSource).toHaveBeenCalled());
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("map_pins_filtered", {
+      text: "berlin",
+      folders: [1],
+      album: null,
+      starred: true,
+      videosOnly: false,
+      hasFaces: false,
+      takenSince: "2024-01-01",
+    });
+  });
+
+  it("re-queries when the view changes and updates the source in place", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValue([PINS[0]]);
+    const { rerender } = render(MapPanel, { props: { open: true, view } });
+    await waitFor(() => expect(mapInstance().addSource).toHaveBeenCalled());
+    const map = mapInstance();
+    const calls = vi.mocked(invoke).mock.calls.length;
+
+    vi.mocked(invoke).mockResolvedValue([PINS[1]]);
+    rerender({ open: true, view: { ...view, query: "sydney" } });
+    await waitFor(() =>
+      expect(vi.mocked(invoke).mock.calls.length).toBeGreaterThan(calls),
+    );
+    await waitFor(() => {
+      expect(map.getSource).toHaveBeenCalledWith("photos");
+      expect(map.getSource("photos").setData).toHaveBeenCalledWith(
+        pinsToGeoJson([PINS[1]]),
+      );
+    });
+  });
+
+  it("debounces bursts of view changes into one re-query", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValue(PINS);
+    const { rerender } = render(MapPanel, { props: { open: true, view } });
+    await waitFor(() => expect(mapInstance().addSource).toHaveBeenCalled());
+    vi.mocked(invoke).mockClear();
+    for (const q of ["a", "ab", "abc", "abcd"]) {
+      rerender({ open: true, view: { ...view, query: q } });
+    }
+    await new Promise((r) => setTimeout(r, 450));
+    expect(vi.mocked(invoke).mock.calls.length).toBe(1);
   });
 });

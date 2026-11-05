@@ -7,7 +7,7 @@
 - Library-wide map shows a pin per geotagged photo; current search/filter state applies to the map live.
 - Pin click opens the viewer; multi-pin selection feeds the Photo Tray; interactions work with touch and mouse.
 
-- [ ] `06-003` (M) Library-wide map view: pin per geotagged photo; current search/filters apply to the map.
+- [x] `06-003` (M) Library-wide map view: pin per geotagged photo; current search/filters apply to the map.
 - [ ] `06-004` (M) Click pin → open viewer; select pins → feed Photo Tray.
 
 ## Tasks

@@ -11,6 +11,7 @@
 -->
 <script lang="ts">
   import { t } from "./i18n.svelte.js";
+  import { debounce } from "./grid";
   import {
     MAP_INITIAL_CENTER,
     MAP_INITIAL_ZOOM,
@@ -18,16 +19,21 @@
     MAP_MIN_ZOOM,
     MARKER_LIMIT,
     availableBasemap,
-    fetchPins,
+    fetchFilteredPins,
     mapStyle,
     markerModel,
     photoClusterSource,
     pinLayers,
+    pinsToGeoJson,
     type BasemapAvailability,
     type MarkerModel,
   } from "./map-src";
+  import type { LibraryView } from "./search";
 
-  let { open = $bindable(false) }: { open?: boolean } = $props();
+  let {
+    open = $bindable(false),
+    view = null,
+  }: { open?: boolean; view?: LibraryView | null } = $props();
 
   let status = $state<BasemapAvailability | null>(null);
   let checked = $state(false);
@@ -38,6 +44,30 @@
   /// move/data change (clustering re-runs server-side in MapLibre's
   /// engine; the DOM layer only mirrors what is on screen).
   let markers: import("maplibre-gl").Marker[] = [];
+  /// The clustered source once added; view changes update it in place
+  /// instead of rebuilding source + layers.
+  let source: import("maplibre-gl").GeoJSONSource | null = null;
+  /// True once the map exists — the view-change effect waits for it.
+  let ready = $state(false);
+  /// The lazily-imported Marker constructor, captured by the mount effect
+  /// so draw() (called from the debounced reload) can build markers.
+  let markerCtor: (typeof import("maplibre-gl"))["Marker"] | null = null;
+  /// The view the pending debounced re-query uses (read at fire time).
+  let pendingView: LibraryView | null = null;
+
+  const reloadPins = debounce(() => {
+    const v = pendingView ?? undefined;
+    void (async () => {
+      const pins = await fetchFilteredPins(v);
+      if (!map || !pins) return;
+      if (source) {
+        source.setData(pinsToGeoJson(pins));
+        draw();
+      } else {
+        addPinSource(pins);
+      }
+    })();
+  }, 250);
 
   function markerElement(model: MarkerModel): HTMLElement {
     const el = document.createElement("div");
@@ -74,6 +104,7 @@
     void (async () => {
       const { Map, Marker, NavigationControl } = await import("maplibre-gl");
       if (cancelled || !container) return;
+      markerCtor = Marker;
       map = new Map({
         container,
         style: mapStyle(1) as Parameters<typeof Map.prototype.setStyle>[0],
@@ -91,49 +122,68 @@
       // reach MapLibre under WebKitWebDriver. Not used by the app itself.
       (container as unknown as { __fbMap?: unknown }).__fbMap = map;
       // Pins arrive after the map exists; a failed fetch (browser dev)
-      // leaves the basemap without them. The style may still be loading —
-      // addSource/addLayer throw before it is — so defer until it is.
-      const pins = await fetchPins();
-      if (cancelled || !map) return;
-      if (pins && pins.length > 0) {
-        const usePins = (): void => {
-          if (!map) return;
-          map.addSource("photos", photoClusterSource(pins));
-          // Reference the source from layers so MapLibre actually loads
-          // its data (querySourceFeatures is only reliable for used
-          // sources).
-          for (const layer of pinLayers()) map.addLayer(layer as never);
-          const draw = (): void => {
-            if (!map) return;
-            for (const m of markers) m.remove();
-            markers = [];
-            for (const model of markerModel(
-              map.querySourceFeatures("photos") as unknown as Parameters<typeof markerModel>[0],
-              MARKER_LIMIT,
-            )) {
-              markers.push(
-                new Marker({ element: markerElement(model) }).setLngLat([model.lon, model.lat]).addTo(map),
-              );
-            }
-          };
-          map.on("moveend", draw);
-          map.on("sourcedata", (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
-            if (e.sourceId === "photos" && e.isSourceLoaded) draw();
-          });
-          draw();
-        };
-        if (map.isStyleLoaded()) usePins();
-        else map.once("load", usePins);
-      }
+      // leaves the basemap without them. addSource/addLayer throw before
+      // the style is loaded — addPinSource defers until it is.
+      pendingView = view;
+      reloadPins();
+      ready = true;
     })();
     return () => {
       cancelled = true;
+      ready = false;
+      source = null;
       for (const m of markers) m.remove();
       markers = [];
       map?.remove();
       map = null;
     };
   });
+
+  // Live updates (TASK-06-003): a search/filter change re-queries the
+  // filtered pin set, debounced so typing does not spam IPC. Fires once the
+  // map is ready; the mount path above already loaded the initial view.
+  $effect(() => {
+    if (!ready) return;
+    pendingView = view;
+    reloadPins();
+  });
+
+  /// Rebuild the DOM markers from the queried (on-screen) features.
+  function draw(): void {
+    if (!map) return;
+    for (const m of markers) m.remove();
+    markers = [];
+    for (const model of markerModel(
+      map.querySourceFeatures("photos") as unknown as Parameters<typeof markerModel>[0],
+      MARKER_LIMIT,
+    )) {
+      if (!markerCtor) return;
+      markers.push(
+        new markerCtor({ element: markerElement(model) }).setLngLat([model.lon, model.lat]).addTo(map),
+      );
+    }
+  }
+
+  /// Add the clustered source + layers for `pins`, deferring until the
+  /// style has loaded (addSource throws before that).
+  function addPinSource(pins: import("./map-src").MapPin[]): void {
+    if (!map) return;
+    const usePins = (): void => {
+      if (!map) return;
+      map.addSource("photos", photoClusterSource(pins));
+      source = map.getSource("photos") as import("maplibre-gl").GeoJSONSource;
+      // Reference the source from layers so MapLibre actually loads its
+      // data (querySourceFeatures is only reliable for used sources).
+      for (const layer of pinLayers()) map.addLayer(layer as never);
+      map.on("moveend", draw);
+      map.on("sourcedata", (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
+        if (e.sourceId === "photos" && e.isSourceLoaded) draw();
+      });
+      draw();
+    };
+    if (map.isStyleLoaded()) usePins();
+    else map.once("load", usePins);
+  }
 </script>
 
 {#if open}

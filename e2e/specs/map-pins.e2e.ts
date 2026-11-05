@@ -117,6 +117,64 @@ describe("map pin clustering", () => {
     expect(src?.startsWith("thumb://")).toBe(true);
   });
 
+  it("applies the current search to the pins and updates live", async () => {
+    // TASK-06-003: the map's pins mirror the grid's filtered view. Close
+    // the panel, narrow the library with the search bar, reopen.
+    await dispatchClick('[data-testid="map-close"]');
+    await browser.waitUntil(
+      async () => !(await $('[data-testid="map-backdrop"]').isExisting()),
+      { timeoutMsg: "map panel did not close" },
+    );
+    const input = await $('[data-testid="search-input"]');
+    await input.setValue("001");
+    // geo_001.jpg is the only fixture file matching the "001" token.
+    await browser.waitUntil(
+      async () => (await $$('[data-testid="grid-cell"]').length) === 1,
+      {
+        timeout: 20_000,
+        timeoutMsg: "search did not narrow the grid to one photo",
+      },
+    );
+    await dispatchClick('[data-testid="open-map"]');
+    await browser.waitUntil(
+      async () => await $('[data-testid="map-pin"]').isExisting(),
+      { timeoutMsg: "filtered map shows no pin" },
+    );
+    const pins = await $$('[data-testid="map-pin"]');
+    expect(pins.length).toBe(1);
+    // The pin's thumbnail is keyed by the content hash (§3 rule 3).
+    const src = await pins[0].$("img").getAttribute("src");
+    expect(src).toBe(`thumb://${lib.checksums["geo_001.jpg"]}`);
+
+    // Live update: widening the search re-pins the map (debounced).
+    await dispatchClick('[data-testid="map-close"]');
+    await browser.waitUntil(
+      async () => !(await $('[data-testid="map-backdrop"]').isExisting()),
+      { timeoutMsg: "map panel did not close" },
+    );
+    await input.setValue("00");
+    await browser.waitUntil(
+      async () => (await $$('[data-testid="grid-cell"]').length) === 10,
+      {
+        timeout: 20_000,
+        timeoutMsg: "widened search did not match ten photos",
+      },
+    );
+    await dispatchClick('[data-testid="open-map"]');
+    // Ten photos sit in two adjacent grid columns → one cluster at the
+    // world zoom, carrying exactly the filtered count.
+    await browser.waitUntil(
+      async () => {
+        const clusters = await $$('[data-testid="map-cluster"]');
+        return (
+          (await clusters.length) === 1 &&
+          (await clusters[0].getText()) === "10"
+        );
+      },
+      { timeout: 20_000, timeoutMsg: "map pins did not follow the search" },
+    );
+  });
+
   it("closes the panel again", async () => {
     await dispatchClick('[data-testid="map-close"]');
     await browser.waitUntil(
