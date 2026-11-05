@@ -52,7 +52,7 @@
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadPhotoInfo } from "./lib/info-pane";
   import { resetFaces } from "./lib/people";
-  import { queryLibraryItems } from "./lib/search";
+  import { queryLibraryItems, type LibraryView } from "./lib/search";
   import { findFileByPath, loadSettings, saveSettings, takeOpenFiles, type Settings } from "./lib/settings";
   import { captionModeFromSettings, settingsWithCaptionMode } from "./lib/captions";
   import {
@@ -87,6 +87,19 @@
   let peopleOpen = $state(false);
   // Offline map panel (TASK-06-001): the bundled world basemap.
   let mapOpen = $state(false);
+  // The map's pins mirror the grid's filtered view (TASK-06-003): the same
+  // LibraryView the grid query sends, so a search/filter change re-pins
+  // the map live.
+  let mapView = $derived<LibraryView>({
+    folders: selectedAlbum !== null ? [] : selectedFolders,
+    album: selectedAlbum,
+    query: gridState.searchQuery,
+    starred: gridState.starredOnly,
+    videosOnly: gridState.videosOnly,
+    hasFaces: gridState.facesOnly,
+    takenSince: cutoffDate(gridState.dateStep),
+    sort: gridState.sort,
+  });
   let peopleManagerOpen = $state(false);
   let stackPicker = $state<{ open: boolean; stackId: string; x: number; y: number }>({
     open: false,
@@ -921,7 +934,7 @@
       peopleOpen = true;
     }}
   />
-  <MapPanel bind:open={mapOpen} />
+  <MapPanel bind:open={mapOpen} view={mapView} />
   <StackPicker
     bind:open={stackPicker.open}
     stackId={stackPicker.stackId}

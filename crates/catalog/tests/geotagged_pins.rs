@@ -4,7 +4,12 @@
 //! frontend can build `thumb://` URIs. Photos without GPS, hidden photos,
 //! and photos inside hidden folders never appear.
 
-use fotobase_catalog::Catalog;
+use fotobase_catalog::{Catalog, FileQuery};
+
+// TASK-06-003: the filtered pin query. The map must show exactly the pins
+// the current search/filter view selects — the same WHERE the grid's
+// `query_files` compiles, applied to the geotagged set (PLAN §2 View menu
+// "Map", §6 P3).
 
 fn photo(
     cat: &mut Catalog,
@@ -99,4 +104,114 @@ fn half_gps_is_never_returned_even_when_the_other_axis_is_set() {
         .unwrap();
 
     assert!(cat.geotagged_pins().unwrap().is_empty());
+}
+
+#[test]
+fn no_filters_returns_the_whole_geotagged_library() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = Catalog::open(dir.path().join("c.db")).unwrap();
+    photo(&mut cat, dir.path(), "a.jpg", Some((52.52, 13.405)), false);
+    photo(&mut cat, dir.path(), "b.jpg", Some((-33.86, 151.21)), false);
+    photo(&mut cat, dir.path(), "plain.jpg", None, false);
+
+    let pins = cat.geotagged_pins_filtered(&FileQuery::default()).unwrap();
+    assert_eq!(pins.len(), 2, "{pins:?}");
+}
+
+#[test]
+fn search_text_narrows_the_pins_by_fts() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = Catalog::open(dir.path().join("c.db")).unwrap();
+    photo(&mut cat, dir.path(), "berlin.jpg", Some((52.52, 13.405)), false);
+    photo(&mut cat, dir.path(), "sydney.jpg", Some((-33.86, 151.21)), false);
+
+    let pins = cat
+        .geotagged_pins_filtered(&FileQuery { text: Some("berlin".into()), ..FileQuery::default() })
+        .unwrap();
+    assert_eq!(pins.len(), 1, "{pins:?}");
+    assert_eq!(pins[0].hash, "hash-berlin.jpg");
+}
+
+#[test]
+fn unsearchable_text_yields_no_pins() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = Catalog::open(dir.path().join("c.db")).unwrap();
+    photo(&mut cat, dir.path(), "a.jpg", Some((1.0, 2.0)), false);
+
+    let pins = cat
+        .geotagged_pins_filtered(&FileQuery { text: Some("!@#".into()), ..FileQuery::default() })
+        .unwrap();
+    assert!(pins.is_empty(), "{pins:?}");
+}
+
+#[test]
+fn folder_filter_narrows_the_pins() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = Catalog::open(dir.path().join("c.db")).unwrap();
+    let keep = photo(&mut cat, dir.path(), "keep.jpg", Some((1.0, 2.0)), false);
+    let other_dir = tempfile::tempdir().unwrap();
+    photo(&mut cat, other_dir.path(), "drop.jpg", Some((3.0, 4.0)), false);
+    let folder_id: i64 = cat
+        .conn()
+        .query_row("SELECT folder_id FROM files WHERE id = ?1", [keep], |r| r.get(0))
+        .unwrap();
+
+    let pins = cat
+        .geotagged_pins_filtered(&FileQuery {
+            folders: Some(vec![folder_id]),
+            ..FileQuery::default()
+        })
+        .unwrap();
+    assert_eq!(pins.len(), 1, "{pins:?}");
+    assert_eq!(pins[0].hash, "hash-keep.jpg");
+}
+
+#[test]
+fn min_rating_narrows_the_pins() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = Catalog::open(dir.path().join("c.db")).unwrap();
+    let starred = photo(&mut cat, dir.path(), "star.jpg", Some((1.0, 2.0)), false);
+    photo(&mut cat, dir.path(), "plain.jpg", Some((3.0, 4.0)), false);
+    cat.conn().execute("UPDATE metadata SET rating = 5 WHERE file_id = ?1", [starred]).unwrap();
+
+    let pins = cat
+        .geotagged_pins_filtered(&FileQuery { min_rating: Some(5), ..FileQuery::default() })
+        .unwrap();
+    assert_eq!(pins.len(), 1, "{pins:?}");
+    assert_eq!(pins[0].hash, "hash-star.jpg");
+}
+
+#[test]
+fn videos_only_narrows_the_pins() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = Catalog::open(dir.path().join("c.db")).unwrap();
+    let video = photo(&mut cat, dir.path(), "clip.mp4", Some((1.0, 2.0)), false);
+    photo(&mut cat, dir.path(), "img.jpg", Some((3.0, 4.0)), false);
+    cat.conn().execute("UPDATE files SET media_type = 'video' WHERE id = ?1", [video]).unwrap();
+
+    let pins = cat
+        .geotagged_pins_filtered(&FileQuery { videos_only: true, ..FileQuery::default() })
+        .unwrap();
+    assert_eq!(pins.len(), 1, "{pins:?}");
+    assert_eq!(pins[0].hash, "hash-clip.mp4");
+}
+
+#[test]
+fn taken_since_narrows_the_pins() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = Catalog::open(dir.path().join("c.db")).unwrap();
+    photo(&mut cat, dir.path(), "old.jpg", Some((1.0, 2.0)), false);
+    let new_id = photo(&mut cat, dir.path(), "new.jpg", Some((3.0, 4.0)), false);
+    cat.conn()
+        .execute("UPDATE files SET taken_at = '2024-06-01T12:00:00' WHERE id = ?1", [new_id])
+        .unwrap();
+
+    let pins = cat
+        .geotagged_pins_filtered(&FileQuery {
+            taken_since: Some("2024-01-01".into()),
+            ..FileQuery::default()
+        })
+        .unwrap();
+    assert_eq!(pins.len(), 1, "{pins:?}");
+    assert_eq!(pins[0].hash, "hash-new.jpg");
 }

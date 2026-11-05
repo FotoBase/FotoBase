@@ -78,11 +78,23 @@ fn is_iso_date(s: &str) -> bool {
     (1..=12).contains(&month) && (1..=31).contains(&day)
 }
 
+/// The `WHERE` fragment the grid query (TASK-03-014) and the filtered map-pin
+/// query (TASK-06-003) share: search text, folder selection, album view and
+/// the filter buttons / date slider AND-combine identically in both, so the
+/// map always shows exactly the pins of the view the grid shows.
+struct CompiledFilters {
+    /// SQL conditions referencing the `f` alias of `files`.
+    conds: String,
+    params: Vec<Box<dyn rusqlite::ToSql>>,
+    /// `FROM` clause producing `files f` (FTS / album joins included).
+    from: String,
+}
+
 impl Catalog {
-    /// Grid rows for `query`, at most `limit`: best match first when there is
-    /// search text, album order inside an album, otherwise by path. Hidden
-    /// photos are excluded unless "show hidden" is on.
-    pub fn query_files(&self, query: &FileQuery, limit: usize) -> Result<Vec<FileInfo>> {
+    /// Compile the shared filters. `Ok(None)` means "matches nothing"
+    /// (unsearchable search text or an empty folder selection) — callers
+    /// return an empty result without running SQL.
+    fn compile_filters(&self, query: &FileQuery) -> Result<Option<CompiledFilters>> {
         if let Some(cutoff) = &query.taken_since {
             if !is_iso_date(cutoff) {
                 return Err(CatalogError::InvalidQuery(format!(
@@ -91,16 +103,16 @@ impl Catalog {
             }
         }
         if query.folders.as_ref().is_some_and(|ids| ids.is_empty()) {
-            return Ok(Vec::new());
+            return Ok(None);
         }
 
         let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         let mut conds = String::new();
-        let (from, order) = match (&query.text, query.album) {
+        let from = match (&query.text, query.album) {
             (Some(text), album) => {
                 let expr = fts_match_expr(text);
                 if expr.is_empty() {
-                    return Ok(Vec::new());
+                    return Ok(None);
                 }
                 params.push(Box::new(expr));
                 conds.push_str(" AND files_fts MATCH ?");
@@ -110,14 +122,14 @@ impl Catalog {
                         " AND f.id IN (SELECT file_id FROM album_files WHERE album_id = ?)",
                     );
                 }
-                ("files_fts JOIN files f ON f.id = files_fts.rowid", "rank")
+                "files_fts JOIN files f ON f.id = files_fts.rowid".to_string()
             }
             (None, Some(album)) => {
                 params.push(Box::new(album));
                 conds.push_str(" AND af.album_id = ?");
-                ("album_files af JOIN files f ON f.id = af.file_id", "af.position, f.path")
+                "album_files af JOIN files f ON f.id = af.file_id".to_string()
             }
-            (None, None) => ("files f", "f.path"),
+            (None, None) => "files f".to_string(),
         };
         if let Some(ids) = &query.folders {
             let placeholders = "?,".repeat(ids.len());
@@ -139,6 +151,22 @@ impl Catalog {
             params.push(Box::new(cutoff.clone()));
             conds.push_str(&format!(" AND {FILE_DATE} >= ?"));
         }
+        Ok(Some(CompiledFilters { conds, params, from: from.to_string() }))
+    }
+
+    /// Grid rows for `query`, at most `limit`: best match first when there is
+    /// search text, album order inside an album, otherwise by path. Hidden
+    /// photos are excluded unless "show hidden" is on.
+    pub fn query_files(&self, query: &FileQuery, limit: usize) -> Result<Vec<FileInfo>> {
+        let Some(filters) = self.compile_filters(query)? else {
+            return Ok(Vec::new());
+        };
+        let CompiledFilters { mut conds, mut params, from } = filters;
+        let order = match (&query.text, query.album) {
+            (Some(_), _) => "rank",
+            (None, Some(_)) => "af.position, f.path",
+            (None, None) => "f.path",
+        };
         let order = match query.sort {
             FileSort::Path => order.to_string(),
             FileSort::Capture => format!("{CAPTURE_TS}, {order}"),
@@ -188,5 +216,33 @@ impl Catalog {
             pins.push(MapPin { hash: r.get(0)?, latitude: r.get(1)?, longitude: r.get(2)? });
         }
         Ok(pins)
+    }
+
+    /// The geotagged pins of the current view (TASK-06-003): the geotagged
+    /// set narrowed by the same filters the grid's `query_files` applies
+    /// (search text, folders, album, rating, videos, faces, date cutoff).
+    /// `stack`/`sort` are grid-only concerns and ignored — pins have no
+    /// collapsed stacks and no meaningful order until clustered client-side.
+    pub fn geotagged_pins_filtered(&self, query: &FileQuery) -> Result<Vec<MapPin>> {
+        let Some(filters) = self.compile_filters(query)? else {
+            return Ok(Vec::new());
+        };
+        let CompiledFilters { conds, params, from } = filters;
+        let sql = format!(
+            "SELECT f.hash, m.latitude, m.longitude \
+             FROM {from} JOIN metadata m ON m.file_id = f.id \
+             WHERE f.hash IS NOT NULL \
+               AND m.latitude IS NOT NULL AND m.longitude IS NOT NULL \
+               AND m.latitude BETWEEN -90.0 AND 90.0 \
+               AND m.longitude BETWEEN -180.0 AND 180.0{conds}{} \
+             ORDER BY f.path",
+            self.not_hidden()
+        );
+        let mut stmt = self.conn().prepare_cached(&sql)?;
+        let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt.query_map(refs.as_slice(), |r| {
+            Ok(MapPin { hash: r.get(0)?, latitude: r.get(1)?, longitude: r.get(2)? })
+        })?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 }

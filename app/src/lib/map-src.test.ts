@@ -24,7 +24,7 @@ import {
   CLUSTER_MAX_ZOOM,
   CLUSTER_RADIUS,
   MARKER_LIMIT,
-  fetchPins,
+  fetchFilteredPins,
   markerModel,
   photoClusterSource,
   pinThumbUri,
@@ -158,17 +158,56 @@ describe("photoClusterSource", () => {
   });
 });
 
-describe("fetchPins", () => {
+describe("fetchFilteredPins", () => {
   it("returns null without a backend (browser dev), like every IPC wrapper", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     vi.mocked(invoke).mockRejectedValue(new Error("no backend"));
-    await expect(fetchPins()).resolves.toBeNull();
+    await expect(fetchFilteredPins()).resolves.toBeNull();
   });
 
   it("returns the backend's pins", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     vi.mocked(invoke).mockResolvedValue([PIN(1)]);
-    await expect(fetchPins()).resolves.toEqual([PIN(1)]);
+    await expect(fetchFilteredPins()).resolves.toEqual([PIN(1)]);
+  });
+
+  it("sends no filter args without a view (whole library)", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValue([]);
+    await fetchFilteredPins();
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("map_pins_filtered", {
+      text: null,
+      folders: null,
+      album: null,
+      starred: null,
+      videosOnly: null,
+      hasFaces: null,
+      takenSince: null,
+    });
+  });
+
+  it("sends the view's filters (TASK-06-003: pins mirror the grid view)", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValue([]);
+    await fetchFilteredPins({
+      folders: [3, 7],
+      album: null,
+      query: "  berlin  ",
+      starred: true,
+      videosOnly: false,
+      hasFaces: false,
+      takenSince: "2024-01-01",
+      sort: "path",
+    });
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("map_pins_filtered", {
+      text: "berlin",
+      folders: [3, 7],
+      album: null,
+      starred: true,
+      videosOnly: false,
+      hasFaces: false,
+      takenSince: "2024-01-01",
+    });
   });
 });
 

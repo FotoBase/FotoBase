@@ -8,6 +8,8 @@
 // layer reads vector tiles from that one source. `mapStyle` is the single
 // place a URL enters the map, so the tests pin the invariant here.
 
+import type { LibraryView } from "./search";
+
 /// The bundled world basemap's top zoom (tools/basemap/build.sh extracts
 /// z0–z4 from the Protomaps build, ~6 MB per ADR-0008). Zooming past it
 /// overzooms the z4 vector tiles — MapLibre re-projects them, no requests
@@ -157,13 +159,24 @@ export const CLUSTER_MAX_ZOOM = 10;
 /// clustering has already done the heavy lifting below it.
 export const MARKER_LIMIT = 300;
 
-/// Ask the backend for the geotagged pins. `null` without a backend
-/// (browser dev) — the panel shows the basemap without pins, like the
-/// availability check above.
-export async function fetchPins(): Promise<MapPin[] | null> {
+/// Ask the backend for the geotagged pins of the current view
+/// (TASK-06-003). The `LibraryView` mirrors what the grid's `query_files`
+/// sends, so the map's pins are exactly the grid's filtered set; without a
+/// view (or without a backend — browser dev) the whole library comes back
+/// / nothing shows, like the availability check above.
+export async function fetchFilteredPins(view?: LibraryView): Promise<MapPin[] | null> {
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<MapPin[]>("map_pins");
+    const text = view?.query.trim() ?? "";
+    return await invoke<MapPin[]>("map_pins_filtered", {
+      text: text === "" ? null : text,
+      folders: view?.folders.length ? view.folders : null,
+      album: view?.album ?? null,
+      starred: view?.starred ?? null,
+      videosOnly: view?.videosOnly ?? null,
+      hasFaces: view?.hasFaces ?? null,
+      takenSince: view?.takenSince ?? null,
+    });
   } catch {
     return null;
   }
