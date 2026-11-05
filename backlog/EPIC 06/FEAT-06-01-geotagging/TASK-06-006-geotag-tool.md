@@ -1,6 +1,6 @@
 # task: build geotag tool
 
-**Feature:** [FEAT-06-01-geotagging](FEAT-06-01-geotagging.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** todo
+**Feature:** [FEAT-06-01-geotagging](FEAT-06-01-geotagging.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** in review (2026-11-05)
 
 ## Description
 Tools → Geotag: tag one photo, a multi-selection, or a whole folder/album in one pass, with undo (PLAN §2 Tools menu "Geotag"; §6 P3 Places).
@@ -20,4 +20,4 @@ Tools → Geotag: tag one photo, a multi-selection, or a whole folder/album in o
 - E2e: Tools → Geotag on album selection completes with progress.
 
 ## Acceptance criteria
-- [ ] 06-006: Geotag tool handles one photo, multi-selection, or whole folder/album in one pass, with undo.
+- [x] 06-006: Geotag tool handles one photo, multi-selection, or whole folder/album in one pass, with undo.

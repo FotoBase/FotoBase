@@ -11,6 +11,7 @@ pub mod duplicates;
 pub mod face_clusters;
 pub mod faces;
 pub mod folder_ini;
+pub mod geotag_tool;
 pub mod hidden;
 pub mod metadata_edit;
 pub mod migrations;
@@ -29,6 +30,7 @@ pub use duplicates::{group_by_phash, DuplicateGroup, DEFAULT_DUPLICATE_THRESHOLD
 pub use face_clusters::ClusterRow;
 pub use faces::{FaceRecord, FaceRow};
 pub use folder_ini::{FolderIniReport, FolderIniStatus};
+pub use geotag_tool::{GeotagTarget, GeotagToolReport};
 pub use metadata_edit::{FieldError, GpsEdit, MetadataEdit, MetadataField};
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;
