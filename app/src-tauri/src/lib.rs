@@ -563,6 +563,24 @@ fn edit_photo_metadata(
     Ok(result)
 }
 
+/// Drag-to-geotag (TASK-06-005, PLAN §2H): set the GPS of every photo
+/// dropped on the map to the drop point. Sidecar first, catalog mirror
+/// second — the sidecars-only default applies; embedding into the original
+/// on Save stays gated on the 00-002 opt-in setting (no backend writer yet,
+/// see save.rs). Emits `library-changed` so pins and the grid refresh.
+#[tauri::command]
+fn geotag_photos(
+    file_ids: Vec<i64>,
+    latitude: f64,
+    longitude: f64,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    with_catalog_sync(&state, |cat| cat.geotag_photos(&file_ids, latitude, longitude))?;
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
 /// Stack photos together (TASK-03-021): a new stack (first id on top) or
 /// the existing stack of one of them. Metadata only — each member's sidecar
 /// gets `fb:StackId` / `fb:StackRole`, no file moves. Returns the stack id.
@@ -2870,6 +2888,7 @@ pub fn run() {
             get_caption,
             set_caption,
             edit_photo_metadata,
+            geotag_photos,
             stack_photos,
             set_stack_top,
             unstack,

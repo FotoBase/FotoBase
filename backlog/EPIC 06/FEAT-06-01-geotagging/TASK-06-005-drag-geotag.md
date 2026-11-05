@@ -1,6 +1,6 @@
 # task: implement drag-to-geotag on map
 
-**Feature:** [FEAT-06-01-geotagging](FEAT-06-01-geotagging.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** todo
+**Feature:** [FEAT-06-01-geotagging](FEAT-06-01-geotagging.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** in review (2026-11-05)
 
 ## Description
 Drag a photo onto the map to geotag it: GPS coordinates written to the sidecar (`exif:GPSLatitude`/`exif:GPSLongitude`), with optional embedding into the original on Save per the 00-002 opt-in rule (PLAN §2H "drag-and-drop to geotag"; §5 XMP data model; §6 P3 Places).
@@ -20,5 +20,5 @@ Drag a photo onto the map to geotag it: GPS coordinates written to the sidecar (
 - Unit: lat/lon → XMP GPS value round-trip (positive/negative, hemispheres).
 
 ## Acceptance criteria
-- [ ] 06-005: Drag-to-geotag writes GPS to sidecar; embed-on-Save follows the 00-002 opt-in rule.
-- [ ] 06-005: Originals otherwise untouched; geotags survive rebuild.
+- [x] 06-005: Drag-to-geotag writes GPS to sidecar; embed-on-Save follows the 00-002 opt-in rule.
+- [x] 06-005: Originals otherwise untouched; geotags survive rebuild.
