@@ -64,7 +64,12 @@ export function makeGeotaggedLibrary(count = 40): Library {
     const lat = 25 + (i % 8) * 0.02;
     const lon = 10 + Math.floor(i / 8) * 0.02;
     const name = `geo_${String(i).padStart(3, "0")}.jpg`;
-    fs.writeFileSync(path.join(dir, name), jpeg);
+    // A per-photo payload byte: identical files would share one content
+    // hash, and the catalog keys pins by hash — the map would draw a
+    // single pin for the whole library (TASK-06-004 selection needs one
+    // pin per photo).
+    const payload = Buffer.concat([jpeg, Buffer.from([i])]);
+    fs.writeFileSync(path.join(dir, name), payload);
     fs.writeFileSync(
       path.join(dir, `${name}.xmp`),
       `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>

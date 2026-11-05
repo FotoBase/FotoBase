@@ -132,26 +132,7 @@ describe("map pin selection", () => {
       holder?.__fbMap?.jumpTo({ center: [10.04, 25.07], zoom: 12 });
     });
     await browser.waitUntil(
-      async () => {
-        const state = await browser.execute(() => {
-          const holder = document.querySelector(
-            '[data-testid="map-holder"]',
-          ) as
-            | (HTMLElement & {
-                __fbMap?: { getZoom(): number; getCenter(): [number, number] };
-              })
-            | null;
-          return {
-            clusters: document.querySelectorAll('[data-testid="map-cluster"]')
-              .length,
-            pins: document.querySelectorAll('[data-testid="map-pin"]').length,
-            zoom: holder?.__fbMap?.getZoom() ?? null,
-          };
-        });
-        // eslint-disable-next-line no-console
-        console.log(`[e2e] zoom state ${JSON.stringify(state)}`);
-        return state.pins >= 3;
-      },
+      async () => (await $$('[data-testid="map-pin"]').length) >= 3,
       { timeout: 20_000, timeoutMsg: "zoom-in did not resolve photo pins" },
     );
   });
