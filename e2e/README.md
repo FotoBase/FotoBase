@@ -10,6 +10,10 @@ a file dropped while hidden still lands in the catalog, quit fully exits.
 bundled offline PMTiles basemap, pans and zooms, and the instrumented
 fetch/XHR stack records zero http(s) requests.
 
+`specs/map-pins.e2e.ts` (TASK-06-002) — a geotagged library shows counted
+cluster markers at the world zoom; zooming in resolves them into photo
+thumbnails through `thumb://`.
+
 ## Platforms
 
 `tauri-driver` has no macOS support, so the suite runs on Linux (CI, or a Linux

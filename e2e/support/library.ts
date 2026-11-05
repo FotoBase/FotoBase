@@ -48,3 +48,39 @@ export function makeLibrary(): Library {
   }
   return { dir, checksums };
 }
+
+// TASK-06-002: a geotagged library for the map-pin specs. `count` tiny
+// JPEGs in one tight cluster around the panel's initial center
+// (map-src.ts MAP_INITIAL_CENTER), so the world view shows a single
+// cluster carrying every photo and a zoom-in resolves it. GPS lives in
+// `.xmp` sidecars — the source of truth (PLAN §5) — as plain decimal
+// degrees, which the sidecar reader accepts.
+export function makeGeotaggedLibrary(count = 40): Library {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fb-e2e-geo-"));
+  const jpeg = Buffer.from(TINY_JPEG_BASE64, "base64");
+  const checksums: Record<string, string> = {};
+  for (let i = 0; i < count; i += 1) {
+    // One tight grid around central Europe (the panel's initial view).
+    const lat = 25 + (i % 8) * 0.02;
+    const lon = 10 + Math.floor(i / 8) * 0.02;
+    const name = `geo_${String(i).padStart(3, "0")}.jpg`;
+    fs.writeFileSync(path.join(dir, name), jpeg);
+    fs.writeFileSync(
+      path.join(dir, `${name}.xmp`),
+      `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:exif="http://ns.adobe.com/exif/1.0/"
+   exif:GPSLatitude="${lat}"
+   exif:GPSLongitude="${lon}">
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>
+`,
+    );
+    checksums[name] = sha256(path.join(dir, name));
+  }
+  return { dir, checksums };
+}

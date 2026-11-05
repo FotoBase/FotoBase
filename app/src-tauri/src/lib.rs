@@ -449,6 +449,14 @@ fn query_files(
     with_catalog(&state, |cat| cat.query_files(&query, usize::MAX))
 }
 
+/// Geotagged pins for the map's clustered source (TASK-06-002). Hashes and
+/// coordinates only — thumbnails travel through `thumb://`, never IPC
+/// (§3 rule 3).
+#[tauri::command]
+fn map_pins(state: tauri::State<'_, AppState>) -> Result<Vec<fotobase_catalog::MapPin>, String> {
+    with_catalog(&state, |cat| cat.geotagged_pins())
+}
+
 fn ratings_enabled(state: &AppState) -> Result<bool, String> {
     let guard = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
     Ok(guard.ratings_enabled)
@@ -2821,6 +2829,7 @@ pub fn run() {
             search_files,
             list_files,
             query_files,
+            map_pins,
             set_rating,
             get_caption,
             set_caption,

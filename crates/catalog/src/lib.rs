@@ -117,6 +117,17 @@ pub struct FileInfo {
     pub stack_count: i64,
 }
 
+/// One geotagged photo for the map (TASK-06-002): the content hash keys
+/// the frontend's `thumb://` URI (§3 rule 3 — no image bytes over IPC) and
+/// the GPS mirror comes from the sidecar via the `metadata` cache. Only
+/// photos with both coordinates and a hash appear.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct MapPin {
+    pub hash: String,
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
 /// Separates tag names inside the one `group_concat` column; tag names can
 /// hold any printable character, never a unit separator.
 const TAG_SEP: char = '\u{1f}';

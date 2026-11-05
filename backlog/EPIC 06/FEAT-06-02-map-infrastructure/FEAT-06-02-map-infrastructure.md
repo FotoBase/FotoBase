@@ -1,6 +1,6 @@
 # feat: map infrastructure
 
-**Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** planned
+**Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** in review (2026-11-04)
 
 ## Acceptance criteria
 
@@ -9,7 +9,7 @@
 - Clusters resolve into photo thumbnails as zoom increases, down to individual pins.
 
 - [x] `06-001` (L) MapLibre GL JS panel + Protomaps PMTiles offline basemap; tile bundling strategy.
-- [ ] `06-002` (M) Pins/clustering: markers cluster at low zoom, resolve to photo thumbnails on zoom-in.
+- [x] `06-002` (M) Pins/clustering: markers cluster at low zoom, resolve to photo thumbnails on zoom-in.
 
 ## Tasks
 
