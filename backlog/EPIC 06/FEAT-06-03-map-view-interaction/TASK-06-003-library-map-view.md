@@ -1,6 +1,6 @@
 # task: build library-wide map view
 
-**Feature:** [FEAT-06-03-map-view-interaction](FEAT-06-03-map-view-interaction.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** in progress (2026-11-05)
+**Feature:** [FEAT-06-03-map-view-interaction](FEAT-06-03-map-view-interaction.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** in review (2026-11-05)
 
 ## Description
 View → Map: a library-wide world map with a pin (or cluster) for every geotagged photo in the catalog; the current search/filter state applies to the map live (PLAN §2 View menu "Map"; §6 P3 Places).
