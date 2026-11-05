@@ -159,7 +159,7 @@ describe("geotag tool", () => {
   });
 
   it("geotags the selection with progress and undoes it", async () => {
-    const before = fs.readFileSync(path.join(lib.dir, `${SOLO}.jpg`));
+    const before = fs.readFileSync(path.join(lib.dir, SOLO));
     expect(await sidecarGps()).toEqual({ lat: null, lon: null });
 
     await openGeotagDialog();
@@ -183,7 +183,7 @@ describe("geotag tool", () => {
     const gps = await sidecarGps();
     expect(gps.lat).toBeCloseTo(52.52, 5);
     expect(gps.lon).toBeCloseTo(13.405, 5);
-    expect(fs.readFileSync(path.join(lib.dir, `${SOLO}.jpg`))).toEqual(before);
+    expect(fs.readFileSync(path.join(lib.dir, SOLO))).toEqual(before);
 
     // Undo restores the untagged state.
     await domClick("geotag-undo");
