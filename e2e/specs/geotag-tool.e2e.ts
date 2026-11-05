@@ -119,20 +119,24 @@ interface Gps {
 }
 
 const sidecarGps = async (): Promise<Gps> => {
-  const raw = (await invoke("photo_info", { file_id: await soloId() })) as {
+  const raw = (await invoke("photo_info", { fileId: await soloId() })) as {
     latitude: number | null;
     longitude: number | null;
   };
   return { lat: raw.latitude, lon: raw.longitude };
-};
+}
+
+interface PhotoInfo {
+  id: number;
+  filename: string;
+  latitude: number | null;
+  longitude: number | null;
+}
 
 let soloIdCache: number | null = null;
 const soloId = async (): Promise<number> => {
   if (soloIdCache !== null) return soloIdCache;
-  const rows = (await invoke("query_files", { limit: 100 })) as Array<{
-    id: number;
-    filename: string;
-  }>;
+  const rows = (await invoke("query_files", { limit: 100 })) as PhotoInfo[];
   const row = rows.find((r) => r.filename === SOLO);
   if (!row) throw new Error("solo photo not in catalog");
   soloIdCache = row.id;
