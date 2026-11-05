@@ -116,26 +116,21 @@ describe("map pin selection", () => {
         timeoutMsg: "scan did not produce all geotagged pins",
       },
     );
-    // Zoom in so every photo is its own pin, as in map-pins.e2e.ts. The
-    // runner's viewport may clip the fixture grid's edge columns, so pin
-    // for at least the three the specs interact with.
+    // Zoom in so every photo is its own pin, as in map-pins.e2e.ts. Wait
+    // for the cluster markers first: the panel defers addSource until the
+    // style loads, and a jumpTo before that can leave the deferred "load"
+    // wait unresolved. The runner's viewport may clip the fixture grid's
+    // edge columns, so pin for the three the specs interact with.
     await dispatchClick('[data-testid="open-map"]');
     await browser.waitUntil(
-      async () =>
-        await browser.execute(() => {
-          const holder = document.querySelector(
-            '[data-testid="map-holder"]',
-          ) as (HTMLElement & { __fbMap?: unknown }) | null;
-          return Boolean(holder?.__fbMap);
-        }),
-      { timeoutMsg: "map handle not exposed" },
+      async () => await $('[data-testid="map-cluster"]').isExisting(),
+      { timeoutMsg: "no cluster markers at the world zoom" },
     );
     await browser.execute(() => {
       const holder = document.querySelector('[data-testid="map-holder"]') as
         (HTMLElement & { __fbMap?: { jumpTo(o: unknown): void } }) | null;
       holder?.__fbMap?.jumpTo({ center: [10.04, 25.07], zoom: 12 });
     });
-    await browser.pause(1_000);
     await browser.waitUntil(
       async () => (await $$('[data-testid="map-pin"]').length) >= 3,
       { timeout: 20_000, timeoutMsg: "zoom-in did not resolve photo pins" },
@@ -209,21 +204,17 @@ describe("map pin selection", () => {
 
   it("selects on a touch long-press without opening the viewer", async () => {
     await dispatchClick('[data-testid="open-map"]');
-    // The panel reopened at the world zoom — zoom back in for pins.
+    // The panel reopened at the world zoom — wait for the clusters, then
+    // zoom back in for pins (same flow as the before hook).
     await browser.waitUntil(
-      async () =>
-        await browser.execute(() => {
-          const holder = document.querySelector(
-            '[data-testid="map-holder"]',
-          ) as
-            (HTMLElement & { __fbMap?: { jumpTo(o: unknown): void } }) | null;
-          if (!holder?.__fbMap) return false;
-          holder.__fbMap.jumpTo({ center: [10.04, 25.07], zoom: 12 });
-          return true;
-        }),
-      { timeoutMsg: "map handle not exposed" },
+      async () => await $('[data-testid="map-cluster"]').isExisting(),
+      { timeoutMsg: "no cluster markers after reopen" },
     );
-    await browser.pause(1_000);
+    await browser.execute(() => {
+      const holder = document.querySelector('[data-testid="map-holder"]') as
+        (HTMLElement & { __fbMap?: { jumpTo(o: unknown): void } }) | null;
+      holder?.__fbMap?.jumpTo({ center: [10.04, 25.07], zoom: 12 });
+    });
     await browser.waitUntil(
       async () => (await $$('[data-testid="map-pin"]').length) >= 3,
       { timeout: 20_000, timeoutMsg: "map pins missing" },
