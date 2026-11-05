@@ -23,6 +23,7 @@
   import { gridState, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
   import { badgeText, hasStackBadge } from "./stacks";
+  import { setPhotoDrag } from "./geotag-drag";
 
   interface Props {
     items?: GridItem[];
@@ -205,6 +206,10 @@
               data-cell-index={row.index * columns + localIdx}
               style="--thumb-size: {gridState.thumbSize}px; --caption-h: {captionH}px"
               tabindex="0"
+              draggable="true"
+              ondragstart={(e) => {
+                if (e.dataTransfer) setPhotoDrag(e.dataTransfer, [item]);
+              }}
               onclick={(e) => onCellClick(e, item)}
               ondblclick={() => onopen(item)}
               oncontextmenu={(e) => {

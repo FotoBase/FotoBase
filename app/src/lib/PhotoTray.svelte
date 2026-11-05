@@ -11,6 +11,7 @@
   import { gridState } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
   import { tray, type TrayPhoto } from "./tray.svelte.js";
+  import { setPhotoDrag } from "./geotag-drag";
 
   interface Props {
     /// Grid selection that "Add selection" moves into the tray.
@@ -101,6 +102,10 @@
             class="tray-thumb"
             data-testid="tray-jump"
             title={item.filename}
+            draggable="true"
+            ondragstart={(e) => {
+              if (e.dataTransfer) setPhotoDrag(e.dataTransfer, [item]);
+            }}
             onclick={() => onjump(item)}
           >
             {#if thumbUri(item.hash)}

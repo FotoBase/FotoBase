@@ -165,6 +165,39 @@ impl Catalog {
         })?;
         Ok(Vec::new())
     }
+
+    /// Drag-to-geotag (TASK-06-005, PLAN §2H): set the GPS of every dropped
+    /// photo to one drop point. Each photo geotags through the regular
+    /// merge-on-write path (sidecar first, catalog mirror second), so a
+    /// failure mid-batch leaves earlier photos correctly tagged and later
+    /// ones untouched. Coordinates are decimal degrees, checked up front so
+    /// a bad drop point writes nothing anywhere.
+    pub fn geotag_photos(
+        &mut self,
+        file_ids: &[i64],
+        latitude: f64,
+        longitude: f64,
+    ) -> SyncResult<()> {
+        let describe =
+            |v: f64, axis: &str| format!("{v} is not a valid {axis} (decimal degrees, ±90/±180)");
+        if !(-90.0..=90.0).contains(&latitude) || latitude.is_nan() {
+            return Err(crate::SyncError::InvalidGps(describe(latitude, "latitude")));
+        }
+        if !(-180.0..=180.0).contains(&longitude) || longitude.is_nan() {
+            return Err(crate::SyncError::InvalidGps(describe(longitude, "longitude")));
+        }
+        for &file_id in file_ids {
+            let edit = MetadataEdit {
+                gps: Some(GpsEdit::Set {
+                    latitude: format!("{latitude:.7}"),
+                    longitude: format!("{longitude:.7}"),
+                }),
+                ..Default::default()
+            };
+            self.edit_metadata(file_id, &edit)?;
+        }
+        Ok(())
+    }
 }
 
 fn current_offset(cat: &Catalog, file_id: i64, taken_at: Option<&str>) -> Option<i32> {

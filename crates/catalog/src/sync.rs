@@ -48,6 +48,8 @@ pub enum SyncError {
     Adjust(#[from] crate::datetime::AdjustError),
     #[error(transparent)]
     FolderMeta(#[from] FolderMetaError),
+    #[error("GPS coordinate out of range: {0}")]
+    InvalidGps(String),
     #[error("no trash entry with id {0}")]
     UnknownTrashEntry(i64),
     #[error("no folder {0} in the catalog")]

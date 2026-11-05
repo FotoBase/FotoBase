@@ -202,6 +202,26 @@ mod tests {
     }
 
     #[test]
+    fn gps_round_trip_hemispheres() {
+        // TASK-06-005: drag-to-geotag drops anywhere on the globe — the
+        // negative hemispheres (S/W) must round-trip through the XMP
+        // GPSCoordinate text with its sign/ref conventions intact.
+        for (lat, lon) in
+            [(52.5200, 13.4050), (-33.8688, 151.2093), (40.7128, -74.0060), (-33.9249, 18.4241)]
+        {
+            let dir = tempfile::tempdir().unwrap();
+            let sidecar = dir.path().join("IMG_0006.jpg.xmp");
+            let mut sc = Sidecar::read(&sidecar).unwrap();
+            sc.set_gps(lat, lon);
+            sc.write(&sidecar).unwrap();
+            let sc2 = Sidecar::read(&sidecar).unwrap();
+            let (got_lat, got_lon) = sc2.gps().unwrap();
+            assert!((got_lat - lat).abs() < 1e-6, "{lat} -> {got_lat}");
+            assert!((got_lon - lon).abs() < 1e-6, "{lon} -> {got_lon}");
+        }
+    }
+
+    #[test]
     fn tags_round_trip() {
         let dir = tempfile::tempdir().unwrap();
         let sidecar = dir.path().join("IMG_0005.jpg.xmp");

@@ -30,6 +30,7 @@
   } from "./map-src";
   import type { LibraryView } from "./search";
   import type { TrayPhoto } from "./tray.svelte";
+  import { acceptsPhotoDrag, geotagPhotos, readPhotoDrop } from "./geotag-drag";
 
   let {
     open = $bindable(false),
@@ -162,6 +163,36 @@
     selected = new Map();
   }
 
+  /// Drag-to-geotag (TASK-06-005, PLAN §2H): only Fotobase photo drags are
+  /// accepted; everything else (files, text) falls through. `map.unproject`
+  /// turns the drop point's container coordinates into decimal degrees.
+  function dragOver(e: DragEvent): void {
+    if (!e.dataTransfer || !acceptsPhotoDrag(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  let geotaggedCount = $state<number | null>(null);
+
+  async function drop(e: DragEvent): Promise<void> {
+    geotaggedCount = null;
+    if (!e.dataTransfer || !map) return;
+    const ids = readPhotoDrop(e.dataTransfer);
+    if (!ids || ids.length === 0) return;
+    e.preventDefault();
+    const rect = container?.getBoundingClientRect();
+    const x = e.clientX - (rect?.left ?? 0);
+    const y = e.clientY - (rect?.top ?? 0);
+    const lngLat = map.unproject([x, y]);
+    try {
+      await geotagPhotos(ids, lngLat.lat, lngLat.lng);
+      geotaggedCount = ids.length;
+    } catch {
+      // The backend refusal (e.g. a vanished sidecar) leaves the map as it
+      // was; the drop simply counts as not delivered.
+    }
+  }
+
   $effect(() => {
     if (!open) return;
     status = null;
@@ -289,7 +320,22 @@
         <p class="map-empty" data-testid="map-empty">{t("map.unavailable")}</p>
       {:else}
         <div class="map-stage">
-          <div class="map-holder" bind:this={container} data-testid="map-holder"></div>
+          <div
+            class="map-holder"
+            bind:this={container}
+            data-testid="map-holder"
+            ondragover={dragOver}
+            ondrop={drop}
+          ></div>
+          {#if geotaggedCount !== null}
+            <p class="map-geotag-note" data-testid="map-geotag-note">
+              {t("map.geotagged", { count: geotaggedCount })}
+            </p>
+          {:else}
+            <p class="map-geotag-note map-geotag-hint" data-testid="map-geotag-hint">
+              {t("map.dropToGeotag")}
+            </p>
+          {/if}
           <p class="map-attribution">{t("map.attribution")}</p>
         </div>
       {/if}
@@ -337,6 +383,23 @@
   .map-holder {
     position: absolute;
     inset: 0;
+  }
+  .map-geotag-note {
+    position: absolute;
+    top: 0.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.75rem;
+    background: rgb(255 255 255 / 85%);
+    color: #333;
+    border-radius: 4px;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .map-geotag-hint {
+    color: var(--fb-text-muted, #666);
   }
   .map-attribution {
     position: absolute;

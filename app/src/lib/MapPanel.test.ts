@@ -39,6 +39,8 @@ vi.mock("maplibre-gl", () => ({
       on: vi.fn(),
       once: vi.fn(),
       isStyleLoaded: vi.fn(() => true),
+      // Drop-to-geotag maps the drop point to decimal degrees (TASK-06-005).
+      unproject: vi.fn(() => ({ lat: 52.52, lng: 13.405 })),
     };
   }),
   Marker: vi.fn().mockImplementation(function (opts?: {
@@ -481,5 +483,101 @@ describe("MapPanel — pin interactions", () => {
     clickEl(el);
     await new Promise((r) => setTimeout(r, 650));
     expect(onopenphoto).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TASK-06-005: drag-to-geotag. Dropping a Fotobase photo drag on the map
+// geotags the dropped photos at the drop point; foreign drags fall through.
+describe("MapPanel — drag-to-geotag", () => {
+  beforeEach(() => {
+    mockStatus(true);
+    // An earlier describe's mockImplementation (Map lifecycle) persists past
+    // clearAllMocks; restore the full implementation with unproject.
+    vi.mocked(MapMock).mockImplementation(function () {
+      return {
+        addControl: vi.fn(),
+        remove: vi.fn(),
+        addSource: vi.fn(),
+        addLayer: vi.fn(),
+        getSource: vi.fn().mockImplementation(
+          (() => {
+            const src = { setData: vi.fn() };
+            return () => src;
+          })(),
+        ),
+        querySourceFeatures: vi.fn(() => []),
+        on: vi.fn(),
+        once: vi.fn(),
+        isStyleLoaded: vi.fn(() => true),
+        unproject: vi.fn(() => ({ lat: 52.52, lng: 13.405 })),
+      } as unknown as import("maplibre-gl").Map;
+    });
+  });
+
+  // jsdom has no DragEvent constructor; a plain Event with a patched
+  // `dataTransfer` reaches the Svelte handlers the same way.
+  function dragEvent(type: string, transfer: DataTransfer): Event {
+    const e = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(e, "dataTransfer", { value: transfer });
+    return e;
+  }
+
+  function fakeTransfer(withPhotos: boolean): DataTransfer {
+    const data = new Map<string, string>();
+    const transfer = {
+      setData: (type: string, value: string) => void data.set(type, value),
+      getData: (type: string) => data.get(type) ?? "",
+      dropEffect: "none",
+      effectAllowed: "uninitialized",
+      get types() {
+        return [...data.keys()];
+      },
+    } as unknown as DataTransfer;
+    if (withPhotos)
+      transfer.setData("application/x-fotobase-photos", JSON.stringify([7, 8]));
+    return transfer;
+  }
+
+  async function renderMap(): Promise<HTMLElement> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValue([]);
+    render(MapPanel, { props: { open: true } });
+    await waitFor(() => expect(MapMock).toHaveBeenCalled());
+    return screen.getByTestId("map-holder");
+  }
+
+  it("geotags the dropped photos at the drop point", async () => {
+    const holder = await renderMap();
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockClear().mockResolvedValue(undefined);
+
+    holder.dispatchEvent(
+      dragEvent("dragover", fakeTransfer(true)),
+    );
+    holder.dispatchEvent(
+      dragEvent("drop", fakeTransfer(true)),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("geotag_photos", {
+        fileIds: [7, 8],
+        latitude: 52.52,
+        longitude: 13.405,
+      }),
+    );
+    await waitFor(() => expect(screen.getByTestId("map-geotag-note")).toBeTruthy());
+  });
+
+  it("ignores foreign drags", async () => {
+    const holder = await renderMap();
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockClear();
+
+    holder.dispatchEvent(
+      dragEvent("dragover", fakeTransfer(false)),
+    );
+    holder.dispatchEvent(
+      dragEvent("drop", fakeTransfer(false)),
+    );
+    expect(invoke).not.toHaveBeenCalled();
   });
 });
