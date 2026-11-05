@@ -144,7 +144,10 @@ describe("map pin clustering", () => {
     expect(pins.length).toBe(1);
     // The pin's thumbnail is keyed by the content hash (§3 rule 3).
     const src = await pins[0].$("img").getAttribute("src");
-    expect(src).toBe(`thumb://${lib.checksums["geo_001.jpg"]}`);
+    // The pin's thumbnail is keyed by the catalog's content hash — the
+    // scanner stores the first 16 bytes of the SHA-256 as 32 hex chars
+    // (§3 rule 3: the URI is built from the queried feature alone).
+    expect(src).toBe(`thumb://${lib.checksums["geo_001.jpg"].slice(0, 32)}`);
 
     // Live update: widening the search re-pins the map (debounced).
     await dispatchClick('[data-testid="map-close"]');
