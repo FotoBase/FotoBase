@@ -96,7 +96,7 @@ fn tool_geotags_an_album_and_the_current_selection() {
 
     let report = cat
         .geotag_tool_run(
-            &fotobase_catalog::GeotagTarget::Ids(vec![a]),
+            &fotobase_catalog::GeotagTarget::Ids { ids: vec![a] },
             0.0,
             0.0,
             &no_cancel(),
@@ -118,7 +118,7 @@ fn undo_restores_the_prior_gps_values() {
     cat.geotag_photos(&[a], 10.0, 20.0).unwrap();
 
     cat.geotag_tool_run(
-        &fotobase_catalog::GeotagTarget::Ids(vec![a, b]),
+        &fotobase_catalog::GeotagTarget::Ids { ids: vec![a, b] },
         52.0,
         13.0,
         &no_cancel(),
@@ -154,7 +154,7 @@ fn cancelling_mid_batch_keeps_processed_photos_valid_and_stops_the_rest() {
     let seen = std::cell::Cell::new(0);
     let report = cat
         .geotag_tool_run(
-            &fotobase_catalog::GeotagTarget::Ids(ids.clone()),
+            &fotobase_catalog::GeotagTarget::Ids { ids: ids.clone() },
             1.0,
             2.0,
             &cancel,
@@ -191,7 +191,7 @@ fn a_new_batch_replaces_the_previous_undo_snapshot() {
     let (a, a_path) = add_photo(&mut cat, dir.path(), "a.jpg");
 
     cat.geotag_tool_run(
-        &fotobase_catalog::GeotagTarget::Ids(vec![a]),
+        &fotobase_catalog::GeotagTarget::Ids { ids: vec![a] },
         1.0,
         1.0,
         &no_cancel(),
@@ -199,7 +199,7 @@ fn a_new_batch_replaces_the_previous_undo_snapshot() {
     )
     .unwrap();
     cat.geotag_tool_run(
-        &fotobase_catalog::GeotagTarget::Ids(vec![a]),
+        &fotobase_catalog::GeotagTarget::Ids { ids: vec![a] },
         2.0,
         2.0,
         &no_cancel(),
@@ -222,7 +222,7 @@ fn out_of_range_coordinates_are_refused_with_nothing_written() {
 
     assert!(cat
         .geotag_tool_run(
-            &fotobase_catalog::GeotagTarget::Ids(vec![a]),
+            &fotobase_catalog::GeotagTarget::Ids { ids: vec![a] },
             91.0,
             0.0,
             &no_cancel(),
@@ -231,7 +231,7 @@ fn out_of_range_coordinates_are_refused_with_nothing_written() {
         .is_err());
     assert!(cat
         .geotag_tool_run(
-            &fotobase_catalog::GeotagTarget::Ids(vec![a]),
+            &fotobase_catalog::GeotagTarget::Ids { ids: vec![a] },
             0.0,
             180.5,
             &no_cancel(),

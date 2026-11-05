@@ -23,9 +23,18 @@ use crate::Catalog;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum GeotagTarget {
-    Ids(Vec<i64>),
-    Folder { folder_id: i64 },
-    Album { album_id: i64 },
+    /// A struct variant, not a newtype one: serde's internally-tagged
+    /// enums cannot deserialize a newtype variant holding a bare sequence
+    /// from `{"kind": "ids", "ids": [...]}`.
+    Ids {
+        ids: Vec<i64>,
+    },
+    Folder {
+        folder_id: i64,
+    },
+    Album {
+        album_id: i64,
+    },
 }
 
 /// One skipped photo: its data was left untouched.
@@ -150,7 +159,7 @@ impl Catalog {
     /// Resolve a target to a deterministic, sorted id list.
     fn resolve_targets(&self, target: &GeotagTarget) -> SyncResult<Vec<i64>> {
         let mut ids = match target {
-            GeotagTarget::Ids(ids) => ids.clone(),
+            GeotagTarget::Ids { ids } => ids.clone(),
             GeotagTarget::Folder { folder_id } => {
                 let mut stmt = self
                     .conn()
