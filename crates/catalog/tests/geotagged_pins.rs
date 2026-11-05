@@ -107,6 +107,29 @@ fn half_gps_is_never_returned_even_when_the_other_axis_is_set() {
 }
 
 #[test]
+fn pins_carry_the_photo_id_and_filename_for_selection() {
+    // TASK-06-004: clicking a pin opens the photo in the viewer and
+    // selected pins feed the Photo Tray — both need the photo's catalog id
+    // and filename, not just its hash.
+    let dir = tempfile::tempdir().unwrap();
+    let mut cat = Catalog::open(dir.path().join("c.db")).unwrap();
+    let id = photo(&mut cat, dir.path(), "a.jpg", Some((52.52, 13.405)), false);
+    photo(&mut cat, dir.path(), "b.jpg", Some((-33.86, 151.21)), false);
+
+    let pins = cat.geotagged_pins().unwrap();
+    let a = pins.iter().find(|p| p.hash == "hash-a.jpg").unwrap();
+    assert_eq!(a.id, id);
+    assert_eq!(a.filename, "a.jpg");
+    let b = pins.iter().find(|p| p.hash == "hash-b.jpg").unwrap();
+    assert_ne!(b.id, id);
+    assert_eq!(b.filename, "b.jpg");
+
+    // The filtered query carries the mapping too.
+    let pins = cat.geotagged_pins_filtered(&FileQuery::default()).unwrap();
+    assert!(pins.iter().any(|p| p.id == id && p.filename == "a.jpg"));
+}
+
+#[test]
 fn no_filters_returns_the_whole_geotagged_library() {
     let dir = tempfile::tempdir().unwrap();
     let mut cat = Catalog::open(dir.path().join("c.db")).unwrap();

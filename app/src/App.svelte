@@ -934,7 +934,18 @@
       peopleOpen = true;
     }}
   />
-  <MapPanel bind:open={mapOpen} view={mapView} />
+  <!-- Map pin interactions (TASK-06-004, PLAN §2D/§6 P3): a pin click
+       opens the photo in the viewer (pins mirror the grid's filtered view,
+       so the photo is in `photos`), selected pins feed the Photo Tray. -->
+  <MapPanel
+    bind:open={mapOpen}
+    view={mapView}
+    onopenphoto={(photo) => {
+      const item = photos.find((p) => p.id === photo.id);
+      if (item) openViewer(item);
+    }}
+    ontray={(selected) => tray.add(selected)}
+  />
   <StackPicker
     bind:open={stackPicker.open}
     stackId={stackPicker.stackId}

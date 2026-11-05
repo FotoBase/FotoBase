@@ -140,8 +140,11 @@ export function mapStyle(version: number) {
 // hashes only, never image bytes (§3 rule 3).
 
 /// One geotagged photo from the `map_pins` command (mirrors
-/// `fotobase_catalog::MapPin`).
+/// `fotobase_catalog::MapPin`). `id`/`filename` are the pin → photo
+/// mapping the viewer open and Photo Tray selection need (TASK-06-004).
 export interface MapPin {
+  id: number;
+  filename: string;
   hash: string;
   latitude: number;
   longitude: number;
@@ -164,7 +167,9 @@ export const MARKER_LIMIT = 300;
 /// sends, so the map's pins are exactly the grid's filtered set; without a
 /// view (or without a backend — browser dev) the whole library comes back
 /// / nothing shows, like the availability check above.
-export async function fetchFilteredPins(view?: LibraryView): Promise<MapPin[] | null> {
+export async function fetchFilteredPins(
+  view?: LibraryView,
+): Promise<MapPin[] | null> {
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     const text = view?.query.trim() ?? "";
@@ -194,7 +199,7 @@ export function pinsToGeoJson(pins: MapPin[]) {
         type: "Point" as const,
         coordinates: [p.longitude, p.latitude],
       },
-      properties: { hash: p.hash },
+      properties: { hash: p.hash, id: p.id, filename: p.filename },
     })),
   };
 }
@@ -219,7 +224,17 @@ export function pinThumbUri(hash: string): string {
 /// bubble or a thumbnail pin. Pure — the panel maps these onto DOM.
 export type MarkerModel =
   | { kind: "cluster"; count: number; lon: number; lat: number }
-  | { kind: "pin"; hash: string; thumb: string; lon: number; lat: number };
+  | {
+      kind: "pin";
+      hash: string;
+      /// The pin → photo mapping for viewer open / tray selection
+      /// (TASK-06-004). Absent only on malformed features.
+      id?: number;
+      filename?: string;
+      thumb: string;
+      lon: number;
+      lat: number;
+    };
 
 interface QueryFeature {
   geometry: { coordinates: number[] } | null;
@@ -228,6 +243,8 @@ interface QueryFeature {
     point_count?: number;
     cluster_id?: number;
     hash?: unknown;
+    id?: unknown;
+    filename?: unknown;
   } | null;
 }
 
@@ -264,6 +281,11 @@ export function markerModel(
       out.push({
         kind: "pin",
         hash: f.properties.hash,
+        id: typeof f.properties.id === "number" ? f.properties.id : undefined,
+        filename:
+          typeof f.properties.filename === "string"
+            ? f.properties.filename
+            : undefined,
         thumb: pinThumbUri(f.properties.hash),
         lon,
         lat,

@@ -29,26 +29,34 @@ vi.mock("maplibre-gl", () => ({
       remove: vi.fn(),
       addSource: vi.fn(),
       addLayer: vi.fn(),
-      getSource: vi.fn().mockImplementation((() => { const src = { setData: vi.fn() }; return () => src; })()),
+      getSource: vi.fn().mockImplementation(
+        (() => {
+          const src = { setData: vi.fn() };
+          return () => src;
+        })(),
+      ),
       querySourceFeatures: vi.fn(() => []),
       on: vi.fn(),
       once: vi.fn(),
       isStyleLoaded: vi.fn(() => true),
     };
   }),
-  Marker: vi.fn().mockImplementation(function () {
+  Marker: vi.fn().mockImplementation(function (opts?: {
+    element: HTMLElement;
+  }) {
     return {
       setLngLat: vi.fn().mockReturnThis(),
       addTo: vi.fn().mockReturnThis(),
       remove: vi.fn(),
+      getElement: () => opts?.element,
     };
   }),
   NavigationControl: vi.fn(),
 }));
 
 const PINS = [
-  { hash: "h1", latitude: 52.5, longitude: 13.4 },
-  { hash: "h2", latitude: -33.9, longitude: 151.2 },
+  { id: 1, filename: "a.jpg", hash: "h1", latitude: 52.5, longitude: 13.4 },
+  { id: 2, filename: "b.jpg", hash: "h2", latitude: -33.9, longitude: 151.2 },
 ];
 
 function mockStatus(available: boolean): void {
@@ -111,7 +119,12 @@ describe("MapPanel", () => {
       remove: vi.fn(),
       addSource: vi.fn(),
       addLayer: vi.fn(),
-      getSource: vi.fn().mockImplementation((() => { const src = { setData: vi.fn() }; return () => src; })()),
+      getSource: vi.fn().mockImplementation(
+        (() => {
+          const src = { setData: vi.fn() };
+          return () => src;
+        })(),
+      ),
       querySourceFeatures: vi.fn(() => []),
       on: vi.fn(),
       once: vi.fn(),
@@ -164,7 +177,12 @@ describe("MapPanel — clustered pins", () => {
         remove: vi.fn(),
         addSource: vi.fn(),
         addLayer: vi.fn(),
-        getSource: vi.fn().mockImplementation((() => { const src = { setData: vi.fn() }; return () => src; })()),
+        getSource: vi.fn().mockImplementation(
+          (() => {
+            const src = { setData: vi.fn() };
+            return () => src;
+          })(),
+        ),
         querySourceFeatures: vi.fn(() => []),
         on: vi.fn(),
         once: vi.fn(),
@@ -260,6 +278,14 @@ describe("MapPanel — clustered pins", () => {
     ] as never);
     fire(map, "moveend");
     await waitFor(() => expect(Marker).toHaveBeenCalled());
+    console.log("DBG t0 markers", Marker.mock.calls.length);
+    await new Promise((r) => setTimeout(r, 400));
+    console.log(
+      "DBG t+400 markers",
+      Marker.mock.calls.length,
+      "invokeCalls",
+      vi.mocked(invoke).mock.calls.length,
+    );
     const marker =
       vi.mocked(Marker).mock.results[vi.mocked(Marker).mock.results.length - 1]
         .value;
@@ -335,5 +361,125 @@ describe("MapPanel — filtered pins", () => {
     }
     await new Promise((r) => setTimeout(r, 450));
     expect(vi.mocked(invoke).mock.calls.length).toBe(1);
+  });
+});
+
+// TASK-06-004: pin interactions. A plain click/tap opens the photo in the
+// viewer; a modifier click (mouse) or a long-press (touch) toggles the
+// pin's selection; the selected pins feed the Photo Tray through the
+// panel's `ontray` callback. A clicked cluster zooms in instead.
+describe("MapPanel — pin interactions", () => {
+  beforeEach(() => {
+    mockStatus(true);
+  });
+
+  /// Render with one pin on screen and return its marker element.
+  async function renderWithPin(
+    props: Record<string, unknown> = {},
+  ): Promise<HTMLElement> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValue(PINS);
+    render(MapPanel, { props: { open: true, ...props } });
+    await waitFor(() => expect(MapMock).toHaveBeenCalled());
+    const map = mapInstance();
+    // Earlier tests leave a persistent mockReturnValue on querySourceFeatures
+    // (mockClear keeps implementations); reset it before the initial draw so
+    // the draw this test drives is the only one that has seen these features.
+    map.querySourceFeatures.mockReset();
+    map.querySourceFeatures.mockReturnValue([]);
+    // The initial debounced pin load must have run before the features are
+    // drawn — otherwise its async completion redraws mid-test and orphans
+    // the element reference.
+    await waitFor(() => expect(map.addSource).toHaveBeenCalled());
+    await waitFor(() => expect(map.on).toHaveBeenCalled());
+    map.querySourceFeatures.mockReturnValue([
+      {
+        geometry: { coordinates: [1, 2] },
+        properties: { hash: "h1", id: 7, filename: "a.jpg" },
+      },
+    ] as never);
+    fire(map, "moveend");
+    await waitFor(() => expect(Marker).toHaveBeenCalled());
+    return vi
+      .mocked(Marker)
+      .mock.calls.map((c) => (c[0] as { element: HTMLElement }).element)
+      .find((el) => el.dataset.testid === "map-pin")!;
+  }
+
+  const clickEl = (el: HTMLElement, init: MouseEventInit = {}): void => {
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, ...init }));
+  };
+
+  it("opens the photo in the viewer on a plain pin click", async () => {
+    const onopenphoto = vi.fn();
+    const el = await renderWithPin({ onopenphoto });
+    clickEl(el);
+    expect(onopenphoto).toHaveBeenCalledWith({
+      id: 7,
+      filename: "a.jpg",
+      hash: "h1",
+    });
+  });
+
+  it("does not open the viewer when a modifier click selects", async () => {
+    const onopenphoto = vi.fn();
+    const el = await renderWithPin({ onopenphoto });
+    clickEl(el, { ctrlKey: true });
+    expect(onopenphoto).not.toHaveBeenCalled();
+  });
+
+  it("toggles selection with a ctrl/meta/shift click and marks the pin", async () => {
+    const el = await renderWithPin();
+    clickEl(el, { metaKey: true });
+    await waitFor(() => expect(el.className).toContain("selected"));
+    // The tray action appears with the selected count.
+    expect(screen.getByTestId("map-add-to-tray").textContent).toMatch(/1/);
+    clickEl(el, { metaKey: true });
+    await waitFor(() => expect(el.className).not.toContain("selected"));
+    expect(screen.queryByTestId("map-add-to-tray")).toBeNull();
+  });
+
+  it("feeds the selected photos to the Photo Tray and clears the selection", async () => {
+    const ontray = vi.fn();
+    const el = await renderWithPin({ ontray });
+    clickEl(el, { ctrlKey: true });
+    await waitFor(() =>
+      expect(screen.getByTestId("map-add-to-tray")).toBeTruthy(),
+    );
+    clickEl(screen.getByTestId("map-add-to-tray") as HTMLElement);
+    expect(ontray).toHaveBeenCalledWith([
+      { id: 7, filename: "a.jpg", hash: "h1" },
+    ]);
+    await waitFor(() =>
+      expect(screen.queryByTestId("map-add-to-tray")).toBeNull(),
+    );
+  });
+
+  it("toggles selection on a long-press (touch) without opening the viewer", async () => {
+    const onopenphoto = vi.fn();
+    const el = await renderWithPin({ onopenphoto });
+    el.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }),
+    );
+    await new Promise((r) => setTimeout(r, 650));
+    el.dispatchEvent(
+      new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }),
+    );
+    expect(el.className).toContain("selected");
+    expect(onopenphoto).not.toHaveBeenCalled();
+  });
+
+  it("opens the viewer on a short touch tap", async () => {
+    const onopenphoto = vi.fn();
+    const el = await renderWithPin({ onopenphoto });
+    el.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }),
+    );
+    el.dispatchEvent(
+      new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }),
+    );
+    clickEl(el);
+    await new Promise((r) => setTimeout(r, 650));
+    expect(onopenphoto).toHaveBeenCalledTimes(1);
   });
 });

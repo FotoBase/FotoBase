@@ -14,7 +14,7 @@
 ## feat: map view & interaction
 
 - [x] `06-003` (M) Library-wide map view: pin per geotagged photo; current search/filters apply to the map.
-- [ ] `06-004` (M) Click pin → open viewer; select pins → feed Photo Tray.
+- [x] `06-004` (M) Click pin → open viewer; select pins → feed Photo Tray.
 
 ## feat: geotagging
 

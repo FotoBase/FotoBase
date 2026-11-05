@@ -200,7 +200,7 @@ impl Catalog {
     /// the coordinates mirror the sidecars, the source of truth (§3 rule 2).
     pub fn geotagged_pins(&self) -> Result<Vec<MapPin>> {
         let sql = format!(
-            "SELECT f.hash, m.latitude, m.longitude \
+            "SELECT f.id, f.filename, f.hash, m.latitude, m.longitude \
              FROM files f JOIN metadata m ON m.file_id = f.id \
              WHERE f.hash IS NOT NULL \
                AND m.latitude IS NOT NULL AND m.longitude IS NOT NULL \
@@ -213,7 +213,13 @@ impl Catalog {
         let mut pins = Vec::new();
         let mut rows = stmt.query([])?;
         while let Some(r) = rows.next()? {
-            pins.push(MapPin { hash: r.get(0)?, latitude: r.get(1)?, longitude: r.get(2)? });
+            pins.push(MapPin {
+                id: r.get(0)?,
+                filename: r.get(1)?,
+                hash: r.get(2)?,
+                latitude: r.get(3)?,
+                longitude: r.get(4)?,
+            });
         }
         Ok(pins)
     }
@@ -229,7 +235,7 @@ impl Catalog {
         };
         let CompiledFilters { conds, params, from } = filters;
         let sql = format!(
-            "SELECT f.hash, m.latitude, m.longitude \
+            "SELECT f.id, f.filename, f.hash, m.latitude, m.longitude \
              FROM {from} JOIN metadata m ON m.file_id = f.id \
              WHERE f.hash IS NOT NULL \
                AND m.latitude IS NOT NULL AND m.longitude IS NOT NULL \
@@ -241,7 +247,13 @@ impl Catalog {
         let mut stmt = self.conn().prepare_cached(&sql)?;
         let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
         let rows = stmt.query_map(refs.as_slice(), |r| {
-            Ok(MapPin { hash: r.get(0)?, latitude: r.get(1)?, longitude: r.get(2)? })
+            Ok(MapPin {
+                id: r.get(0)?,
+                filename: r.get(1)?,
+                hash: r.get(2)?,
+                latitude: r.get(3)?,
+                longitude: r.get(4)?,
+            })
         })?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
