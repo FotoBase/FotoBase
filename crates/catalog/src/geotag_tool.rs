@@ -43,6 +43,17 @@ pub struct GeotagToolReport {
     pub cancelled: bool,
 }
 
+/// One tool run: the target plus the location to apply. One command
+/// argument keeps the IPC surface a single required key (`request`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GeotagRequest {
+    pub target: GeotagTarget,
+    /// Decimal degrees.
+    pub latitude: f64,
+    /// Decimal degrees.
+    pub longitude: f64,
+}
+
 impl Catalog {
     /// Run the tool: geotag every target at `latitude`/`longitude` in one
     /// pass, snapshotting each photo's prior GPS for [`Catalog::undo_geotag`].

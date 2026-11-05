@@ -87,7 +87,7 @@ export function runGeotagTool(
   latitude: number,
   longitude: number,
 ): Promise<GeotagToolReport> {
-  return call<GeotagToolReport>("geotag_tool", { target, latitude, longitude });
+  return call<GeotagToolReport>("geotag_tool", { request: { target, latitude, longitude } });
 }
 
 /// Cancel the running pass (best-effort, no-op without a run).

@@ -143,6 +143,26 @@ const soloId = async (): Promise<number> => {
   return row.id;
 };
 
+// Wait for a dialog element; on timeout, surface the dialog's error line
+// so a failed invoke is visible in the CI log instead of a bare timeout.
+async function waitDialog(testid: string, what: string): Promise<void> {
+  const sel = `[data-testid="${testid}"]`;
+  try {
+    await browser.waitUntil(
+      async () =>
+        browser.execute((s: string) => document.querySelector(s) !== null, sel),
+      { timeout: 20_000, timeoutMsg: what },
+    );
+  } catch (e) {
+    const errText = await browser.execute(
+      () =>
+        (document.querySelector('[data-testid="geotag-error"]') as HTMLElement | null)?.textContent ??
+        "",
+    );
+    throw new Error(`${what}: ${errText || "(no dialog error shown)"}`);
+  }
+}
+
 describe("geotag tool", () => {
   before(async () => {
     lib = makeLibrary();
@@ -175,15 +195,10 @@ describe("geotag tool", () => {
     await domClick("geotag-apply");
 
     // Progress or the done note: both prove the pass ran through the queue.
-    await browser.waitUntil(
-      async () =>
-        (await $('[data-testid="geotag-progress"]').isExisting()) ||
-        (await $('[data-testid="geotag-done"]').isExisting()),
-      { timeoutMsg: "no geotag progress" },
+    await waitDialog("geotag-progress", "no geotag progress").catch(() =>
+      waitDialog("geotag-done", "no geotag progress"),
     );
-    await browser.waitUntil(async () => await $('[data-testid="geotag-done"]').isExisting(), {
-      timeoutMsg: "geotag pass did not complete",
-    });
+    await waitDialog("geotag-done", "geotag pass did not complete");
     const gps = await sidecarGps();
     expect(gps.lat).toBeCloseTo(52.52, 5);
     expect(gps.lon).toBeCloseTo(13.405, 5);
@@ -191,9 +206,7 @@ describe("geotag tool", () => {
 
     // Undo restores the untagged state.
     await domClick("geotag-undo");
-    await browser.waitUntil(async () => await $('[data-testid="geotag-undone"]').isExisting(), {
-      timeoutMsg: "geotag undo did not complete",
-    });
+    await waitDialog("geotag-undone", "geotag undo did not complete");
     expect(await sidecarGps()).toEqual({ lat: null, lon: null });
   });
 });

@@ -30,7 +30,7 @@ pub use duplicates::{group_by_phash, DuplicateGroup, DEFAULT_DUPLICATE_THRESHOLD
 pub use face_clusters::ClusterRow;
 pub use faces::{FaceRecord, FaceRow};
 pub use folder_ini::{FolderIniReport, FolderIniStatus};
-pub use geotag_tool::{GeotagTarget, GeotagToolReport};
+pub use geotag_tool::{GeotagRequest, GeotagTarget, GeotagToolReport};
 pub use metadata_edit::{FieldError, GpsEdit, MetadataEdit, MetadataField};
 pub use migrations::MIGRATIONS;
 pub use missing::MissingFile;

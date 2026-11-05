@@ -598,9 +598,7 @@ fn geotag_photos(
 /// The photos' prior GPS values are snapshotted for `undo_geotag`.
 #[tauri::command]
 async fn geotag_tool(
-    target: fotobase_catalog::GeotagTarget,
-    latitude: f64,
-    longitude: f64,
+    request: fotobase_catalog::GeotagRequest,
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<fotobase_catalog::GeotagToolReport, String> {
@@ -620,7 +618,7 @@ async fn geotag_tool(
             fotobase_jobs::job(move |ctx| {
                 let app = job_app.clone();
                 let catalog_path = catalog_path.clone();
-                let target = target.clone();
+                let request = request.clone();
                 let token = token.clone();
                 let ctx = ctx.clone();
                 async move {
@@ -628,9 +626,9 @@ async fn geotag_tool(
                     let joined = tauri::async_runtime::spawn_blocking(move || {
                         geotag_tool::run(
                             &catalog_path,
-                            &target,
-                            latitude,
-                            longitude,
+                            &request.target,
+                            request.latitude,
+                            request.longitude,
                             &cancel,
                             &|p| {
                                 if token.is_cancelled() || ctx.is_cancelled() {
