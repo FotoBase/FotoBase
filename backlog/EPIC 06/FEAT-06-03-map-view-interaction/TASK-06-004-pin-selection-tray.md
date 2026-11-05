@@ -1,6 +1,6 @@
 # task: implement pin click and selection interactions
 
-**Feature:** [FEAT-06-03-map-view-interaction](FEAT-06-03-map-view-interaction.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** todo
+**Feature:** [FEAT-06-03-map-view-interaction](FEAT-06-03-map-view-interaction.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** in progress (2026-11-05)
 
 ## Description
 Map interactions: clicking a pin opens the photo in the viewer; selecting pins feeds the Photo Tray (PLAN §2D Map view; §6 P3 Places "clicking a pin opens the viewer, selecting pins feeds the Photo Tray").
@@ -20,4 +20,4 @@ Map interactions: clicking a pin opens the photo in the viewer; selecting pins f
 - E2e: touch gestures select/open on a touch-enabled profile.
 
 ## Acceptance criteria
-- [ ] 06-004: Pin click opens the viewer; pin selection feeds the Photo Tray; touch + mouse supported.
+- [x] 06-004: Pin click opens the viewer; pin selection feeds the Photo Tray; touch + mouse supported.

@@ -120,9 +120,13 @@ pub struct FileInfo {
 /// One geotagged photo for the map (TASK-06-002): the content hash keys
 /// the frontend's `thumb://` URI (§3 rule 3 — no image bytes over IPC) and
 /// the GPS mirror comes from the sidecar via the `metadata` cache. Only
-/// photos with both coordinates and a hash appear.
+/// photos with both coordinates and a hash appear. `id`/`filename` carry
+/// the pin → photo mapping the viewer open and Photo Tray selection need
+/// (TASK-06-004).
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct MapPin {
+    pub id: i64,
+    pub filename: String,
     pub hash: String,
     pub latitude: f64,
     pub longitude: f64,

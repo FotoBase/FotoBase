@@ -122,6 +122,8 @@ describe("initial view constants", () => {
 // pins). No image bytes ever enter these structures — hashes only.
 
 const PIN = (i: number, lat = 52.5, lon = 13.4): MapPin => ({
+  id: i,
+  filename: `geo_${i.toString().padStart(3, "0")}.jpg`,
   hash: `hash-${i.toString().padStart(4, "0")}`,
   latitude: lat,
   longitude: lon,
@@ -134,7 +136,11 @@ describe("pinsToGeoJson", () => {
     expect(fc.features).toHaveLength(2);
     const [a] = fc.features;
     expect(a.geometry).toEqual({ type: "Point", coordinates: [20, 10] });
-    expect(a.properties).toEqual({ hash: "hash-0001" });
+    expect(a.properties).toEqual({
+      hash: "hash-0001",
+      id: 1,
+      filename: "geo_001.jpg",
+    });
   });
 
   it("carries no image bytes — hashes only (§3 rule 3)", () => {
@@ -238,21 +244,35 @@ describe("markerModel", () => {
       [
         {
           geometry: { coordinates: [1, 2] },
-          properties: { hash: "h1" },
+          properties: { hash: "h1", id: 7, filename: "a.jpg" },
         } as never,
       ],
       10,
     );
     expect(model).toEqual([
-      { kind: "pin", hash: "h1", thumb: "thumb://h1", lon: 1, lat: 2 },
+      {
+        kind: "pin",
+        hash: "h1",
+        id: 7,
+        filename: "a.jpg",
+        thumb: "thumb://h1",
+        lon: 1,
+        lat: 2,
+      },
     ]);
   });
 
   it("deduplicates wrapped-world copies of the same cluster and photo", () => {
     const model = markerModel(
       [
-        { geometry: { coordinates: [13.4, 52.5] }, properties: { cluster: true, point_count: 7, cluster_id: 1 } },
-        { geometry: { coordinates: -346.6 }, properties: { cluster: true, point_count: 7, cluster_id: 1 } },
+        {
+          geometry: { coordinates: [13.4, 52.5] },
+          properties: { cluster: true, point_count: 7, cluster_id: 1 },
+        },
+        {
+          geometry: { coordinates: -346.6 },
+          properties: { cluster: true, point_count: 7, cluster_id: 1 },
+        },
         { geometry: { coordinates: [1, 2] }, properties: { hash: "h1" } },
         { geometry: { coordinates: [361, 2] }, properties: { hash: "h1" } },
       ] as never,

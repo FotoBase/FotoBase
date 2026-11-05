@@ -394,6 +394,7 @@ const messages: Record<string, Dict> = {
     "map.unavailable":
       "No offline basemap found — the bundled world map is missing. Reinstall Fotobase to restore it.",
     "map.attribution": "© OpenStreetMap contributors",
+    "map.addToTray": "Add {count} to tray",
     "people.managerTitle": "People Manager",
     "people.named": "Named people",
     "people.unnamed": "Unnamed clusters",
@@ -926,6 +927,7 @@ const messages: Record<string, Dict> = {
     "map.unavailable":
       "Keine Offline-Basiskarte gefunden — die mitgelieferte Weltkarte fehlt. Fotobase neu installieren, um sie wiederherzustellen.",
     "map.attribution": "© OpenStreetMap-Mitwirkende",
+    "map.addToTray": "{count} in Ablage",
     "people.managerTitle": "Personen-Verwaltung",
     "people.named": "Benannte Personen",
     "people.unnamed": "Unbenannte Cluster",

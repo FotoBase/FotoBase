@@ -14,6 +14,10 @@ fetch/XHR stack records zero http(s) requests.
 cluster markers at the world zoom; zooming in resolves them into photo
 thumbnails through `thumb://`.
 
+`specs/map-pin-select.e2e.ts` (TASK-06-004) — a pin click opens the photo
+in the viewer; modifier-click / touch long-press selects pins and the tray
+action feeds exactly those photos to the Photo Tray.
+
 ## Platforms
 
 `tauri-driver` has no macOS support, so the suite runs on Linux (CI, or a Linux

@@ -29,11 +29,25 @@
     type MarkerModel,
   } from "./map-src";
   import type { LibraryView } from "./search";
+  import type { TrayPhoto } from "./tray.svelte";
 
   let {
     open = $bindable(false),
     view = null,
-  }: { open?: boolean; view?: LibraryView | null } = $props();
+    onopenphoto = () => {},
+    ontray = () => {},
+  }: {
+    open?: boolean;
+    view?: LibraryView | null;
+    /// A plain pin click/tap: open that photo in the viewer (TASK-06-004).
+    onopenphoto?: (photo: TrayPhoto) => void;
+    /// The tray action: the selected pins feed the Photo Tray.
+    ontray?: (photos: TrayPhoto[]) => void;
+  } = $props();
+
+    /// Pins the user selected (modifier click / long-press); the tray action
+    /// hands them to the Photo Tray and clears the set.
+    let selected = $state<Map<number, TrayPhoto>>(new Map());
 
   let status = $state<BasemapAvailability | null>(null);
   let checked = $state(false);
@@ -75,15 +89,77 @@
       el.className = "map-cluster";
       el.dataset.testid = "map-cluster";
       el.textContent = model.count > 999 ? "999+" : String(model.count);
+      // A cluster click zooms in to resolve it into its photos.
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        zoomToCluster(model.lon, model.lat);
+      });
     } else {
       el.className = "map-pin";
       el.dataset.testid = "map-pin";
+      if (model.id !== undefined) el.dataset.photoId = String(model.id);
+      if (selected.has(model.id ?? -1)) el.classList.add("selected");
+      // Plain click/tap opens the photo; a modifier click selects. The
+      // long-press fallback covers touch, where there is no modifier key.
+      let pressTimer: ReturnType<typeof setTimeout> | null = null;
+      let longPressed = false;
+      el.addEventListener("pointerdown", (e) => {
+        if (e.pointerType === "mouse") return;
+        longPressed = false;
+        pressTimer = setTimeout(() => {
+          longPressed = true;
+          togglePin(model);
+        }, 500);
+      });
+      const cancel = (): void => {
+        if (pressTimer !== null) clearTimeout(pressTimer);
+        pressTimer = null;
+      };
+      el.addEventListener("pointerup", cancel);
+      el.addEventListener("pointercancel", cancel);
+      el.addEventListener("pointerleave", cancel);
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (longPressed) {
+          longPressed = false;
+          return;
+        }
+        if (e.ctrlKey || e.metaKey || e.shiftKey) togglePin(model);
+        else if (model.id !== undefined)
+          onopenphoto({ id: model.id, filename: model.filename ?? "", hash: model.hash });
+      });
       const img = document.createElement("img");
       img.src = model.thumb;
       img.alt = "";
       el.appendChild(img);
     }
     return el;
+  }
+
+  function togglePin(model: MarkerModel & { kind: "pin" }): void {
+    if (model.id === undefined) return;
+    selected = new Map(selected);
+    const nowSelected = !selected.has(model.id);
+    if (nowSelected) selected.set(model.id, { id: model.id, filename: model.filename ?? "", hash: model.hash });
+    else selected.delete(model.id);
+    // Mirror the state onto the live marker element (draw() would rebuild
+    // it and orphan any open-press timers).
+    const id = String(model.id);
+    for (const m of markers) {
+      const el = m.getElement();
+      if (el?.dataset.photoId === id) el.classList.toggle("selected", nowSelected);
+    }
+  }
+
+  function zoomToCluster(lon: number, lat: number): void {
+    if (!map) return;
+    map.easeTo({ center: [lon, lat], zoom: Math.min(map.getZoom() + 2, MAP_MAX_ZOOM) });
+  }
+
+  function addToTray(): void {
+    if (selected.size === 0) return;
+    ontray([...selected.values()]);
+    selected = new Map();
   }
 
   $effect(() => {
@@ -132,6 +208,7 @@
       cancelled = true;
       ready = false;
       source = null;
+      selected = new Map();
       for (const m of markers) m.remove();
       markers = [];
       map?.remove();
@@ -191,6 +268,15 @@
     <div class="map-dialog" role="dialog" aria-label={t("map.title")}>
       <header>
         <h2>{t("map.title")}</h2>
+        {#if selected.size > 0}
+          <button
+            type="button"
+            data-testid="map-add-to-tray"
+            onclick={addToTray}
+          >
+            {t("map.addToTray", { count: selected.size })}
+          </button>
+        {/if}
         <button
           type="button"
           data-testid="map-close"
@@ -289,7 +375,12 @@
     border-radius: 4px;
     overflow: hidden;
     box-shadow: 0 1px 4px rgb(0 0 0 / 40%);
-    pointer-events: none;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .map-stage :global(.map-pin.selected) {
+    outline: 2px solid var(--fb-accent, #3567b0);
+    outline-offset: 1px;
   }
   .map-stage :global(.map-pin img) {
     width: 100%;
