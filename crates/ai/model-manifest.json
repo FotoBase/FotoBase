@@ -14,5 +14,13 @@
     "url": "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
     "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
     "size_bytes": 38696353
+  },
+  {
+    "name": "geonames/cities.txt",
+    "license": "CC-BY-4.0",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "url": "https://download.geonames.org/export/dump/cities15000.zip",
+    "sha256": "f21d3004ad10118ffe1b83761c894a9ee587545c303ad22f64b59a54143ae975",
+    "size_bytes": 1343386
   }
 ]

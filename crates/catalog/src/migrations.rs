@@ -27,6 +27,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V18,
     MIGRATION_V19,
     MIGRATION_V20,
+    MIGRATION_V21,
 ];
 
 const MIGRATION_V1: &str = "
@@ -495,13 +496,14 @@ macro_rules! fts_refresh {
             "DELETE FROM files_fts WHERE rowid = ",
             $id,
             ";
-    INSERT INTO files_fts(rowid, filename, folder, caption, tags, people)
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags, people, place)
         SELECT f.id, f.filename, d.path, m.caption,
                (SELECT group_concat(t.name, ' ') FROM file_tags ft
                 JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id),
                (SELECT group_concat(name, ' ') FROM
                 (SELECT DISTINCT p.name AS name FROM faces fa
-                 JOIN persons p ON p.id = fa.person_id WHERE fa.file_id = f.id))
+                 JOIN persons p ON p.id = fa.person_id WHERE fa.file_id = f.id)),
+               (SELECT name FROM places WHERE id = f.place_id)
         FROM files f JOIN folders d ON d.id = f.folder_id
         LEFT JOIN metadata m ON m.file_id = f.id WHERE f.id = ",
             $id,
@@ -733,6 +735,141 @@ CREATE TABLE geotag_undo (
     lon      REAL
 );
 ";
+
+/// TASK-06-008: offline reverse geocoding (PLAN §6 P3 Places, §4
+/// "GeoNames cities dataset (embedded)"). `places` caches one row per
+/// geo cell (a 0.1° grid) with the nearest city's name; `files.place_id`
+/// points each geotagged photo at its place. Both are derived data —
+/// recomputable from the GPS mirrors + the embedded dataset on rebuild —
+/// so the sidecar stays untouched and the FTS `place` column is fed by
+/// the same `fts_refresh!` pathway as tags and people.
+const MIGRATION_V21: &str = concat!(
+    "
+CREATE TABLE places (
+    id        INTEGER PRIMARY KEY,
+    geo_cell  TEXT NOT NULL UNIQUE,
+    name      TEXT NOT NULL,
+    country   TEXT,
+    latitude  REAL NOT NULL,
+    longitude REAL NOT NULL
+);
+CREATE INDEX idx_places_name ON places(name);
+ALTER TABLE files ADD COLUMN place_id INTEGER REFERENCES places(id) ON DELETE SET NULL;
+CREATE INDEX idx_files_place ON files(place_id);
+
+DROP TRIGGER files_fts_insert;
+DROP TRIGGER files_fts_delete;
+DROP TRIGGER files_fts_update;
+DROP TRIGGER files_fts_caption_insert;
+DROP TRIGGER files_fts_caption_update;
+DROP TRIGGER files_fts_caption_delete;
+DROP TRIGGER files_fts_tags_insert;
+DROP TRIGGER files_fts_tags_delete;
+DROP TRIGGER files_fts_people_insert;
+DROP TRIGGER files_fts_people_update;
+DROP TRIGGER files_fts_people_delete;
+DROP TRIGGER files_fts_person_rename;
+DROP TABLE files_fts;
+CREATE VIRTUAL TABLE files_fts USING fts5(filename, folder, caption, tags, people, place);
+
+CREATE TRIGGER files_fts_insert AFTER INSERT ON files BEGIN
+    ",
+    fts_refresh!("NEW.id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_delete AFTER DELETE ON files BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.id;
+END;
+
+CREATE TRIGGER files_fts_update AFTER UPDATE ON files BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.id;
+    ",
+    fts_refresh!("NEW.id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_caption_insert AFTER INSERT ON metadata
+WHEN NEW.caption IS NOT NULL BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_caption_update AFTER UPDATE OF caption ON metadata
+WHEN OLD.caption IS NOT NEW.caption BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_caption_delete AFTER DELETE ON metadata
+WHEN OLD.caption IS NOT NULL BEGIN
+    ",
+    fts_refresh!("OLD.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_tags_insert AFTER INSERT ON file_tags BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_tags_delete AFTER DELETE ON file_tags BEGIN
+    ",
+    fts_refresh!("OLD.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_people_insert AFTER INSERT ON faces
+WHEN NEW.person_id IS NOT NULL BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_people_update AFTER UPDATE OF person_id ON faces
+WHEN NEW.person_id IS NOT OLD.person_id BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_people_delete AFTER DELETE ON faces
+WHEN OLD.person_id IS NOT NULL BEGIN
+    ",
+    fts_refresh!("OLD.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_person_rename AFTER UPDATE OF name ON persons BEGIN
+    DELETE FROM files_fts WHERE rowid IN (SELECT file_id FROM faces WHERE person_id = NEW.id);
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags, people, place)
+        SELECT f.id, f.filename, d.path, m.caption,
+               (SELECT group_concat(t.name, ' ') FROM file_tags ft
+                JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id),
+               (SELECT group_concat(name, ' ') FROM
+                (SELECT DISTINCT p.name AS name FROM faces fa
+                 JOIN persons p ON p.id = fa.person_id WHERE fa.file_id = f.id)),
+               (SELECT name FROM places WHERE id = f.place_id)
+        FROM files f JOIN folders d ON d.id = f.folder_id
+        LEFT JOIN metadata m ON m.file_id = f.id
+        WHERE f.id IN (SELECT file_id FROM faces WHERE person_id = NEW.id);
+END;
+
+INSERT INTO files_fts(rowid, filename, folder, caption, tags, people, place)
+    SELECT f.id, f.filename, d.path, m.caption,
+           (SELECT group_concat(t.name, ' ') FROM file_tags ft
+            JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id),
+           (SELECT group_concat(name, ' ') FROM
+            (SELECT DISTINCT p.name AS name FROM faces fa
+             JOIN persons p ON p.id = fa.person_id WHERE fa.file_id = f.id)),
+           (SELECT name FROM places WHERE id = f.place_id)
+    FROM files f JOIN folders d ON d.id = f.folder_id
+    LEFT JOIN metadata m ON m.file_id = f.id;
+"
+);
 
 /// Apply all pending migrations, in order, each in its own transaction.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
