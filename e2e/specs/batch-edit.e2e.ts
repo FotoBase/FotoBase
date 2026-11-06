@@ -125,6 +125,15 @@ async function fillTray(): Promise<void> {
     (await browser.execute(() => (window as unknown as { __fbMarker?: number }).__fbMarker === 1))
       ? "page NOT reloaded"
       : "page RELOADED (marker gone)";
+  // before() waits for 3 grid-cells, but a cell whose hash has not been
+  // mirrored yet renders a placeholder instead of an img — snapshotting the
+  // imgs too early made the tray fill stop after that many adds (CI
+  // 2026-11-06: "tray never reached 3 photos" with "1 in tray" / "0 in
+  // tray", page not reloaded).
+  await browser.waitUntil(async () => (await $$('[data-testid="grid-cell"] img').length) === 3, {
+    timeout: 20_000,
+    timeoutMsg: "grid cells never grew their thumbnail imgs",
+  });
   const imgs = await $$('[data-testid="grid-cell"] img');
   let added = 0;
   for (const img of imgs) {
