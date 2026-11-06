@@ -1,6 +1,6 @@
 # task: embed geonames dataset and reverse geocode
 
-**Feature:** [FEAT-06-04-reverse-geocoding](FEAT-06-04-reverse-geocoding.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** todo
+**Feature:** [FEAT-06-04-reverse-geocoding](FEAT-06-04-reverse-geocoding.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** in review (2026-11-06)
 
 ## Description
 Offline reverse geocoding from an embedded GeoNames cities dataset: GPS → place names in the catalog, searchable via FTS ("photos in Lisbon") (PLAN §4 "GeoNames cities dataset (embedded)"; §6 P3 Places).
@@ -21,5 +21,5 @@ Offline reverse geocoding from an embedded GeoNames cities dataset: GPS → plac
 - Integration: bulk geocode of 50k fixture completes as background job, UI responsive (§9 Performance).
 
 ## Acceptance criteria
-- [ ] 06-008: Embedded GeoNames dataset powers offline reverse geocoding to place names.
-- [ ] 06-008: Place names in catalog + FTS; bulk geocoding of 50k fixture is a non-blocking background job.
+- [x] 06-008: Embedded GeoNames dataset powers offline reverse geocoding to place names.
+- [x] 06-008: Place names in catalog + FTS; bulk geocoding of 50k fixture is a non-blocking background job.

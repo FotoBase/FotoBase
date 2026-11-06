@@ -8,8 +8,8 @@
 - Place names land in the catalog and are searchable via FTS ("photos in Lisbon").
 - Bulk geocoding of the 50k fixture completes as a background job without UI jank.
 
-- [ ] `06-008` (M) Embedded GeoNames cities dataset; offline reverse geocode → place names in catalog + FTS.
+- [x] `06-008` (M) Embedded GeoNames cities dataset; offline reverse geocode → place names in catalog + FTS.
 
 ## Tasks
 
-- [ ] [TASK-06-008-geonames-reverse-geocode.md](TASK-06-008-geonames-reverse-geocode.md) — embed geonames dataset and reverse geocode
+- [x] [TASK-06-008-geonames-reverse-geocode.md](TASK-06-008-geonames-reverse-geocode.md) — embed geonames dataset and reverse geocode

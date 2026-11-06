@@ -11,6 +11,7 @@ pub mod duplicates;
 pub mod face_clusters;
 pub mod faces;
 pub mod folder_ini;
+pub mod geonames;
 pub mod geotag_tool;
 pub mod hidden;
 pub mod metadata_edit;

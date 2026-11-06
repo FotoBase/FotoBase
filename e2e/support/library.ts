@@ -59,14 +59,22 @@ export function makeLibrary(): Library {
 // `plain` (TASK-06-007) adds untagged JPEGs (`plain_NNN.jpg`, no sidecar)
 // to the same folder, so a spec can exercise the "Geotagged" filter over a
 // mixed library.
-export function makeGeotaggedLibrary(count = 40, plain = 0): Library {
+//
+// `center` (TASK-06-008) overrides the cluster center; the default keeps
+// the panel's initial view. The reverse-geocode spec passes Lisbon, so the
+// embedded GeoNames dataset resolves every photo to the same city.
+export function makeGeotaggedLibrary(
+  count = 40,
+  plain = 0,
+  center: { lat: number; lon: number } = { lat: 25, lon: 10 },
+): Library {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fb-e2e-geo-"));
   const jpeg = Buffer.from(TINY_JPEG_BASE64, "base64");
   const checksums: Record<string, string> = {};
   for (let i = 0; i < count; i += 1) {
-    // One tight grid around central Europe (the panel's initial view).
-    const lat = 25 + (i % 8) * 0.02;
-    const lon = 10 + Math.floor(i / 8) * 0.02;
+    // One tight grid around the requested center.
+    const lat = center.lat + (i % 8) * 0.02;
+    const lon = center.lon + Math.floor(i / 8) * 0.02;
     const name = `geo_${String(i).padStart(3, "0")}.jpg`;
     // A per-photo payload byte: identical files would share one content
     // hash, and the catalog keys pins by hash — the map would draw a
