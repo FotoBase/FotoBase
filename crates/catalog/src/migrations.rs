@@ -26,6 +26,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V17,
     MIGRATION_V18,
     MIGRATION_V19,
+    MIGRATION_V20,
 ];
 
 const MIGRATION_V1: &str = "
@@ -716,6 +717,20 @@ const MIGRATION_V19: &str = "
 CREATE TABLE person_contacts (
     person_id  INTEGER PRIMARY KEY REFERENCES persons(id) ON DELETE CASCADE,
     contact_id TEXT NOT NULL UNIQUE
+);
+";
+
+/// TASK-06-006: the geotag-tool undo snapshot. One row per photo in the
+/// latest batch, holding the GPS the photo had before the batch (`NULL`
+/// = the photo was untagged). The snapshot is transient state, not user
+/// data, so it lives in the rebuildable cache; restore rewrites the
+/// sidecars through merge-on-write.
+const MIGRATION_V20: &str = "
+CREATE TABLE geotag_undo (
+    id       INTEGER PRIMARY KEY,
+    file_id  INTEGER NOT NULL,
+    lat      REAL,
+    lon      REAL
 );
 ";
 

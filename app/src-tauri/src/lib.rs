@@ -28,6 +28,7 @@ pub mod export_dialog;
 pub mod face_jobs;
 pub mod file_menu;
 pub mod folder_manager;
+pub mod geotag_tool;
 pub mod import;
 pub mod people;
 pub mod perf_probe;
@@ -88,6 +89,8 @@ const EDIT_QUEUE_CAPACITY: usize = 8;
 /// Capacity of the batch-edit queue (TASK-04-011): bounded, per PLAN §3
 /// rule 4; one background batch at a time serializes sidecar writers.
 const BATCH_EDIT_QUEUE_CAPACITY: usize = 2;
+/// Geotag tool runs serialize like batch edits (TASK-06-006).
+const GEOTAG_QUEUE_CAPACITY: usize = 2;
 
 /// Capacity of the duplicate-hashing queue (TASK-04-019): bounded, per
 /// PLAN §3 rule 4; one background run at a time.
@@ -159,6 +162,12 @@ struct AppState {
     /// (TASK-04-011): `cancel_batch_edit` trips it, the running job
     /// observes the flag and stops between photos.
     batch_edit_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
+    /// Bounded queue for geotag-tool runs and undos (TASK-06-006).
+    geotag_tool: fotobase_jobs::Queue<fotobase_catalog::GeotagToolReport>,
+    /// Bounded queue for geotag-tool undo runs (TASK-06-006).
+    geotag_undo: fotobase_jobs::Queue<usize>,
+    /// Cancel token of the most recently started geotag run.
+    geotag_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
     /// Bounded queue for duplicate hashing runs (TASK-04-019): background
     /// priority, the single worker serializes runs (PLAN §3 rule 4).
     dupes: fotobase_jobs::Queue<duplicates::HashReport>,
@@ -581,8 +590,138 @@ fn geotag_photos(
     Ok(())
 }
 
-/// Stack photos together (TASK-03-021): a new stack (first id on top) or
-/// the existing stack of one of them. Metadata only — each member's sidecar
+/// Geotag tool (TASK-06-006, PLAN §2 Tools "Geotag"): one pass applies one
+/// location to every target — a selection, a whole folder, or a whole
+/// album. The run goes through the bounded job queue (§3 rule 4) at
+/// background priority on its own catalog connection; progress streams on
+/// the `geotag-progress` event and `cancel_geotag` stops it between photos.
+/// The photos' prior GPS values are snapshotted for `undo_geotag`.
+#[tauri::command]
+async fn geotag_tool(
+    request: fotobase_catalog::GeotagRequest,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_catalog::GeotagToolReport, String> {
+    let queue = state.geotag_tool.clone();
+    let token = fotobase_jobs::CancelToken::default();
+    {
+        let mut guard =
+            state.geotag_cancel.lock().map_err(|e| format!("geotag cancel mutex poisoned: {e}"))?;
+        *guard = Some(token.clone());
+    }
+    let job_app = app.clone();
+    let catalog_path = state.catalog_path();
+    let handle = queue
+        .try_enqueue(
+            "geotag-tool",
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |ctx| {
+                let app = job_app.clone();
+                let catalog_path = catalog_path.clone();
+                let request = request.clone();
+                let token = token.clone();
+                let ctx = ctx.clone();
+                async move {
+                    let cancel = std::sync::atomic::AtomicBool::new(false);
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        geotag_tool::run(
+                            &catalog_path,
+                            &request.target,
+                            request.latitude,
+                            request.longitude,
+                            &cancel,
+                            &|p| {
+                                if token.is_cancelled() || ctx.is_cancelled() {
+                                    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                                }
+                                let _ = app.emit(geotag_tool::GEOTAG_EVENT, p);
+                            },
+                        )
+                    })
+                    .await;
+                    match joined {
+                        Ok(result) => match result {
+                            Ok(report) => fotobase_jobs::Outcome::Done(report),
+                            Err(e) => fotobase_jobs::Outcome::Failed(e),
+                        },
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("geotag task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue geotag tool: {e}"))?;
+    let outcome = handle.result().await;
+    if let Ok(mut guard) = state.geotag_cancel.lock() {
+        *guard = None;
+    }
+    let _ = app.emit("library-changed", ());
+    match outcome.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("geotag cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Cancel the geotag tool run that is currently running or queued
+/// (TASK-06-006). Best-effort: with no run in flight it is a no-op.
+#[tauri::command]
+fn cancel_geotag(state: tauri::State<'_, AppState>) {
+    let token = state
+        .geotag_cancel
+        .lock()
+        .map_err(|e| format!("geotag cancel mutex poisoned: {e}"))
+        .ok()
+        .and_then(|guard| guard.clone());
+    if let Some(token) = token {
+        token.cancel();
+    }
+}
+
+/// Undo the latest geotag-tool batch (TASK-06-006): restores every photo's
+/// prior GPS through the merge-on-write path. Also queued at background
+/// priority — a whole-folder undo writes just as many sidecars.
+#[tauri::command]
+async fn undo_geotag(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<usize, String> {
+    let queue = state.geotag_undo.clone();
+    let job_app = app.clone();
+    let catalog_path = state.catalog_path();
+    let handle = queue
+        .try_enqueue(
+            "geotag-undo",
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |_ctx| {
+                let app = job_app.clone();
+                let catalog_path = catalog_path.clone();
+                async move {
+                    let cancel = std::sync::atomic::AtomicBool::new(false);
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        geotag_tool::undo(&catalog_path, &cancel, &|p| {
+                            let _ = app.emit(geotag_tool::GEOTAG_EVENT, p);
+                        })
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(restored)) => fotobase_jobs::Outcome::Done(restored),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("geotag undo: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue geotag undo: {e}"))?;
+    let outcome = handle.result().await;
+    let _ = app.emit("library-changed", ());
+    match outcome.as_ref() {
+        fotobase_jobs::Outcome::Done(restored) => Ok(*restored),
+        fotobase_jobs::Outcome::Cancelled => Err("geotag undo cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Stack photos together (TASK-03-021): a new stack (first id on top) or/// the existing stack of one of them. Metadata only — each member's sidecar
 /// gets `fb:StackId` / `fb:StackRole`, no file moves. Returns the stack id.
 #[tauri::command]
 fn stack_photos(
@@ -2704,6 +2843,12 @@ pub fn run() {
             let dupes = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(DUPES_QUEUE_CAPACITY)
             });
+            let geotag_tool_queue = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(GEOTAG_QUEUE_CAPACITY)
+            });
+            let geotag_undo_queue = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(GEOTAG_QUEUE_CAPACITY)
+            });
             // The face queue runs on the battery hook: on battery the
             // dequeue pauses (§10), on AC it admits immediately.
             let face_battery = std::sync::Arc::new(fotobase_jobs::BatteryHook::new(false));
@@ -2759,6 +2904,9 @@ pub fn run() {
                 dupes,
                 faces,
                 batch_edit_cancel: Mutex::new(None),
+                geotag_tool: geotag_tool_queue,
+                geotag_undo: geotag_undo_queue,
+                geotag_cancel: Mutex::new(None),
                 import_cancel: Mutex::new(None),
                 settings: Mutex::new(persisted),
                 pending_update: Mutex::new(None),
@@ -2889,6 +3037,9 @@ pub fn run() {
             set_caption,
             edit_photo_metadata,
             geotag_photos,
+            geotag_tool,
+            cancel_geotag,
+            undo_geotag,
             stack_photos,
             set_stack_top,
             unstack,

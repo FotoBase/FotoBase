@@ -12,6 +12,7 @@
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import DateTimeDialog from "./lib/DateTimeDialog.svelte";
+  import GeotagDialog from "./lib/GeotagDialog.svelte";
   import FolderManagerDialog from "./lib/FolderManagerDialog.svelte";
   import FolderTree from "./lib/FolderTree.svelte";
   import ImportDialog from "./lib/ImportDialog.svelte";
@@ -146,6 +147,9 @@
   // Date/time adjustment (TASK-03-019): opened from the photo menu, acts on
   // the right-clicked photo or the whole selection it belongs to.
   let dateTimeDialog = $state<{ open: boolean; ids: number[] }>({ open: false, ids: [] });
+  // Geotag tool (TASK-06-006): opened from the photo menu, acts on the
+  // selection — or, per the scope picker, the whole current folder/album.
+  let geotagDialog = $state<{ open: boolean; ids: number[] }>({ open: false, ids: [] });
   let folderMenu = $state<{ open: boolean; x: number; y: number; folder: FolderInfo | null }>({
     open: false,
     x: 0,
@@ -548,6 +552,7 @@
     { id: "delete-from-disk", label: t("menu.deleteFromDisk") },
     { id: "add-to-album", label: t("menu.addToAlbum"), disabled: userAlbums(albums).length === 0 },
     { id: "adjust-date-time", label: t("menu.adjustDateTime") },
+    { id: "geotag", label: t("menu.geotag") },
     { id: "reset-faces", label: t("menu.resetFaces") },
     { id: "batch-edit", label: t("menu.batchEdit") },
     { id: "export", label: t("menu.export") },
@@ -631,6 +636,8 @@
       };
     } else if (id === "adjust-date-time") {
       dateTimeDialog = { open: true, ids: targetIds(item.id, gridState.selection) };
+    } else if (id === "geotag") {
+      geotagDialog = { open: true, ids: targetIds(item.id, gridState.selection) };
     } else if (id === "batch-edit") {
       batchEditDialog = { open: true, ids: targetIds(item.id, gridState.selection) };
     } else if (id === "export") {
@@ -1085,6 +1092,13 @@
   <DateTimeDialog
     bind:open={dateTimeDialog.open}
     ids={dateTimeDialog.ids}
+    onapplied={() => void refreshLibrary()}
+  />
+  <GeotagDialog
+    bind:open={geotagDialog.open}
+    ids={geotagDialog.ids}
+    folderId={selectedFolders.length === 1 ? selectedFolders[0] : null}
+    albumId={selectedAlbum}
     onapplied={() => void refreshLibrary()}
   />
   <BatchDialog
