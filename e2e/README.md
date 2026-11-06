@@ -18,6 +18,10 @@ thumbnails through `thumb://`.
 in the viewer; modifier-click / touch long-press selects pins and the tray
 action feeds exactly those photos to the Photo Tray.
 
+`specs/geotagged-filter.e2e.ts` (TASK-06-007) — the "Geotagged" filter button
+narrowing a mixed library to its geotagged photos, combined with a search
+term, and mirrored by the map's pins.
+
 ## Platforms
 
 `tauri-driver` has no macOS support, so the suite runs on Linux (CI, or a Linux

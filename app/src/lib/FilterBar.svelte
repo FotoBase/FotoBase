@@ -68,6 +68,15 @@
   >
     {t("filters.faces")}
   </button>
+  <button
+    type="button"
+    class="filter-toggle"
+    data-testid="filter-geotagged"
+    aria-pressed={gridState.geotaggedOnly}
+    onclick={() => (gridState.geotaggedOnly = !gridState.geotaggedOnly)}
+  >
+    {t("filters.geotagged")}
+  </button>
   <label class="filter-sort">
     <span>{t("filters.sort")}</span>
     <select data-testid="filter-sort" value={gridState.sort} onchange={onsort}>

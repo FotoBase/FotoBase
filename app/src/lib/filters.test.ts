@@ -70,6 +70,7 @@ describe("filter i18n", () => {
       "filters.label",
       "filters.starred",
       "filters.videos",
+      "filters.geotagged",
       "filters.date",
       "filters.allTime",
       "filters.lastDays",

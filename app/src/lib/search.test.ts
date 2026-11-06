@@ -22,6 +22,7 @@ const view = (over: Partial<LibraryView> = {}): LibraryView => ({
   starred: false,
   videosOnly: false,
   hasFaces: false,
+  geotagged: false,
   takenSince: null,
   sort: "path",
   ...over,
@@ -37,9 +38,15 @@ describe("queryLibraryItems", () => {
       starred: false,
       videosOnly: false,
       hasFaces: false,
+      geotagged: false,
       takenSince: null,
       sort: "path",
     });
+  });
+
+  it("sends the geotagged filter (TASK-06-007)", async () => {
+    await queryLibraryItems(view({ geotagged: true }));
+    expect(vi.mocked(invoke).mock.calls[0][1]).toMatchObject({ geotagged: true });
   });
 
   it("sends the has-faces filter (TASK-05-007)", async () => {
@@ -81,6 +88,7 @@ describe("queryLibraryItems", () => {
       starred: true,
       videosOnly: true,
       hasFaces: false,
+      geotagged: false,
       takenSince: "2026-01-01",
       sort: "path",
     });

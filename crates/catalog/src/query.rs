@@ -57,6 +57,10 @@ pub struct FileQuery {
     /// "Has faces" filter (TASK-05-007): photos with at least one detected
     /// or named face row.
     pub has_faces: bool,
+    /// "Geotagged" filter (TASK-06-007, PLAN §6 P3): photos with a complete
+    /// GPS mirror — the same predicate `geotagged_pins` applies, so grid and
+    /// map agree on what counts as geotagged.
+    pub geotagged: bool,
     /// Date-slider cutoff, `YYYY-MM-DD`, inclusive.
     pub taken_since: Option<String>,
     /// Expand one stack (TASK-03-021): its members, top first, instead of
@@ -147,6 +151,17 @@ impl Catalog {
         if query.has_faces {
             conds.push_str(" AND EXISTS (SELECT 1 FROM faces fa WHERE fa.file_id = f.id)");
         }
+        // TASK-06-007: complete GPS pair only, plus a hash — the exact
+        // predicate `geotagged_pins` uses, so a geotagged-filtered grid and
+        // the map's pins are the same set.
+        if query.geotagged {
+            conds.push_str(
+                " AND f.hash IS NOT NULL AND f.id IN (SELECT file_id FROM metadata \
+                 WHERE latitude IS NOT NULL AND longitude IS NOT NULL \
+                 AND latitude BETWEEN -90.0 AND 90.0 \
+                 AND longitude BETWEEN -180.0 AND 180.0)",
+            );
+        }
         if let Some(cutoff) = &query.taken_since {
             params.push(Box::new(cutoff.clone()));
             conds.push_str(&format!(" AND {FILE_DATE} >= ?"));
@@ -226,9 +241,10 @@ impl Catalog {
 
     /// The geotagged pins of the current view (TASK-06-003): the geotagged
     /// set narrowed by the same filters the grid's `query_files` applies
-    /// (search text, folders, album, rating, videos, faces, date cutoff).
-    /// `stack`/`sort` are grid-only concerns and ignored — pins have no
-    /// collapsed stacks and no meaningful order until clustered client-side.
+    /// (search text, folders, album, rating, videos, faces, geotagged
+    /// toggle, date cutoff). `stack`/`sort` are grid-only concerns and
+    /// ignored — pins have no collapsed stacks and no meaningful order
+    /// until clustered client-side.
     pub fn geotagged_pins_filtered(&self, query: &FileQuery) -> Result<Vec<MapPin>> {
         let Some(filters) = self.compile_filters(query)? else {
             return Ok(Vec::new());

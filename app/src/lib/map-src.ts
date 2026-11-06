@@ -180,6 +180,7 @@ export async function fetchFilteredPins(
       starred: view?.starred ?? null,
       videosOnly: view?.videosOnly ?? null,
       hasFaces: view?.hasFaces ?? null,
+      geotagged: view?.geotagged ?? null,
       takenSince: view?.takenSince ?? null,
     });
   } catch {

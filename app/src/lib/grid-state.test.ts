@@ -88,11 +88,18 @@ describe("gridState", () => {
     gridState.clearFilters();
     expect(gridState.facesOnly).toBe(false);
 
+    gridState.geotaggedOnly = true;
+    expect(gridState.filtersActive).toBe(true);
+    gridState.clearFilters();
+    expect(gridState.geotaggedOnly).toBe(false);
+
     gridState.starredOnly = true;
     gridState.facesOnly = true;
+    gridState.geotaggedOnly = true;
     resetGridState();
     expect(gridState.starredOnly).toBe(false);
     expect(gridState.facesOnly).toBe(false);
+    expect(gridState.geotaggedOnly).toBe(false);
   });
 
   it("bumps per-hash thumb versions monotonically and resets cleanly", () => {

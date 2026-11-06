@@ -188,6 +188,7 @@ describe("fetchFilteredPins", () => {
       starred: null,
       videosOnly: null,
       hasFaces: null,
+      geotagged: null,
       takenSince: null,
     });
   });
@@ -202,6 +203,7 @@ describe("fetchFilteredPins", () => {
       starred: true,
       videosOnly: false,
       hasFaces: false,
+      geotagged: true,
       takenSince: "2024-01-01",
       sort: "path",
     });
@@ -212,6 +214,7 @@ describe("fetchFilteredPins", () => {
       starred: true,
       videosOnly: false,
       hasFaces: false,
+      geotagged: true,
       takenSince: "2024-01-01",
     });
   });

@@ -20,7 +20,7 @@
 
 - [x] `06-005` (M) Drag-to-geotag on map: writes GPS to sidecar (`exif:GPSLatitude/Longitude`); optional embed on Save (per 00-002).
 - [x] `06-006` (M) Geotag tool: one photo, multi-selection, or whole folder/album in one pass.
-- [ ] `06-007` (M) "Geotagged" filter.
+- [x] `06-007` (M) "Geotagged" filter.
 
 ## feat: reverse geocoding
 
