@@ -29,7 +29,7 @@ describe("geotagged filter", () => {
             core: { invoke: (cmd: string, args: unknown) => Promise<unknown> };
           };
         }
-      ).__TAURI__.core.invoke("set_folder_mode", { path: libDir, mode: "once" });
+      ).__TAURI__.core.invoke("set_folder_mode", { path: dir, mode: "once" });
     }, libDir);
     // The scan must have synced the sidecar GPS before the filter is toggled.
     await browser.waitUntil(
