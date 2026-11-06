@@ -311,6 +311,7 @@ describe("MapPanel — filtered pins", () => {
     starred: true,
     videosOnly: false,
     hasFaces: false,
+    geotagged: false,
     takenSince: "2024-01-01",
     sort: "path" as const,
   };
@@ -327,6 +328,7 @@ describe("MapPanel — filtered pins", () => {
       starred: true,
       videosOnly: false,
       hasFaces: false,
+      geotagged: false,
       takenSince: "2024-01-01",
     });
   });

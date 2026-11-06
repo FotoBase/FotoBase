@@ -55,7 +55,11 @@ export function makeLibrary(): Library {
 // cluster carrying every photo and a zoom-in resolves it. GPS lives in
 // `.xmp` sidecars — the source of truth (PLAN §5) — as plain decimal
 // degrees, which the sidecar reader accepts.
-export function makeGeotaggedLibrary(count = 40): Library {
+//
+// `plain` (TASK-06-007) adds untagged JPEGs (`plain_NNN.jpg`, no sidecar)
+// to the same folder, so a spec can exercise the "Geotagged" filter over a
+// mixed library.
+export function makeGeotaggedLibrary(count = 40, plain = 0): Library {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fb-e2e-geo-"));
   const jpeg = Buffer.from(TINY_JPEG_BASE64, "base64");
   const checksums: Record<string, string> = {};
@@ -84,6 +88,14 @@ export function makeGeotaggedLibrary(count = 40): Library {
 </x:xmpmeta>
 <?xpacket end="w"?>
 `,
+    );
+    checksums[name] = sha256(path.join(dir, name));
+  }
+  for (let i = 0; i < plain; i += 1) {
+    const name = `plain_${String(i).padStart(3, "0")}.jpg`;
+    fs.writeFileSync(
+      path.join(dir, name),
+      Buffer.concat([jpeg, Buffer.from([count + i])]),
     );
     checksums[name] = sha256(path.join(dir, name));
   }

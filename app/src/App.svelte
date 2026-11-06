@@ -98,6 +98,7 @@
     starred: gridState.starredOnly,
     videosOnly: gridState.videosOnly,
     hasFaces: gridState.facesOnly,
+    geotagged: gridState.geotaggedOnly,
     takenSince: cutoffDate(gridState.dateStep),
     sort: gridState.sort,
   });
@@ -261,6 +262,7 @@
       starred: gridState.starredOnly,
       videosOnly: gridState.videosOnly,
       hasFaces: gridState.facesOnly,
+      geotagged: gridState.geotaggedOnly,
       takenSince: cutoffDate(gridState.dateStep),
       sort: gridState.sort,
     });

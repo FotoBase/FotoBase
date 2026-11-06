@@ -35,6 +35,10 @@ class GridState {
   videosOnly = $state(false);
   /// "Has faces" filter (TASK-05-007): photos with a detected or named face.
   facesOnly = $state(false);
+  /// "Geotagged" filter (TASK-06-007, PLAN §6 P3): photos with a complete
+  /// GPS mirror; in map view the state is already implicit, the button
+  /// lives with the other filter buttons.
+  geotaggedOnly = $state(false);
   /// Date-slider position (`DATE_STEPS` index); `ALL_TIME` = no restriction.
   dateStep = $state(ALL_TIME);
   /// Grid order (TASK-03-019). Not a filter: `clearFilters` leaves it alone.
@@ -56,13 +60,15 @@ class GridState {
 
   /// Any filter button or the date slider narrowing the library.
   get filtersActive(): boolean {
-    return this.starredOnly || this.videosOnly || this.facesOnly || this.dateStep !== ALL_TIME;
+    return this.starredOnly || this.videosOnly || this.facesOnly || this.geotaggedOnly ||
+      this.dateStep !== ALL_TIME;
   }
 
   clearFilters(): void {
     this.starredOnly = false;
     this.videosOnly = false;
     this.facesOnly = false;
+    this.geotaggedOnly = false;
     this.dateStep = ALL_TIME;
   }
 

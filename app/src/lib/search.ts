@@ -22,6 +22,8 @@ export interface LibraryView {
   videosOnly: boolean;
   /// Only photos with a detected or named face (TASK-05-007).
   hasFaces: boolean;
+  /// Only photos with a complete GPS mirror (TASK-06-007, PLAN §6 P3).
+  geotagged: boolean;
   /// `YYYY-MM-DD` cutoff from the date slider, `null` = all time.
   takenSince: string | null;
   sort: GridSort;
@@ -37,6 +39,7 @@ export async function queryLibraryItems(view: LibraryView): Promise<GridItem[]> 
     starred: view.starred,
     videosOnly: view.videosOnly,
     hasFaces: view.hasFaces,
+    geotagged: view.geotagged,
     takenSince: view.takenSince,
     sort: view.sort,
   });

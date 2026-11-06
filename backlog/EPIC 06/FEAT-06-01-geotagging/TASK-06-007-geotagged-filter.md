@@ -1,6 +1,6 @@
 # task: add geotagged filter
 
-**Feature:** [FEAT-06-01-geotagging](FEAT-06-01-geotagging.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** todo
+**Feature:** [FEAT-06-01-geotagging](FEAT-06-01-geotagging.md) · **Epic:** [EPIC-06 — Places](../EPIC-06.md) · **Status:** in review (2026-11-06)
 
 ## Description
 "Geotagged" filter button showing only photos with GPS, in both grid and map views (PLAN §2C filter buttons; §6 P3 Places).
@@ -17,4 +17,4 @@
 - E2e: toggle filter in grid; combined with a search term.
 
 ## Acceptance criteria
-- [ ] 06-007: "Geotagged" filter works in grid and map contexts.
+- [x] 06-007: "Geotagged" filter works in grid and map contexts.

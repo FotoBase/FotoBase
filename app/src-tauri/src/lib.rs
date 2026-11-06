@@ -419,7 +419,8 @@ fn list_files(
 /// in a single catalog query. `starred` resolves to the rating threshold for
 /// the current rating mode; `taken_since` is the date slider's `YYYY-MM-DD`
 /// cutoff; `has_faces` keeps only photos with a detected or named face
-/// (TASK-05-007); `sort` is `path` (default) or `capture` (TASK-03-019: chronological,
+/// (TASK-05-007); `geotagged` keeps only photos with a complete GPS mirror
+/// (TASK-06-007); `sort` is `path` (default) or `capture` (TASK-03-019: chronological,
 /// adjusted capture times included); `stack` (TASK-03-021) expands one stack
 /// instead of showing every stack as its top. Ids and metadata only — no
 /// image bytes over IPC.
@@ -434,6 +435,7 @@ fn query_files(
     starred: Option<bool>,
     videos_only: Option<bool>,
     has_faces: Option<bool>,
+    geotagged: Option<bool>,
     taken_since: Option<String>,
     sort: Option<fotobase_catalog::FileSort>,
     stack: Option<String>,
@@ -451,6 +453,7 @@ fn query_files(
         min_rating,
         videos_only: videos_only == Some(true),
         has_faces: has_faces == Some(true),
+        geotagged: geotagged == Some(true),
         taken_since,
         stack,
         sort: sort.unwrap_or_default(),
@@ -479,6 +482,7 @@ fn map_pins_filtered(
     starred: Option<bool>,
     videos_only: Option<bool>,
     has_faces: Option<bool>,
+    geotagged: Option<bool>,
     taken_since: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<fotobase_catalog::MapPin>, String> {
@@ -494,6 +498,7 @@ fn map_pins_filtered(
         min_rating,
         videos_only: videos_only == Some(true),
         has_faces: has_faces == Some(true),
+        geotagged: geotagged == Some(true),
         taken_since,
         stack: None,
         sort: Default::default(),

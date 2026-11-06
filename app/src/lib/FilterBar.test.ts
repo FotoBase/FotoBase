@@ -29,6 +29,7 @@ describe("FilterBar", () => {
     render(FilterBar);
     expect(screen.getByTestId("filter-starred").getAttribute("aria-pressed")).toBe("false");
     expect(screen.getByTestId("filter-videos").getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByTestId("filter-geotagged").getAttribute("aria-pressed")).toBe("false");
     const slider = screen.getByTestId("filter-date") as HTMLInputElement;
     expect(slider.value).toBe(String(ALL_TIME));
     expect(slider.max).toBe(String(DATE_STEPS.length - 1));
@@ -85,6 +86,24 @@ describe("FilterBar", () => {
     fireEvent.click(btn);
     flushSync();
     expect(gridState.facesOnly).toBe(false);
+    expect(gridState.filtersActive).toBe(false);
+  });
+
+  it("geotagged toggle flips the store and lights the filters-active state (TASK-06-007)", () => {
+    render(FilterBar);
+    const btn = screen.getByTestId("filter-geotagged");
+    expect(btn.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(btn);
+    flushSync();
+    expect(gridState.geotaggedOnly).toBe(true);
+    expect(gridState.filtersActive).toBe(true);
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+    expect(gridState.starredOnly).toBe(false);
+
+    fireEvent.click(btn);
+    flushSync();
+    expect(gridState.geotaggedOnly).toBe(false);
     expect(gridState.filtersActive).toBe(false);
   });
 

@@ -52,6 +52,28 @@ impl Fixture {
         id
     }
 
+    /// Mirror a complete GPS pair into the metadata (the same shape the
+    /// scanner's sidecar sync produces) and give the file a hash like the
+    /// scanner does — both predicates `geotagged_pins` applies.
+    fn set_gps(&self, id: i64, lat: Option<f64>, lon: Option<f64>) {
+        self.cat
+            .conn()
+            .execute(
+                "UPDATE files SET hash = ?1 WHERE id = ?2",
+                rusqlite::params![format!("hash-{id}"), id],
+            )
+            .unwrap();
+        self.cat
+            .conn()
+            .execute(
+                "INSERT INTO metadata (file_id, latitude, longitude) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(file_id) DO UPDATE SET
+                     latitude = excluded.latitude, longitude = excluded.longitude",
+                rusqlite::params![id, lat, lon],
+            )
+            .unwrap();
+    }
+
     fn ids(&self, q: &FileQuery) -> Vec<i64> {
         let mut ids: Vec<i64> =
             self.cat.query_files(q, usize::MAX).unwrap().iter().map(|f| f.id).collect();
@@ -213,6 +235,46 @@ fn rows_without_text_are_path_ordered_and_carry_rating() {
         vec!["a.jpg", "b.jpg"]
     );
     assert!(rows.iter().all(|r| r.rating == 5));
+}
+
+// TASK-06-007 (PLAN §2 C filter buttons, §6 P3 Places): the "Geotagged"
+// toggle keeps only photos with a complete GPS mirror — the same predicate
+// the map's pin query uses, so grid and map agree on what is geotagged.
+#[test]
+fn geotagged_filter_returns_exactly_the_photos_with_gps() {
+    let mut f = fixture();
+    let geotagged = f.add("geo.jpg", "image", None, 0.0, None);
+    f.set_gps(geotagged, Some(52.52), Some(13.405));
+    let _no_gps = f.add("plain.jpg", "image", None, 0.0, None);
+    let _lon_only = f.add("half.jpg", "image", None, 0.0, None);
+    f.set_gps(_lon_only, Some(1.0), None);
+    let _lat_only = f.add("other-half.jpg", "image", None, 0.0, None);
+    f.set_gps(_lat_only, None, Some(2.0));
+    let _out_of_range = f.add("bogus.jpg", "image", None, 0.0, None);
+    f.set_gps(_out_of_range, Some(95.0), Some(400.0));
+
+    let q = FileQuery { geotagged: true, ..FileQuery::default() };
+    assert_eq!(f.ids(&q), vec![geotagged]);
+    assert_eq!(f.ids(&FileQuery::default()).len(), 5);
+}
+
+#[test]
+fn geotagged_filter_combines_with_search_and_other_filters() {
+    let mut f = fixture();
+    let hit = f.add("beach-geo.jpg", "image", None, 0.0, Some(5));
+    f.set_gps(hit, Some(52.52), Some(13.405));
+    // Same search token, starred, but no GPS: only the geotagged toggle drops it.
+    let _beach_plain = f.add("beach.jpg", "image", None, 0.0, Some(5));
+    // Geotagged and unstarred: only the starred / search filters drop it.
+    let _geo_unstarred = f.add("geo.jpg", "image", None, 0.0, None);
+    f.set_gps(_geo_unstarred, Some(3.0), Some(4.0));
+
+    let q = FileQuery { text: Some("beach".into()), geotagged: true, ..FileQuery::default() };
+    assert_eq!(f.ids(&q), vec![hit]);
+    let q = FileQuery { min_rating: Some(5), geotagged: true, ..FileQuery::default() };
+    assert_eq!(f.ids(&q), vec![hit]);
+    let q = FileQuery { videos_only: true, geotagged: true, ..FileQuery::default() };
+    assert!(f.ids(&q).is_empty());
 }
 
 /// Perf (TASK-03-014): a filter toggle on a 50k-photo catalog must query well
