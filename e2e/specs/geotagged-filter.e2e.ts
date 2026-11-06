@@ -119,8 +119,10 @@ describe("geotagged filter", () => {
 
   it("cleans up: filter off, search cleared", async () => {
     await dispatchClick('[data-testid="filter-geotagged"]');
-    const input = await $('[data-testid="search-input"]');
-    await input.setValue("");
+    // The app's own clear button: WebKitWebDriver rejects element/value with
+    // an empty text parameter ("Missing text parameter"), so setValue("")
+    // is not an option here.
+    await dispatchClick('[data-testid="search-clear"]');
     await browser.waitUntil(
       async () => (await $$('[data-testid="grid-cell"]').length) === GEOTAGGED + PLAIN,
       { timeout: 20_000, timeoutMsg: "library did not widen back" },
