@@ -16,10 +16,18 @@ let libDir: string;
 
 describe("reverse geocode", () => {
   before(async () => {
-    libDir = makeGeotaggedLibrary(GEOTAGGED, PLAIN, {
-      lat: 38.7167,
-      lon: -9.1394,
-    }).dir;
+    libDir = makeGeotaggedLibrary(
+      GEOTAGGED,
+      PLAIN,
+      // Lisbon's own coordinates from the embedded GeoNames dataset
+      // (cities15000), not the city-center tourist point: the dataset
+      // carries Lisbon neighborhoods (Arroios, Areeiro, Alvalade…) as
+      // separate cities, and a loose grid around the center resolves to
+      // them. A tight cluster (< 0.5 km) keeps every photo nearest to
+      // Lisbon itself, matching the "city-level accuracy" spec.
+      { lat: 38.72509, lon: -9.1498 },
+      0.001,
+    ).dir;
     await browser.waitUntil(async () =>
       browser.execute(() =>
         Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__),
