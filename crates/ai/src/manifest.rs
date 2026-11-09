@@ -4,7 +4,8 @@
 //!
 //! The same manifest is checked in CI by `tools/verify_model_licenses.py`,
 //! which fails the build if an entry is missing or non-permissive
-//! (MIT/Apache-2.0 only — no InsightFace/non-commercial weights).
+//! (MIT/Apache-2.0, plus CC-BY-4.0 for attribution-only datasets such as
+//! GeoNames — no InsightFace/non-commercial weights).
 
 use std::fs;
 use std::path::{Path, PathBuf};

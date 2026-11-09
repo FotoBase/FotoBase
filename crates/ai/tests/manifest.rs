@@ -28,8 +28,11 @@ fn manifest_parses_with_permissive_licenses() {
     assert!(names.contains(&"face_detection_yunet_2023mar.onnx"));
     assert!(names.contains(&"face_recognition_sface_2021dec.onnx"));
     for e in registry.entries() {
+        // CC-BY-4.0 is permissive for attribution-only datasets (GeoNames,
+        // TASK-06-008): no code, no weights, attribution suffices — same
+        // allowlist as the CI gate `tools/verify_model_licenses.py`.
         assert!(
-            matches!(e.license.as_str(), "MIT" | "Apache-2.0"),
+            matches!(e.license.as_str(), "MIT" | "Apache-2.0" | "CC-BY-4.0"),
             "non-permissive license {}",
             e.license
         );
@@ -104,14 +107,16 @@ fn unknown_model_rejected() {
 }
 
 /// The manifest on disk matches the CI license gate (`tools/
-/// verify_model_licenses.py`): every entry MIT or Apache-2.0. Belt and
-/// braces — the Python gate runs in CI, this keeps the Rust side honest.
+/// verify_model_licenses.py`): every entry MIT, Apache-2.0, or CC-BY-4.0
+/// (the last only for attribution-only datasets such as GeoNames, which
+/// contain no code or weights). Belt and braces — the Python gate runs in
+/// CI, this keeps the Rust side honest.
 #[test]
 fn manifest_entries_are_permissive() {
     let registry = ModelRegistry::from_manifest_file(&manifest_path()).expect("manifest");
     for e in registry.entries() {
         assert!(
-            e.license == "MIT" || e.license == "Apache-2.0",
+            e.license == "MIT" || e.license == "Apache-2.0" || e.license == "CC-BY-4.0",
             "non-permissive license in manifest: {} ({})",
             e.name,
             e.license

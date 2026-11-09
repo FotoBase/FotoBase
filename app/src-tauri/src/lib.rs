@@ -309,6 +309,10 @@ fn with_folder_manager<T>(
                 let _ = app_handle.emit("folder-ini-offered", &report.folder_ini_offered);
             }
             spawn_hash_backfill(catalog_path.clone(), app_handle.clone());
+            // The scan's GPS sync is a GPS change too (TASK-06-008): sidecar
+            // GPS mirrored into the catalog needs a reverse-geocode pass
+            // before "photos in Lisbon" is searchable.
+            spawn_reverse_geocode_at(catalog_path.clone(), app_handle.clone());
         });
         let fm = folder_manager::FolderManager::open_with(
             &state.catalog_path(),
@@ -608,10 +612,20 @@ fn geotag_photos(
 /// background priority after GPS-changing commands, so place names and
 /// the FTS `place` column converge without blocking the UI thread.
 fn spawn_reverse_geocode(app: &tauri::AppHandle, state: &tauri::State<'_, AppState>) {
+    spawn_reverse_geocode_at(state.catalog_path(), app.clone());
+}
+
+/// Same pass, spawned from contexts that hold only the `AppHandle` and the
+/// catalog path — the folder-manager scan hook: a scan that mirrored
+/// sidecar GPS into the catalog is a GPS change as much as a geotag
+/// command is (TASK-06-008 technical spec: "run after GPS changes").
+fn spawn_reverse_geocode_at(catalog_path: PathBuf, app: tauri::AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
     let queue = state.geocode.clone();
     let emit_app = app.clone();
     let done_app = app.clone();
-    let catalog_path = state.catalog_path();
     let queued = queue.try_enqueue(
         "reverse-geocode",
         fotobase_jobs::Priority::Background,
