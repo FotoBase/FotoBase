@@ -299,6 +299,9 @@ fn migrating_an_older_catalog_makes_the_next_rebuild_reread_sidecars() {
          DROP TABLE face_clusters;
          DROP TABLE persons;
          DROP TABLE folder_ini_ingest;
+         DROP TABLE places;
+         DROP INDEX idx_files_place;
+         ALTER TABLE files DROP COLUMN place_id;
          DROP INDEX idx_files_stack;
          ALTER TABLE files DROP COLUMN stack_id;
          ALTER TABLE files DROP COLUMN stack_role;

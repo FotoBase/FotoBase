@@ -28,6 +28,7 @@ pub mod export_dialog;
 pub mod face_jobs;
 pub mod file_menu;
 pub mod folder_manager;
+pub mod geocode;
 pub mod geotag_tool;
 pub mod import;
 pub mod people;
@@ -91,6 +92,9 @@ const EDIT_QUEUE_CAPACITY: usize = 8;
 const BATCH_EDIT_QUEUE_CAPACITY: usize = 2;
 /// Geotag tool runs serialize like batch edits (TASK-06-006).
 const GEOTAG_QUEUE_CAPACITY: usize = 2;
+/// Capacity of the reverse-geocode queue (TASK-06-008): one bulk pass at a
+/// time; a queued duplicate is coalesced by the job key (PLAN §3 rule 4).
+const GEOCODE_QUEUE_CAPACITY: usize = 1;
 
 /// Capacity of the duplicate-hashing queue (TASK-04-019): bounded, per
 /// PLAN §3 rule 4; one background run at a time.
@@ -168,6 +172,9 @@ struct AppState {
     geotag_undo: fotobase_jobs::Queue<usize>,
     /// Cancel token of the most recently started geotag run.
     geotag_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
+    /// Bounded queue for reverse-geocode passes (TASK-06-008): background
+    /// priority, own catalog connection (PLAN §3 rules 3–4).
+    geocode: fotobase_jobs::Queue<usize>,
     /// Bounded queue for duplicate hashing runs (TASK-04-019): background
     /// priority, the single worker serializes runs (PLAN §3 rule 4).
     dupes: fotobase_jobs::Queue<duplicates::HashReport>,
@@ -302,6 +309,10 @@ fn with_folder_manager<T>(
                 let _ = app_handle.emit("folder-ini-offered", &report.folder_ini_offered);
             }
             spawn_hash_backfill(catalog_path.clone(), app_handle.clone());
+            // The scan's GPS sync is a GPS change too (TASK-06-008): sidecar
+            // GPS mirrored into the catalog needs a reverse-geocode pass
+            // before "photos in Lisbon" is searchable.
+            spawn_reverse_geocode_at(catalog_path.clone(), app_handle.clone());
         });
         let fm = folder_manager::FolderManager::open_with(
             &state.catalog_path(),
@@ -592,7 +603,59 @@ fn geotag_photos(
 ) -> Result<(), String> {
     with_catalog_sync(&state, |cat| cat.geotag_photos(&file_ids, latitude, longitude))?;
     let _ = app.emit("library-changed", ());
+    // GPS changed: refresh places in the background (TASK-06-008).
+    spawn_reverse_geocode(&app, &state);
     Ok(())
+}
+
+/// Fire-and-forget reverse-geocode pass (TASK-06-008): enqueued at
+/// background priority after GPS-changing commands, so place names and
+/// the FTS `place` column converge without blocking the UI thread.
+fn spawn_reverse_geocode(app: &tauri::AppHandle, state: &tauri::State<'_, AppState>) {
+    spawn_reverse_geocode_at(state.catalog_path(), app.clone());
+}
+
+/// Same pass, spawned from contexts that hold only the `AppHandle` and the
+/// catalog path — the folder-manager scan hook: a scan that mirrored
+/// sidecar GPS into the catalog is a GPS change as much as a geotag
+/// command is (TASK-06-008 technical spec: "run after GPS changes").
+fn spawn_reverse_geocode_at(catalog_path: PathBuf, app: tauri::AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let queue = state.geocode.clone();
+    let emit_app = app.clone();
+    let done_app = app.clone();
+    let queued = queue.try_enqueue(
+        "reverse-geocode",
+        fotobase_jobs::Priority::Background,
+        fotobase_jobs::job(move |_ctx| {
+            let app = emit_app.clone();
+            let catalog_path = catalog_path.clone();
+            async move {
+                let cancel = std::sync::atomic::AtomicBool::new(false);
+                let joined = tauri::async_runtime::spawn_blocking(move || {
+                    geocode::run(&catalog_path, &cancel, &|p| {
+                        let _ = app.emit(geocode::GEOCODE_EVENT, p);
+                    })
+                })
+                .await;
+                match joined {
+                    Ok(Ok(_)) => fotobase_jobs::Outcome::Done(0),
+                    Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                    Err(e) => fotobase_jobs::Outcome::Failed(format!("reverse geocode task: {e}")),
+                }
+            }
+        }),
+    );
+    if let Ok(handle) = queued {
+        tauri::async_runtime::spawn(async move {
+            let _ = handle.result().await;
+            let _ = done_app.emit("library-changed", ());
+        });
+    } else if let Err(e) = queued {
+        tracing::warn!("enqueue reverse geocode failed: {e}");
+    }
 }
 
 /// Geotag tool (TASK-06-006, PLAN §2 Tools "Geotag"): one pass applies one
@@ -660,6 +723,8 @@ async fn geotag_tool(
         *guard = None;
     }
     let _ = app.emit("library-changed", ());
+    // GPS changed: refresh places in the background (TASK-06-008).
+    spawn_reverse_geocode(&app, &state);
     match outcome.as_ref() {
         fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
         fotobase_jobs::Outcome::Cancelled => Err("geotag cancelled".into()),
@@ -719,9 +784,63 @@ async fn undo_geotag(
         .map_err(|e| format!("enqueue geotag undo: {e}"))?;
     let outcome = handle.result().await;
     let _ = app.emit("library-changed", ());
+    // GPS changed (cleared or restored): refresh places in the background
+    // (TASK-06-008).
+    spawn_reverse_geocode(&app, &state);
     match outcome.as_ref() {
         fotobase_jobs::Outcome::Done(restored) => Ok(*restored),
         fotobase_jobs::Outcome::Cancelled => Err("geotag undo cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Reverse geocode (TASK-06-008, PLAN §6 P3 Places): every photo with a
+/// complete GPS mirror resolves to the nearest bundled GeoNames city
+/// (≤ 50 km, fully offline); the place lands in the catalog and the FTS
+/// `place` column. Runs at background priority (§3 rule 4) on its own
+/// catalog connection, so a 50k bulk pass never holds the UI mutex.
+/// Progress streams on `geocode-progress` — counters only, never image
+/// bytes (§3 rule 3). Called after GPS changes (drag-to-geotag, geotag
+/// tool) and on demand; the job key coalesces overlapping passes.
+#[tauri::command]
+async fn reverse_geocode_all(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<usize, String> {
+    let queue = state.geocode.clone();
+    let job_app = app.clone();
+    let catalog_path = state.catalog_path();
+    let handle = queue
+        .try_enqueue(
+            "reverse-geocode",
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |_ctx| {
+                let app = job_app.clone();
+                let catalog_path = catalog_path.clone();
+                async move {
+                    let cancel = std::sync::atomic::AtomicBool::new(false);
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        geocode::run(&catalog_path, &cancel, &|p| {
+                            let _ = app.emit(geocode::GEOCODE_EVENT, p);
+                        })
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(geocoded)) => fotobase_jobs::Outcome::Done(geocoded),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => {
+                            fotobase_jobs::Outcome::Failed(format!("reverse geocode task: {e}"))
+                        }
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue reverse geocode: {e}"))?;
+    let outcome = handle.result().await;
+    let _ = app.emit("library-changed", ());
+    match outcome.as_ref() {
+        fotobase_jobs::Outcome::Done(geocoded) => Ok(*geocoded),
+        fotobase_jobs::Outcome::Cancelled => Err("reverse geocode cancelled".into()),
         fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
     }
 }
@@ -2854,6 +2973,9 @@ pub fn run() {
             let geotag_undo_queue = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(GEOTAG_QUEUE_CAPACITY)
             });
+            let geocode_queue = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(GEOCODE_QUEUE_CAPACITY)
+            });
             // The face queue runs on the battery hook: on battery the
             // dequeue pauses (§10), on AC it admits immediately.
             let face_battery = std::sync::Arc::new(fotobase_jobs::BatteryHook::new(false));
@@ -2911,6 +3033,7 @@ pub fn run() {
                 batch_edit_cancel: Mutex::new(None),
                 geotag_tool: geotag_tool_queue,
                 geotag_undo: geotag_undo_queue,
+                geocode: geocode_queue,
                 geotag_cancel: Mutex::new(None),
                 import_cancel: Mutex::new(None),
                 settings: Mutex::new(persisted),
@@ -3045,6 +3168,7 @@ pub fn run() {
             geotag_tool,
             cancel_geotag,
             undo_geotag,
+            reverse_geocode_all,
             stack_photos,
             set_stack_top,
             unstack,

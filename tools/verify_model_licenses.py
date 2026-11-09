@@ -2,9 +2,10 @@
 """CI gate for the AI model license manifest (TASK-05-001, PLAN §4 pins).
 
 Every entry in `crates/ai/model-manifest.json` must carry a permissive
-license (MIT or Apache-2.0 only) and a pinned download URL. PLAN §1/§10:
-no non-commercial weights (InsightFace et al.) may enter the app, and the
-manifest is the enforcement point checked in CI.
+license (MIT, Apache-2.0 or CC-BY-4.0 — the last only for attribution-only
+datasets such as GeoNames, which contain no code or weights) and a pinned
+download URL. PLAN §1/§10: no non-commercial weights (InsightFace et al.)
+may enter the app, and the manifest is the enforcement point checked in CI.
 
 Exit code 0 = manifest passes; 1 = missing entry / non-permissive license /
 missing field.
@@ -14,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-ALLOWED_LICENSES = {"MIT", "Apache-2.0"}
+ALLOWED_LICENSES = {"MIT", "Apache-2.0", "CC-BY-4.0"}
 REQUIRED_FIELDS = ("name", "license", "url", "sha256", "size_bytes")
 
 MANIFEST = Path(__file__).resolve().parent.parent / "crates" / "ai" / "model-manifest.json"
@@ -57,7 +58,7 @@ def main() -> int:
         for f in failures:
             print(f"FAIL: {f}", file=sys.stderr)
         return 1
-    print(f"OK: {len(entries)} model entries, all permissive (MIT/Apache-2.0)")
+    print(f"OK: {len(entries)} entries, all permissive (MIT/Apache-2.0/CC-BY-4.0)")
     return 0
 
 

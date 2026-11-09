@@ -24,4 +24,4 @@
 
 ## feat: reverse geocoding
 
-- [ ] `06-008` (M) Embedded GeoNames cities dataset; offline reverse geocode → place names in catalog + FTS.
+- [x] `06-008` (M) Embedded GeoNames cities dataset; offline reverse geocode → place names in catalog + FTS.
