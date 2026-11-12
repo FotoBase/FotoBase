@@ -64,9 +64,10 @@ jobs:
         # links against. AVIF goes through libaom because the runner's dav1d
         # is older than the dav1d plugin of embedded libheif 1.23 needs
         # (dav1d >= 1.0); macOS gets dav1d via brew, which is new enough.
-        # `aom`: on ubuntu-24.04 libaom-dev's AOMTargets.cmake references
-        # /usr/bin/aomdec, which only the `aom` tools package ships —
-        # without it libheif-sys's CMake step dies on the missing file.
+        # `aom-tools`: `libaom-dev`'s AOMTargets.cmake references
+        # /usr/bin/aomdec, which only the tools package (aom on 24.04 and
+        # earlier, aom-tools on 26.04) ships — without it libheif-sys's
+        # CMake step dies on the missing file.
         # libraw-dev: RAW decode via LibRaw (TASK-04-013, pkg-config `libraw_r`).
         # libopenjp2-7-dev: the embedded libheif enables its OpenJPEG (JPEG 2000)
         # codec plugin, which links `-lopenjp2` — the ubuntu-24.04 runner image
@@ -85,7 +86,7 @@ jobs:
             librsvg2-dev \
             libde265-dev \
             libaom-dev \
-            aom \
+            aom-tools \
             libraw-dev \
             libopenjp2-7-dev
 

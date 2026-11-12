@@ -58,7 +58,7 @@ jobs:
             librsvg2-dev \
             libde265-dev \
             libaom-dev \
-            aom \
+            aom-tools \
             libraw-dev \
             webkitgtk-webdriver \
             gdb \
@@ -75,7 +75,7 @@ jobs:
             librsvg2-dev \
             libde265-dev \
             libaom-dev \
-            aom \
+            aom-tools \
             libraw-dev \
             webkitgtk-webdriver \
             gdb \
