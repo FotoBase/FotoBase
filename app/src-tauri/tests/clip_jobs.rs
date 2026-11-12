@@ -198,17 +198,22 @@ fn peak_rss_bytes() -> u64 {
             PeakWorkingSetSize: 0,
             WorkingSetSize: 0,
             QuotaPeakPagedPoolUsage: 0,
-            QuotaPeakNonPagedPoolUsage: 0,
-            PagefileUsage: 0,
             QuotaPagedPoolUsage: 0,
-            QuotaPeakCommitLimit: 0,
-            QuotaPeakNonPagedPoolUsage2: 0,
-            PrivateUsage: 0,
+            QuotaPeakNonPagedPoolUsage: 0,
+            QuotaNonPagedPoolUsage: 0,
+            PagefileUsage: 0,
+            PeakPagefileUsage: 0,
         };
         // SAFETY: counters.cb initialized; GetProcessMemoryInfo fills it.
-        let ok = unsafe { GetProcessMemoryInfo(handle, &mut counters, counters.cb) };
-        assert_ne!(ok, 0, "GetProcessMemoryInfo failed");
-        counters.PeakWorkingSetSize
+        let ok = unsafe {
+            GetProcessMemoryInfo(
+                handle as _,
+                &mut counters,
+                std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+            )
+        };
+        assert!(ok != 0, "GetProcessMemoryInfo failed");
+        counters.PeakWorkingSetSize as u64
     }
     #[cfg(not(any(unix, windows)))]
     {
