@@ -287,7 +287,8 @@
 
   // Hide/unhide/undo changed what the library lists: re-run the current
   // (folder / album / search) view, not the whole-library list, then refresh
-  // the tree and the album counts.  async function refreshView(): Promise<void> {
+  // the tree and the album counts.
+  async function refreshView(): Promise<void> {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       photos = await loadPhotos(selectedFolders, selectedAlbum);
