@@ -71,7 +71,8 @@ fn blend_is_symmetric_in_rank_contribution() {
     // input lists are swapped too (RRF is symmetric).
     let (_lib, _cat, ids) = fixture(3);
     let (a, b, c) = (ids[0], ids[1], ids[2]);
-    let one = fotobase_catalog::blend::blend_fts_ann(&[a, b], &[b, c]);    let two = fotobase_catalog::blend::blend_fts_ann(&[b, c], &[a, b]);
+    let one = fotobase_catalog::blend::blend_fts_ann(&[a, b], &[b, c]);
+    let two = fotobase_catalog::blend::blend_fts_ann(&[b, c], &[a, b]);
     let mut same = two.clone();
     same.retain(|id| one.contains(id));
     assert_eq!(one, same, "RRF gives both lists equal weight");
