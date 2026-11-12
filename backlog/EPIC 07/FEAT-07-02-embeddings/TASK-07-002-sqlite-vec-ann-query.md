@@ -1,6 +1,6 @@
 # task: add sqlite-vec storage and ann query path
 
-**Feature:** [FEAT-07-02-embeddings](FEAT-07-02-embeddings.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** todo
+**Feature:** [FEAT-07-02-embeddings](FEAT-07-02-embeddings.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** in review (2026-11-12)
 
 ## Description
 Store the CLIP image embeddings from task 07-001 in a `sqlite-vec` virtual table (PLAN §4 Vector search, §5 `embeddings` table) and expose an ANN query path encoding a text query with the CLIP text encoder for text→image search. This is the storage/query foundation for semantic search (07-003) and auto-tagging (07-004).
@@ -23,5 +23,5 @@ Store the CLIP image embeddings from task 07-001 in a `sqlite-vec` virtual table
 - Integration: rebuild → embeddings table fully repopulated.
 
 ## Acceptance criteria
-- [ ] 07-002: sqlite-vec virtual table stores all 50k-fixture embeddings and text→image ANN queries return in < ~500 ms.
-- [ ] 07-002: Rebuild repopulates the embeddings table from recomputed vectors.
+- [x] 07-002: sqlite-vec virtual table stores all 50k-fixture embeddings and text→image ANN queries return in < ~500 ms.
+- [x] 07-002: Rebuild repopulates the embeddings table from recomputed vectors.

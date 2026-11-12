@@ -1808,6 +1808,32 @@ fn run_embed_pass_blocking(
     clip_jobs::run_embed_pass(&mut cat, &mut engine, &flag)
 }
 
+/// Text→image smart search (TASK-07-002, PLAN §4 Vector search): encode
+/// the query with the CLIP textual tower, rank the stored photo embeddings
+/// by cosine distance, return `(file_id, distance)` closest first. Runs
+/// off the UI thread; no image bytes cross IPC (§3 rule 3). Errors when
+/// the opt-in model is not installed — the caller prompts for the download.
+#[tauri::command]
+async fn clip_search(
+    app: tauri::AppHandle,
+    query: String,
+    k: Option<usize>,
+) -> Result<Vec<(i64, f32)>, String> {
+    let model_dir = ai_models_dir(&app);
+    if !model_dir.join(clip_jobs::CLIP_TEXT_MODEL_NAME).exists() {
+        return Err("clip-text-model-missing".into());
+    }
+    let path = app.state::<AppState>().catalog_path().to_path_buf();
+    let k = k.unwrap_or(50).min(500);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cat = Catalog::open(path).map_err(|e| e.to_string())?;
+        let mut engine = clip_jobs::OrtTextEngine::load(&model_dir).map_err(|e| e.to_string())?;
+        clip_jobs::search_photos(&mut cat, &mut engine, &query, k)
+    })
+    .await
+    .map_err(|e| format!("clip search task: {e}"))?
+}
+
 /// Run a full-library CLIP pass now (Options dialog / first smart-search
 /// use after the model is installed). Background priority, battery hook.
 #[tauri::command]
@@ -3361,6 +3387,7 @@ pub fn run() {
             folder_face_enabled,
             run_face_pass,
             run_embed_pass,
+            clip_search,
             clip_model_status,
             download_clip_model,
             remove_folder,

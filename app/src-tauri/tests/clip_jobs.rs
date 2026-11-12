@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use fotobase_catalog::Catalog;
-use fotobase_lib::clip_jobs::{run_embed_pass, ClipEngine, EmbedReport};
+use fotobase_lib::clip_jobs::{run_embed_pass, search_photos, ClipEngine, EmbedReport, TextEngine};
 use fotobase_scanner::scan_folder;
 
 /// A tiny valid JPEG (solid color) the real decoder accepts.
@@ -339,4 +339,63 @@ async fn battery_hook_pauses_the_embedding_queue() {
     let outcome = handle.result().await;
     assert!(matches!(*outcome, Outcome::Done(_)));
     assert_eq!(ran.load(Ordering::SeqCst), 1);
+}
+
+// TASK-07-002: the text→image query path. The text engine is a fake here
+// (the 254 MB textual tower never ships in tests); the composition rule
+// under test is encode-text → catalog ANN query → ranked file ids.
+
+/// A fake text encoder: "dog on the beach" maps to a fixed unit vector
+/// (the matching photo's embedding); everything else maps elsewhere — the
+/// contract the real text tower fulfills.
+struct FakeTextEngine {
+    dog: Vec<f32>,
+}
+
+impl TextEngine for FakeTextEngine {
+    fn embed_text(&mut self, text: &str) -> Result<Vec<f32>, String> {
+        if text == "dog on the beach" {
+            return Ok(self.dog.clone());
+        }
+        let mut v: Vec<f32> = (0..512).map(|i| (i as f32 + 7.0).cos()).collect();
+        let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+        for x in &mut v {
+            *x /= norm;
+        }
+        Ok(v)
+    }
+}
+
+/// `search_photos` encodes the query and ranks the stored embeddings by
+/// ascending distance; the matching photo beats the distractors.
+#[test]
+fn text_query_ranks_the_matching_photo_top_k() {
+    let (_lib, mut cat) = fixture(3);
+    let mut dog = vec![0f32; 512];
+    dog[0] = 1.0;
+    let mut far = vec![0f32; 512];
+    far[1] = 1.0;
+    let ids: Vec<i64> = cat
+        .conn()
+        .prepare("SELECT id FROM files ORDER BY path")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .flatten()
+        .collect();
+    cat.store_photo_embedding(ids[0], &dog).unwrap();
+    cat.store_photo_embedding(ids[1], &far).unwrap();
+    cat.store_photo_embedding(ids[2], &far).unwrap();
+
+    let mut engine = FakeTextEngine { dog: dog.clone() };
+    let hits = search_photos(&mut cat, &mut engine, "dog on the beach", 2).unwrap();
+    assert_eq!(hits[0].0, ids[0], "the matching photo ranks first");
+    assert_eq!(hits.len(), 2, "k limits the result");
+}
+
+/// An empty query is rejected before any model work.
+#[test]
+fn empty_query_is_rejected() {
+    let (_lib, mut cat) = fixture(1);
+    assert!(search_photos(&mut cat, &mut FakeTextEngine { dog: vec![0.0; 512] }, "   ", 5).is_err());
 }

@@ -115,3 +115,91 @@ impl ClipRuntime {
         Ok(v)
     }
 }
+
+/// The OpenAI CLIP BPE tokenizer (OpenCLIP uses the same): SOT/EOT markers,
+/// the 77-token context length, and a padded id vector for the text tower.
+/// A thin, testable façade over `instant-clip-tokenizer` (TASK-07-002).
+pub mod clip_tokenize {
+    use instant_clip_tokenizer::{Token, Tokenizer};
+
+    /// The ViT-B/32 text tower's context length.
+    pub const CTX: usize = 77;
+
+    fn tokenizer() -> &'static Tokenizer {
+        use std::sync::OnceLock;
+        static TOK: OnceLock<Tokenizer> = OnceLock::new();
+        TOK.get_or_init(Tokenizer::new)
+    }
+
+    /// The `<start_of_text>` marker id.
+    pub const SOT: i64 = 49406;
+    /// The `<end_of_text>` marker id.
+    pub const EOT: i64 = 49407;
+
+    /// Append the BPE ids of `text` (lowercased like the reference
+    /// implementation) to `out`.
+    pub fn encode(text: &str, out: &mut Vec<i64>) {
+        let mut raw: Vec<Token> = Vec::new();
+        tokenizer().encode(text, &mut raw);
+        out.extend(raw.iter().map(|t| t.to_u16() as i64));
+    }
+
+    /// One 77-token int64 row for the text tower: SOT, the prompt ids, EOT,
+    /// then zero padding (the OpenAI CLIP convention). A prompt longer than
+    /// the context is truncated at the EOT slot.
+    pub fn tokenize_padded(text: &str) -> Vec<i64> {
+        let mut ids = vec![SOT];
+        encode(text, &mut ids);
+        ids.truncate(CTX - 1);
+        ids.push(EOT);
+        ids.resize(CTX, 0);
+        ids
+    }
+}
+
+/// A loaded CLIP textual tower on the shared CPU environment (TASK-07-002):
+/// int64 token ids `[batch, 77]` in, the 512-d text projection out — the
+/// same space as the image embeddings, so cosine distance ranks photos.
+pub struct ClipTextRuntime {
+    session: Session,
+}
+
+impl ClipTextRuntime {
+    /// Load the textual tower with the CPU execution provider only.
+    pub fn load(path: &std::path::Path) -> Result<Self, ClipError> {
+        let mut builder = Session::builder(crate::runtime::environment())?;
+        builder = builder
+            .with_optimization_level(GraphOptimizationLevel::Level3)
+            .map_err(|e| ClipError::Load { path: path.to_path_buf(), source: e.into() })?;
+        let session = builder
+            .commit_from_file(path)
+            .map_err(|e| ClipError::Load { path: path.to_path_buf(), source: e })?;
+        Ok(Self { session })
+    }
+
+    /// Embed one text query: tokenize to the 77-token context, run the
+    /// textual tower, return the L2-normalized 512-d projection.
+    pub fn embed_text(&mut self, text: &str) -> Result<Vec<f32>, ClipError> {
+        if text.trim().is_empty() {
+            return Err(ClipError::InvalidInput("empty text query".into()));
+        }
+        let ids = clip_tokenize::tokenize_padded(text);
+        let tensor = TensorRef::from_array_view(([1usize, 77usize], ids.as_slice()))?;
+        let outputs = self.session.run(ort::inputs![tensor])?;
+        let out = outputs[0].view().downcast::<ort::value::TensorValueType<f32>>()?;
+        let (shape, data) = out.extract_tensor();
+        let dims: Vec<usize> = shape.iter().map(|&d| d as usize).collect();
+        let d = match dims.last() {
+            Some(&d) if d == CLIP_EMBEDDING_DIM => d,
+            _ => return Err(ClipError::Shape(format!("unexpected CLIP text output {dims:?}"))),
+        };
+        let mut v: Vec<f32> = data[data.len() - d..].to_vec();
+        let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if norm > 1e-9 {
+            for x in &mut v {
+                *x /= norm;
+            }
+        }
+        Ok(v)
+    }
+}

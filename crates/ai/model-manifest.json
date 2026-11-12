@@ -16,6 +16,14 @@
     "size_bytes": 38696353
   },
   {
+    "name": "open_clip_vit_b32_laion2b_textual.onnx",
+    "license": "MIT",
+    "license_url": "https://huggingface.co/laion/CLIP-ViT-B-32-laion2B-s34B-b79K",
+    "url": "https://huggingface.co/Marqo/onnx-open_clip-ViT-B-32/resolve/main/onnx32-open_clip-ViT-B-32-laion2b_e16-textual.onnx",
+    "sha256": "396472d990befe796d03b625b6fdc9ae2fe7ace70d01178d5652fbd412acb3fa",
+    "size_bytes": 253870548
+  },
+  {
     "name": "geonames/cities.txt",
     "license": "CC-BY-4.0",
     "license_url": "https://creativecommons.org/licenses/by/4.0/",
