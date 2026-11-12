@@ -27,8 +27,8 @@ before(async () => {
     ).__TAURI__.core.invoke("set_folder_mode", { path: dir, mode: "once" });
   }, libDir);
   await browser.waitUntil(
-    async () => (await $$('[data-testid="grid-cell"]').length) === 2,
-    { timeout: 20_000, timeoutMsg: "grid did not show the two photos" },
+    async () => (await $$('[data-testid="grid-cell"]').length) === 3,
+    { timeout: 20_000, timeoutMsg: "grid did not show three photos" },
   );
 });
 
