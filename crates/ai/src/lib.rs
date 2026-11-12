@@ -14,6 +14,15 @@
 pub mod manifest;
 pub mod runtime;
 
+pub mod clip;
+
+/// The model manifest embedded at compile time: the installed app has no
+/// `crates/` directory, so the opt-in download flow (TASK-07-001) reads the
+/// pinned entries from here — the same bytes `tools/download_models.sh` and
+/// the CI license gate check.
+pub const MODEL_MANIFEST_JSON: &str = include_str!("../model-manifest.json");
+
+pub use clip::{clip_preprocess, ClipError, ClipRuntime, CLIP_EMBEDDING_DIM, CLIP_INPUT};
 pub use manifest::{ManifestEntry, ModelError, ModelRegistry};
 pub use runtime::{align_face, DetectedFace, FaceRuntime, RuntimeError};
 

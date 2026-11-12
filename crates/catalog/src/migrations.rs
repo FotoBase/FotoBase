@@ -28,6 +28,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V19,
     MIGRATION_V20,
     MIGRATION_V21,
+    MIGRATION_V22,
 ];
 
 const MIGRATION_V1: &str = "
@@ -884,3 +885,17 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     }
     Ok(())
 }
+
+/// TASK-07-001: CLIP photo embeddings (PLAN §5 `embeddings` derived data,
+/// §6 P3 Smart search). One sqlite-vec `photo_embeddings` table (`float[512]`,
+/// the OpenCLIP ViT-B/32 image projection) keyed by file id, plus the
+/// `files.embed_scanned` marker (the phash sentinel pattern) that drives the
+/// incremental pass. Derived data — recomputed after a catalog rebuild,
+/// never written to sidecars (PLAN §3 rule 2).
+const MIGRATION_V22: &str = "
+ALTER TABLE files ADD COLUMN embed_scanned INTEGER NOT NULL DEFAULT 0;
+CREATE VIRTUAL TABLE photo_embeddings USING vec0(
+    file_id INTEGER PRIMARY KEY,
+    embedding float[512]
+);
+";

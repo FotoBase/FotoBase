@@ -22,5 +22,13 @@
     "url": "https://download.geonames.org/export/dump/cities15000.zip",
     "sha256": "f21d3004ad10118ffe1b83761c894a9ee587545c303ad22f64b59a54143ae975",
     "size_bytes": 1343386
+  },
+  {
+    "name": "open_clip_vit_b32_laion2b_visual.onnx",
+    "license": "MIT",
+    "license_url": "https://huggingface.co/laion/CLIP-ViT-B-32-laion2B-s34B-b79K",
+    "url": "https://huggingface.co/Marqo/onnx-open_clip-ViT-B-32/resolve/main/onnx32-open_clip-ViT-B-32-laion2b_e16-visual.onnx",
+    "sha256": "a65757c1eea849fa4ef138718edd05bbee95bdf0056ea7b571701eecbedab791",
+    "size_bytes": 351529890
   }
 ]

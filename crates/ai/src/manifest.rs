@@ -127,4 +127,37 @@ impl ModelRegistry {
         fs::rename(&tmp, &dest)?;
         Ok(dest)
     }
+
+    /// Download one manifest entry over HTTPS into `models_dir` — the
+    /// opt-in download flow (TASK-07-001, PLAN §1). The caller surfaces the
+    /// consent prompt; nothing here downloads without being called. The
+    /// bytes stream to a `.tmp` file, are verified against the pinned
+    /// SHA-256 and size, then atomically renamed into place. A failed or
+    /// tampered download leaves no installed file behind.
+    #[cfg(feature = "download")]
+    pub fn download_model(
+        &self,
+        entry: &ManifestEntry,
+        models_dir: &Path,
+    ) -> Result<PathBuf, ModelError> {
+        fs::create_dir_all(models_dir)?;
+        let tmp = models_dir.join(format!("{}.download.tmp", entry.name));
+        let response = ureq::get(&entry.url).call().map_err(|e| {
+            ModelError::ManifestInvalid(format!("download failed for {}: {e}", entry.name))
+        })?;
+        let mut reader = response.into_reader();
+        let mut file = fs::File::create(&tmp)?;
+        std::io::copy(&mut reader, &mut file)?;
+        drop(file);
+        match self.install_model(entry, &tmp, models_dir) {
+            Ok(dest) => {
+                let _ = fs::remove_file(&tmp);
+                Ok(dest)
+            }
+            Err(e) => {
+                let _ = fs::remove_file(&tmp);
+                Err(e)
+            }
+        }
+    }
 }

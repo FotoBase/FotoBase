@@ -25,7 +25,8 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 fotobase-catalog = { path = "../../crates/catalog" }
 # Face detection/embedding jobs (TASK-05-002): the ort runtime lives here.
-fotobase-ai = { path = "../../crates/ai" }
+# `download` enables the opt-in model download (TASK-07-001).
+fotobase-ai = { path = "../../crates/ai", features = ["download"] }
 # Edit recipe engine (TASK-04-008): the neutral picker's balance math lives
 # next to the ops it inverts.
 fotobase-core = { path = "../../crates/core" }

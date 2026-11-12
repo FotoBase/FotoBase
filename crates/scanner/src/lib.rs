@@ -536,7 +536,12 @@ fn upsert_file(catalog: &Catalog, f: &WalkedFile) -> Result<()> {
             filename = excluded.filename,
             size = excluded.size,
             mtime = excluded.mtime,
-            media_type = excluded.media_type",
+            media_type = excluded.media_type,
+            -- The content changed (or a full rebuild re-upserted the row),
+            -- so the CLIP embedding is stale: the marker resets to pending
+            -- and the next embedding pass recomputes it (TASK-07-001, §5
+            -- derived data — recomputed, never migrated).
+            embed_scanned = 0",
         rusqlite::params![folder_id, f.path, f.filename, f.size, f.mtime, f.media_type],
     )?;
     Ok(())

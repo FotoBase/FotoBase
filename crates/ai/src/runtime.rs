@@ -50,7 +50,7 @@ static ENV: OnceLock<Environment> = OnceLock::new();
 /// The shared ONNX Runtime environment: no GPU execution providers
 /// registered (CPU fallback) and telemetry disabled — the no-telemetry
 /// invariant is enforced here, not left to callers.
-fn environment() -> &'static Environment {
+pub(crate) fn environment() -> &'static Environment {
     ENV.get_or_init(|| {
         ort::environment::init().with_telemetry(false).build().expect("onnxruntime environment")
     })
