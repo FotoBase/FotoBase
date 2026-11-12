@@ -39,6 +39,7 @@ jobs:
             librsvg2-dev \
             libde265-dev \
             libaom-dev \
+            aom \
             libraw-dev \
             webkitgtk-webdriver \
             xvfb
