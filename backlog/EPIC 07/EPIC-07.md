@@ -9,7 +9,7 @@
 
 ## feat: embeddings
 
-- [ ] `07-001` (L) CLIP/SigLIP (OpenCLIP ViT-B/32 ONNX) image embeddings in the shared job queue; opt-in model download; license manifest in CI (permissive weights only).
+- [x] `07-001` (L) CLIP/SigLIP (OpenCLIP ViT-B/32 ONNX) image embeddings in the shared job queue; opt-in model download; license manifest in CI (permissive weights only).
 - [ ] `07-002` (M) sqlite-vec storage + ANN query path for text→image search.
 
 ## feat: search features

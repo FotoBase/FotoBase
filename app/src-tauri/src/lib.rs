@@ -17,6 +17,7 @@ pub mod basemap;
 pub mod batch_commands;
 pub mod batch_edit;
 pub mod catalog_registry;
+pub mod clip_jobs;
 pub mod codec;
 pub mod contacts;
 pub mod datetime_commands;
@@ -104,6 +105,11 @@ const DUPES_QUEUE_CAPACITY: usize = 2;
 /// new triggers coalesce onto the queued pass.
 const FACES_QUEUE_CAPACITY: usize = 2;
 
+/// CLIP embedding pass (TASK-07-001): one full-library pass at a time on
+/// the shared battery hook, background priority only — visible thumbnails
+/// are never starved (§6 P3, §3 rule 4).
+const CLIP_QUEUE_CAPACITY: usize = 2;
+
 /// Sequence number for unique portable-export job keys.
 static EXPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -179,6 +185,9 @@ struct AppState {
     /// priority, the single worker serializes runs (PLAN §3 rule 4).
     dupes: fotobase_jobs::Queue<duplicates::HashReport>,
     faces: fotobase_jobs::Queue<face_jobs::FaceReport>,
+    /// Bounded queue for CLIP embedding passes (TASK-07-001): background
+    /// priority, the shared battery hook (PLAN §3 rule 4, §10).
+    embeddings: fotobase_jobs::Queue<clip_jobs::EmbedReport>,
     /// Cancel token of the most recently started import (TASK-01-017):
     /// `cancel_import` trips it, the running job observes the flag.
     import_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
@@ -1780,6 +1789,122 @@ async fn run_face_pass(
     }
 }
 
+/// The blocking body of every embedding-pass job (TASK-07-001): own catalog
+/// connection so a 50k pass never holds the UI's catalog mutex (§9); a
+/// no-op without the opt-in model (PLAN §1 — nothing computes without the
+/// user's explicit download consent).
+fn run_embed_pass_blocking(
+    app: &tauri::AppHandle,
+    cancelled: bool,
+) -> Result<clip_jobs::EmbedReport, String> {
+    let model_dir = ai_models_dir(app);
+    if !model_dir.join(clip_jobs::CLIP_MODEL_NAME).exists() {
+        return Ok(clip_jobs::EmbedReport::default());
+    }
+    let path = app.state::<AppState>().catalog_path().to_path_buf();
+    let mut cat = Catalog::open(path).map_err(|e| e.to_string())?;
+    let mut engine = clip_jobs::OrtEngine::load(&model_dir).map_err(|e| e.to_string())?;
+    let flag = std::sync::atomic::AtomicBool::new(cancelled);
+    clip_jobs::run_embed_pass(&mut cat, &mut engine, &flag)
+}
+
+/// Run a full-library CLIP pass now (Options dialog / first smart-search
+/// use after the model is installed). Background priority, battery hook.
+#[tauri::command]
+async fn run_embed_pass(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<clip_jobs::EmbedReport, String> {
+    let queue = state.embeddings.clone();
+    let key = clip_jobs::job_key();
+    let job_app = app.clone();
+    let handle = queue
+        .try_enqueue(
+            key,
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |ctx| {
+                let app = job_app.clone();
+                let emitter = job_app.clone();
+                async move {
+                    let cancelled = ctx.is_cancelled();
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        run_embed_pass_blocking(&app, cancelled)
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(report)) => {
+                            let _ = emitter.emit(clip_jobs::EMBEDDINGS_EVENT, &report);
+                            fotobase_jobs::Outcome::Done(report)
+                        }
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("embed pass task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue embed pass: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("embed pass cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Smart-search model status (TASK-07-001): what the frontend needs to
+/// decide whether the opt-in prompt is due. No network, no side effects.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ClipModelStatus {
+    installed: bool,
+    size_bytes: u64,
+    license: String,
+}
+
+#[tauri::command]
+fn clip_model_status(state: tauri::State<'_, AppState>) -> Result<ClipModelStatus, String> {
+    let registry = fotobase_ai::ModelRegistry::from_manifest_bytes(
+        fotobase_ai::MODEL_MANIFEST_JSON.as_bytes(),
+    )
+    .map_err(|e| e.to_string())?;
+    let entry = registry
+        .entry(clip_jobs::CLIP_MODEL_NAME)
+        .ok_or_else(|| "CLIP model missing from the manifest".to_string())?;
+    let models_dir = catalog_models_dir(&state.catalog_dir());
+    Ok(ClipModelStatus {
+        installed: registry.is_installed(entry, &models_dir),
+        size_bytes: entry.size_bytes,
+        license: entry.license.clone(),
+    })
+}
+
+/// The opt-in download (TASK-07-001, PLAN §1): the frontend calls this only
+/// after the user accepted the prompt — the command itself is the consent
+/// boundary. Verifies SHA-256 + size before the model lands in the catalog
+/// location's `models/` directory (the face models' layout).
+#[tauri::command]
+async fn download_clip_model(app: tauri::AppHandle) -> Result<(), String> {
+    let models_dir = {
+        let state = app.state::<AppState>();
+        catalog_models_dir(&state.catalog_dir())
+    };
+    let registry = fotobase_ai::ModelRegistry::from_manifest_bytes(
+        fotobase_ai::MODEL_MANIFEST_JSON.as_bytes(),
+    )
+    .map_err(|e| e.to_string())?;
+    let entry = registry
+        .entry(clip_jobs::CLIP_MODEL_NAME)
+        .ok_or_else(|| "CLIP model missing from the manifest".to_string())?
+        .clone();
+    let joined =
+        tauri::async_runtime::spawn_blocking(move || registry.download_model(&entry, &models_dir))
+            .await;
+    match joined {
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(e)) => Err(e.to_string()),
+        Err(e) => Err(format!("clip model download task: {e}")),
+    }
+}
+
 // --- File menu / folder context menu (TASK-01-021, PLAN §2) -----------------
 
 /// "Locate on disk" (File menu / Folder context menu): reveal a photo or
@@ -2985,6 +3110,12 @@ pub fn run() {
                     face_battery.clone() as std::sync::Arc<dyn fotobase_jobs::ThrottleHook>,
                 )
             });
+            let embeddings = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::with_throttle(
+                    CLIP_QUEUE_CAPACITY,
+                    face_battery.clone() as std::sync::Arc<dyn fotobase_jobs::ThrottleHook>,
+                )
+            });
             let persisted = settings::Settings::load(&data_dir);
             // Catalog registry (TASK-03-024): which catalog opens at launch
             // (the last-used one, functional spec). The default entry keeps
@@ -3030,6 +3161,7 @@ pub fn run() {
                 batch_edits,
                 dupes,
                 faces,
+                embeddings,
                 batch_edit_cancel: Mutex::new(None),
                 geotag_tool: geotag_tool_queue,
                 geotag_undo: geotag_undo_queue,
@@ -3228,6 +3360,9 @@ pub fn run() {
             set_folder_face,
             folder_face_enabled,
             run_face_pass,
+            run_embed_pass,
+            clip_model_status,
+            download_clip_model,
             remove_folder,
             reveal_path,
             delete_to_trash,

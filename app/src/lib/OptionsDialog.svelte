@@ -19,6 +19,13 @@
     type Settings,
   } from "./settings";
   import PortableExportDialog from "./PortableExportDialog.svelte";
+  import {
+    clipModelStatus,
+    downloadClipModel,
+    mayDownload,
+    modelSizeLabel,
+    type ClipModelStatus,
+  } from "./smart-search";
 
   let {
     open = $bindable(false),
@@ -35,6 +42,33 @@
 
   let clearResult = $state<string | null>(null);
   let exportOpen = $state(false);
+
+  // Smart search model (TASK-07-001): status, the opt-in consent flag and
+  // the download button state. Nothing downloads without explicit consent.
+  let clipStatus = $state<ClipModelStatus | null>(null);
+  let clipConsent = $state(false);
+  let clipDownloading = $state(false);
+  let clipResult = $state<string | null>(null);
+
+  $effect(() => {
+    if (!open || clipStatus) return;
+    void clipModelStatus().then((status) => (clipStatus = status));
+  });
+
+  async function onDownloadClipModel(): Promise<void> {
+    if (!clipStatus || !mayDownload(clipStatus, clipConsent) || clipDownloading) return;
+    clipDownloading = true;
+    clipResult = null;
+    try {
+      await downloadClipModel(clipConsent);
+      clipStatus = await clipModelStatus();
+      clipResult = t("options.smartSearch.done");
+    } catch (e) {
+      clipResult = t("options.smartSearch.failed", { error: String(e) });
+    } finally {
+      clipDownloading = false;
+    }
+  }
 
   function apply(next: Settings): void {
     const revealChanged = next.show_hidden !== settings.show_hidden;
@@ -370,6 +404,37 @@
           </div>
           {#if assocResult}
             <span class="clear-result" data-testid="assoc-result">{assocResult}</span>
+          {/if}
+        </fieldset>
+
+        <!-- Smart search model (TASK-07-001, PLAN §1): opt-in download,
+             never without the user's explicit consent. -->
+        <fieldset class="options-row options-associations">
+          <legend>{t("options.smartSearch")}</legend>
+          <p class="assoc-hint">{t("options.smartSearch.hint")}</p>
+          {#if clipStatus}
+            <div class="options-row">
+              {#if clipStatus.installed}
+                <span data-testid="clip-model-installed">{t("options.smartSearch.installed")}</span>
+              {:else}
+                <button
+                  type="button"
+                  data-testid="clip-model-download"
+                  disabled={!mayDownload(clipStatus, clipConsent) || clipDownloading}
+                  onclick={onDownloadClipModel}
+                >
+                  {t("options.smartSearch.download")} ({modelSizeLabel(clipStatus.size_bytes)},
+                  {clipStatus.license})
+                </button>
+                <label class="options-check">
+                  <input type="checkbox" data-testid="clip-model-consent" bind:checked={clipConsent} />
+                  {t("options.smartSearch.consent")}
+                </label>
+              {/if}
+              {#if clipResult}
+                <span class="clear-result" data-testid="clip-model-result">{clipResult}</span>
+              {/if}
+            </div>
           {/if}
         </fieldset>
 

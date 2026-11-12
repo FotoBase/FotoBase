@@ -8,6 +8,7 @@
 pub mod albums;
 pub mod datetime;
 pub mod duplicates;
+pub mod embeddings;
 pub mod face_clusters;
 pub mod faces;
 pub mod folder_ini;
@@ -992,6 +993,7 @@ impl Catalog {
             rows.flatten().collect()
         };
         self.delete_faces_for_files(&file_ids)?;
+        self.delete_photo_embeddings(&file_ids)?;
 
         let mut removed = 0;
         for id in doomed {
@@ -1007,8 +1009,10 @@ impl Catalog {
     /// the catalog entry. Returns `false` when no row has that id.
     pub fn remove_file(&mut self, file_id: i64) -> Result<bool> {
         // vec0 virtual tables do not participate in FK cascades, so the
-        // photo's face embeddings are cleaned up explicitly (TASK-05-008).
+        // photo's face AND photo embeddings are cleaned up explicitly
+        // (TASK-05-008, TASK-07-001).
         self.delete_faces_for_files(&[file_id])?;
+        self.delete_photo_embeddings(&[file_id])?;
         let removed = self.conn.execute("DELETE FROM files WHERE id = ?1", [file_id])?;
         Ok(removed > 0)
     }
@@ -1030,6 +1034,7 @@ impl Catalog {
             rows.flatten().collect()
         };
         self.delete_faces_for_files(&ids)?;
+        self.delete_photo_embeddings(&ids)?;
         let removed = self.conn.execute(
             &format!("DELETE FROM files WHERE path IN ({placeholders})"),
             rusqlite::params_from_iter(paths),

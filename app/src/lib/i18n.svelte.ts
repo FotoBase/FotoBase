@@ -37,6 +37,14 @@ const messages: Record<string, Dict> = {
     "options.rebuildCatalog.done":
       "Rebuilt: {added} added, {updated} updated, {removed} removed",
     "options.rebuildCatalog.failed": "Rebuilding the catalog failed: {error}",
+    "options.smartSearch": "Smart search",
+    "options.smartSearch.hint":
+      "Semantic search runs fully on this device. It needs a one-time model download (~335 MB); nothing is sent anywhere.",
+    "options.smartSearch.installed": "Smart-search model installed",
+    "options.smartSearch.download": "Download model",
+    "options.smartSearch.consent": "I agree to download the model to this device",
+    "options.smartSearch.done": "Model downloaded — embeddings will build in the background",
+    "options.smartSearch.failed": "The model download failed: {error}",
     "options.showTooltips": "Show tooltips",
     "options.gridRenderer": "Thumbnail grid renderer",
     "options.gridRenderer.dom": "DOM (default)",
@@ -551,6 +559,15 @@ const messages: Record<string, Dict> = {
       "Neu aufgebaut: {added} neu, {updated} aktualisiert, {removed} entfernt",
     "options.rebuildCatalog.failed":
       "Neuaufbau des Katalogs fehlgeschlagen: {error}",
+    "options.smartSearch": "Smarte Suche",
+    "options.smartSearch.hint":
+      "Die semantische Suche läuft vollständig auf diesem Gerät. Dafür wird einmalig ein Modell (~335 MB) heruntergeladen; nichts wird übertragen.",
+    "options.smartSearch.installed": "Smart-Search-Modell installiert",
+    "options.smartSearch.download": "Modell herunterladen",
+    "options.smartSearch.consent":
+      "Ich stimme zu, das Modell auf dieses Gerät herunterzuladen",
+    "options.smartSearch.done": "Modell geladen — Embeddings werden im Hintergrund aufgebaut",
+    "options.smartSearch.failed": "Das Herunterladen des Modells ist fehlgeschlagen: {error}",
     "options.showTooltips": "Tooltips anzeigen",
     "options.gridRenderer": "Vorschaugitter-Renderer",
     "options.gridRenderer.dom": "DOM (Standard)",

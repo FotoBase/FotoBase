@@ -300,6 +300,7 @@ fn migrating_an_older_catalog_makes_the_next_rebuild_reread_sidecars() {
          DROP TABLE persons;
          DROP TABLE folder_ini_ingest;
          DROP TABLE places;
+         DROP TABLE photo_embeddings;
          DROP INDEX idx_files_place;
          ALTER TABLE files DROP COLUMN place_id;
          DROP INDEX idx_files_stack;
@@ -308,6 +309,7 @@ fn migrating_an_older_catalog_makes_the_next_rebuild_reread_sidecars() {
          ALTER TABLE files DROP COLUMN has_recipe;
          ALTER TABLE files DROP COLUMN phash;
          ALTER TABLE files DROP COLUMN face_scanned;
+         ALTER TABLE files DROP COLUMN embed_scanned;
          ALTER TABLE folders DROP COLUMN face_detect;
          ALTER TABLE metadata DROP COLUMN artist;
          ALTER TABLE metadata DROP COLUMN copyright;",

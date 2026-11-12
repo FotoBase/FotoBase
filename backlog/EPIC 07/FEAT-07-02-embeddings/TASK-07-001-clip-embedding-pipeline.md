@@ -1,6 +1,6 @@
 # task: add clip image embedding pipeline
 
-**Feature:** [FEAT-07-02-embeddings](FEAT-07-02-embeddings.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** todo
+**Feature:** [FEAT-07-02-embeddings](FEAT-07-02-embeddings.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** in review (2026-11-12)
 
 ## Description
 Compute OpenCLIP ViT-B/32 (ONNX) image embeddings for every cataloged photo via the shared job queue (PLAN §6 Phase 3 Smart search). Model is an opt-in download (PLAN §1 "Private AI"); the CI license manifest must reject non-permissive weights (PLAN §10 model-licensing risk). Depends on the AI runtime from EPIC-05 and the job queue from EPIC-01.
@@ -24,6 +24,6 @@ Compute OpenCLIP ViT-B/32 (ONNX) image embeddings for every cataloged photo via 
 - Integration: catalog rebuild → embeddings recomputed for all photos (feeds 07-009).
 
 ## Acceptance criteria
-- [ ] 07-001: Opt-in download flow downloads OpenCLIP ViT-B/32 ONNX weights and computes embeddings for all photos in the 50k fixture via the job queue, throttled on battery.
-- [ ] 07-001: CI license manifest fails the build on non-permissive model weights.
-- [ ] 07-001: No embedding is ever written to an XMP sidecar (derived data stays in the catalog).
+- [x] 07-001: Opt-in download flow downloads OpenCLIP ViT-B/32 ONNX weights and computes embeddings for all photos in the 50k fixture via the job queue, throttled on battery.
+- [x] 07-001: CI license manifest fails the build on non-permissive model weights.
+- [x] 07-001: No embedding is ever written to an XMP sidecar (derived data stays in the catalog).
