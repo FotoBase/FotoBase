@@ -40,7 +40,7 @@ jobs:
             libde265-dev \
             libaom-dev \
             libraw-dev \
-            webkit2gtk-driver \
+            webkitgtk-webdriver \
             xvfb
 
       - uses: dtolnay/rust-toolchain@stable
