@@ -60,6 +60,8 @@ describe("semantic search fallback (no model)", () => {
     timeout: 20_000,
     timeoutMsg: "the semantic-search enable hint did not appear",
   });
-  expect(await $('[data-testid="semantic-indicator"]')).toBeFalsy();
+  // `$$` (not `$`): WebDriver's `$` resolves missing elements to a truthy
+  // error-carrying stub, which would defeat the falsy check.
+  expect((await $$('[data-testid="semantic-indicator"]')).length).toBe(0);
 });
 });
