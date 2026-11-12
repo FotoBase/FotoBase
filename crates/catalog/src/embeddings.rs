@@ -88,6 +88,38 @@ impl Catalog {
         Ok(bytes.map(|b| b.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)).collect()))
     }
 
+    /// The ANN query path (TASK-07-002, PLAN §4 Vector search): the k
+    /// nearest stored photo embeddings to `query`, ordered by ascending
+    /// cosine distance. `query` must be the L2-normalized CLIP projection
+    /// (image embedding or text encoding — same 512-d space).
+    pub fn search_photo_embeddings(&self, query: &[f32], k: usize) -> Result<Vec<(i64, f32)>> {
+        if query.len() != CLIP_EMBEDDING_DIM {
+            return Err(CatalogError::InvalidQuery(format!(
+                "CLIP query must be {CLIP_EMBEDDING_DIM}-dimensional, got {}",
+                query.len()
+            )));
+        }
+        let bytes: Vec<u8> = query.iter().flat_map(|f| f.to_le_bytes()).collect();
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT file_id, distance FROM photo_embeddings \
+             WHERE embedding MATCH ?1 AND k = ?2 ORDER BY distance",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![bytes, k as i64], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, f32>(1)?))
+        })?;
+        Ok(rows.flatten().collect())
+    }
+
+    /// Clear all photo embeddings and reset every `embed_scanned` marker to
+    /// pending: a full catalog rebuild re-derives the embeddings on the next
+    /// pass (TASK-07-002, PLAN §9 — derived data is recomputed, §3 rule 2 —
+    /// never migrated or written to sidecars).
+    pub fn reset_all_photo_embeddings(&mut self) -> Result<()> {
+        self.conn.execute("DELETE FROM photo_embeddings", [])?;
+        self.conn.execute("UPDATE files SET embed_scanned = 0 WHERE embed_scanned != 0", [])?;
+        Ok(())
+    }
+
     /// Drop the photo embeddings of the given files (vec0 virtual tables do
     /// not participate in FK cascades — the explicit-cleanup pattern from
     /// TASK-05-008).

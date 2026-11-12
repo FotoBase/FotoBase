@@ -1367,6 +1367,7 @@ version = "0.1.0"
 dependencies = [
  "fotobase-core",
  "image",
+ "instant-clip-tokenizer",
  "ort",
  "serde",
  "serde_json",
@@ -2346,6 +2347,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c033f80b2c113cdf91ab7a33faa9cbc014726dcad99880c8609af2a370edf37d"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "instant-clip-tokenizer"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0da25dbe969d80a15bac118a46e8a372934595d3287195b473fe94cc209e902"
+dependencies = [
+ "ahash",
+ "regex",
 ]
 
 [[package]]

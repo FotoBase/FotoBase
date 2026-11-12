@@ -21,7 +21,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use fotobase_ai::ClipRuntime;
+use fotobase_ai::{ClipRuntime, ClipTextRuntime};
 use fotobase_catalog::Catalog;
 use serde::Serialize;
 
@@ -31,6 +31,9 @@ pub const EMBEDDINGS_EVENT: &str = "embeddings-progress";
 
 /// The manifest entry name of the CLIP visual tower (TASK-07-001 pin).
 pub const CLIP_MODEL_NAME: &str = "open_clip_vit_b32_laion2b_visual.onnx";
+
+/// The manifest entry name of the CLIP textual tower (TASK-07-002 pin).
+pub const CLIP_TEXT_MODEL_NAME: &str = "open_clip_vit_b32_laion2b_textual.onnx";
 
 /// One full pass over the unprocessed images.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -67,6 +70,50 @@ impl ClipEngine for OrtEngine {
     fn embed(&mut self, rgb: &[u8], width: u32, height: u32) -> Result<Vec<f32>, String> {
         self.runtime.embed_image(rgb, width, height).map_err(|e| e.to_string())
     }
+}
+
+/// The text-side backend (TASK-07-002).
+pub trait TextEngine: Send {
+    fn embed_text(&mut self, text: &str) -> Result<Vec<f32>, String>;
+}
+
+/// Production text engine: the OpenCLIP ViT-B/32 textual tower (the
+/// manifest-pinned, MIT-licensed opt-in download).
+pub struct OrtTextEngine {
+    runtime: ClipTextRuntime,
+}
+
+impl OrtTextEngine {
+    /// Load the textual tower from the models directory.
+    pub fn load(model_dir: &std::path::Path) -> Result<Self, String> {
+        let runtime = ClipTextRuntime::load(&model_dir.join(CLIP_TEXT_MODEL_NAME))
+            .map_err(|e| e.to_string())?;
+        Ok(Self { runtime })
+    }
+}
+
+impl TextEngine for OrtTextEngine {
+    fn embed_text(&mut self, text: &str) -> Result<Vec<f32>, String> {
+        self.runtime.embed_text(text).map_err(|e| e.to_string())
+    }
+}
+
+/// The text→image query path (TASK-07-002, PLAN §4 Vector search): encode
+/// the query with the CLIP text encoder, then rank the stored photo
+/// embeddings by cosine distance. Returns `(file_id, distance)` pairs,
+/// closest first. No image bytes here — the caller resolves ids to rows
+/// (§3 rule 3).
+pub fn search_photos(
+    cat: &mut Catalog,
+    engine: &mut dyn TextEngine,
+    text: &str,
+    k: usize,
+) -> Result<Vec<(i64, f32)>, String> {
+    if text.trim().is_empty() {
+        return Err("empty text query".into());
+    }
+    let query = engine.embed_text(text)?;
+    cat.search_photo_embeddings(&query, k).map_err(|e| e.to_string())
 }
 
 /// One full-library embedding pass. Cooperative cancellation: a cancelled

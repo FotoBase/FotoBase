@@ -22,7 +22,10 @@ pub mod clip;
 /// the CI license gate check.
 pub const MODEL_MANIFEST_JSON: &str = include_str!("../model-manifest.json");
 
-pub use clip::{clip_preprocess, ClipError, ClipRuntime, CLIP_EMBEDDING_DIM, CLIP_INPUT};
+pub use clip::{
+    clip_preprocess, clip_tokenize, ClipError, ClipRuntime, ClipTextRuntime, CLIP_EMBEDDING_DIM,
+    CLIP_INPUT,
+};
 pub use manifest::{ManifestEntry, ModelError, ModelRegistry};
 pub use runtime::{align_face, DetectedFace, FaceRuntime, RuntimeError};
 

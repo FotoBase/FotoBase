@@ -89,3 +89,51 @@ fn preprocess_is_planar_not_interleaved() {
 fn embedding_dimension_is_512() {
     assert_eq!(CLIP_EMBEDDING_DIM, 512);
 }
+
+// TASK-07-002: the text tower — same OpenCLIP model, same opt-in download
+// and license manifest as the visual tower. The model itself is never in
+// CI (254 MB opt-in download); the manifest pin and the tokenizer math are
+// testable without it.
+
+#[test]
+fn clip_text_tower_is_manifested_permissive_and_pinned() {
+    let registry = ModelRegistry::from_manifest_file(&manifest_path()).expect("manifest parses");
+    let entry = registry
+        .entries()
+        .iter()
+        .find(|e| e.name == "open_clip_vit_b32_laion2b_textual.onnx")
+        .expect("CLIP textual tower pinned in the manifest");
+    assert_eq!(entry.license, "MIT", "laion2b ViT-B/32 text weights are MIT");
+    assert!(entry.url.starts_with("https://"));
+    assert_eq!(entry.sha256.len(), 64);
+    // The real ViT-B/32 fp32 textual tower is ~254 MB.
+    assert!(entry.size_bytes > 200_000_000, "size pin looks wrong");
+}
+
+/// The tokenizer is the OpenAI CLIP BPE (OpenCLIP uses the same) and must
+/// produce the reference ids for a fixed prompt — a wrong tokenizer would
+/// silently degrade every text query.
+#[test]
+fn clip_tokenizer_produces_reference_ids() {
+    use fotobase_ai::clip::clip_tokenize;
+    let mut tokens = vec![clip_tokenize::SOT];
+    clip_tokenize::encode("a photo of a dog", &mut tokens);
+    tokens.push(clip_tokenize::EOT);
+    // Reference ids from the OpenAI CLIP tokenizer: "a photo of a dog".
+    assert_eq!(tokens, [49406, 320, 1125, 539, 320, 1929, 49407]);
+}
+
+/// Token sequences are deterministic and context-padded to 77: SOT first,
+/// EOT right after the prompt, zeros after (the OpenAI CLIP convention).
+#[test]
+fn clip_tokenizer_pads_to_context_length() {
+    use fotobase_ai::clip::clip_tokenize;
+    let ids = clip_tokenize::tokenize_padded("a photo of a dog");
+    assert_eq!(ids.len(), clip_tokenize::CTX);
+    assert_eq!(ids[0], clip_tokenize::SOT);
+    assert_eq!(ids[6], clip_tokenize::EOT, "EOT follows the prompt");
+    for t in &ids[7..] {
+        assert_eq!(*t, 0, "padding is zeros");
+    }
+    assert_eq!(ids, clip_tokenize::tokenize_padded("a photo of a dog"), "deterministic");
+}

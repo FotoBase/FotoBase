@@ -404,6 +404,13 @@ impl Catalog {
     /// are skipped. `full = true` forces a re-read of every sidecar.
     pub fn rebuild_from_sidecars(&mut self, full: bool) -> SyncResult<SyncStats> {
         let mut stats = SyncStats::default();
+        if full {
+            // Derived data (TASK-07-002, PLAN §9): a full rebuild re-derives
+            // the CLIP embeddings — the vec0 table is cleared and every
+            // photo returns to the pending marker so the next embedding
+            // pass recomputes it. Sidecars are never touched (§3 rule 2).
+            self.reset_all_photo_embeddings()?;
+        }
         // Folder-level hide lives in `.fotobase`, not in any sidecar (ADR-0007).
         self.sync_all_folder_flags()?;
         let files: Vec<(i64, String, Option<i64>, Option<i64>)> = {
