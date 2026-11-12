@@ -86,19 +86,19 @@ fn is_iso_date(s: &str) -> bool {
 /// query (TASK-06-003) share: search text, folder selection, album view and
 /// the filter buttons / date slider AND-combine identically in both, so the
 /// map always shows exactly the pins of the view the grid shows.
-struct CompiledFilters {
+pub(crate) struct CompiledFilters {
     /// SQL conditions referencing the `f` alias of `files`.
-    conds: String,
-    params: Vec<Box<dyn rusqlite::ToSql>>,
+    pub(crate) conds: String,
+    pub(crate) params: Vec<Box<dyn rusqlite::ToSql>>,
     /// `FROM` clause producing `files f` (FTS / album joins included).
-    from: String,
+    pub(crate) from: String,
 }
 
 impl Catalog {
     /// Compile the shared filters. `Ok(None)` means "matches nothing"
     /// (unsearchable search text or an empty folder selection) — callers
     /// return an empty result without running SQL.
-    fn compile_filters(&self, query: &FileQuery) -> Result<Option<CompiledFilters>> {
+    pub(crate) fn compile_filters(&self, query: &FileQuery) -> Result<Option<CompiledFilters>> {
         if let Some(cutoff) = &query.taken_since {
             if !is_iso_date(cutoff) {
                 return Err(CatalogError::InvalidQuery(format!(

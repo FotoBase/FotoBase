@@ -57,11 +57,22 @@ class GridState {
   /// it stays pending until the photo is among the shown items, so the shell
   /// can widen the filters first and let the list reload.
   revealRequest = $state<{ id: number } | null>(null);
+  /// Semantic search state (TASK-07-003, PLAN §6 P3): `semanticActive`
+  /// drives the search bar's small indicator while the CLIP path
+  /// contributed to the current grid; `semanticHint` shows the
+  /// "enable semantic search" hint while the opt-in model is missing.
+  semanticActive = $state(false);
+  semanticHint = $state(false);
 
   /// Any filter button or the date slider narrowing the library.
   get filtersActive(): boolean {
-    return this.starredOnly || this.videosOnly || this.facesOnly || this.geotaggedOnly ||
-      this.dateStep !== ALL_TIME;
+    return (
+      this.starredOnly ||
+      this.videosOnly ||
+      this.facesOnly ||
+      this.geotaggedOnly ||
+      this.dateStep !== ALL_TIME
+    );
   }
 
   clearFilters(): void {
@@ -116,6 +127,8 @@ export function resetGridState(): void {
   gridState.thumbVersions = {};
   gridState.revealRequest = null;
   gridState.captionMode = DEFAULT_CAPTION_MODE;
+  gridState.semanticActive = false;
+  gridState.semanticHint = false;
 }
 
 /// Which renderer to mount for a persisted setting. Canvas only when
