@@ -26,10 +26,10 @@ fotobase-core = { path = "../core" }
 fotobase-video = { path = "../video" }
 tracing.workspace = true
 thiserror.workspace = true
-zune-jpeg = "0.4"
+zune-jpeg = "0.5"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "tiff", "webp"] }
-fast_image_resize = "5"
-sha2 = "0.10"
+fast_image_resize = "6"
+sha2 = "0.11"
 tokio = { version = "1", features = ["rt"] }
 # TASK-02-001: all color transforms go through lcms2 (LittleCMS) — the task
 # spec forbids hand-rolled color math. The lcms2-sys backing crate builds the
@@ -39,7 +39,7 @@ lcms2 = "6"
 # of `image`, declared explicitly because icc.rs calls it directly.
 miniz_oxide = "0.8"
 # TASK-04-014: JPEG XL via jxl-oxide (PLAN §4: pure Rust decoder).
-jxl-oxide = { version = "0.11", optional = true }
+jxl-oxide = { version = "0.12", optional = true }
 # TASK-04-019: perceptual hashing for the near-duplicate finder.
 image_hasher = "3.1"
 
