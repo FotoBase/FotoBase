@@ -24,7 +24,8 @@ vi.mock("./map-src", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./map-src")>()),
   availableBasemap: vi.fn(),
 }));
-vi.mock("maplibre-gl", () => ({
+vi.mock("maplibre-gl", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("maplibre-gl")>()),
   Map: vi.fn().mockImplementation(function () {
     return {
       addControl: vi.fn(),

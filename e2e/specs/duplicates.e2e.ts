@@ -74,7 +74,9 @@ describe("near-duplicate finder", () => {
   });
 
   it("cancel deletes nothing", async () => {
-    await $('[data-testid="dupe-mark"]').click();
+    // wdio 10 strict selectors: the group holds three members, so the mark
+    // button is not unique — mark the first row's member explicitly.
+    await (await $$('[data-testid="dupe-mark"]'))[0].click();
     await $('[data-testid="dupes-delete"]').click();
     await $('[data-testid="dupes-cancel-delete"]').click();
     await $('[data-testid="dupes-close"]').click();

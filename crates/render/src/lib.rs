@@ -371,8 +371,6 @@ fn decode_with_image(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
 }
 
 fn zune_jpeg_decode(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
-    use std::io::Seek;
-
     use zune_jpeg::zune_core::{colorspace::ColorSpace, options::DecoderOptions};
 
     // zune 0.4 ran strict by default; 0.5 defaults to error tolerance. Keep
