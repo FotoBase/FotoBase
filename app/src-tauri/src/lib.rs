@@ -224,6 +224,10 @@ struct AppState {
     /// platform backend is not implemented — the People Manager hides the
     /// link UI then.
     contacts: Option<std::sync::Arc<dyn contacts::ContactsProvider>>,
+    /// Last semantic query's encoded text vector (TASK-07-003): the CLIP
+    /// text tower is expensive, so a repeat query reuses the vector instead
+    /// of re-encoding. In-memory only — derived data, never persisted.
+    clip_text_cache: clip_jobs::TextVectorCache,
 }
 
 impl AppState {
@@ -466,7 +470,36 @@ fn query_files(
     } else {
         None
     };
-    let query = fotobase_catalog::FileQuery {
+    let query = grid_file_query(
+        text,
+        folders,
+        album,
+        min_rating,
+        videos_only,
+        has_faces,
+        geotagged,
+        taken_since,
+        sort,
+        stack,
+    );
+    with_catalog(&state, |cat| cat.query_files(&query, usize::MAX))
+}
+
+/// The grid's named IPC fields compiled into the catalog's one query.
+#[allow(clippy::too_many_arguments)]
+fn grid_file_query(
+    text: Option<String>,
+    folders: Option<Vec<i64>>,
+    album: Option<i64>,
+    min_rating: Option<u8>,
+    videos_only: Option<bool>,
+    has_faces: Option<bool>,
+    geotagged: Option<bool>,
+    taken_since: Option<String>,
+    sort: Option<fotobase_catalog::FileSort>,
+    stack: Option<String>,
+) -> fotobase_catalog::FileQuery {
+    fotobase_catalog::FileQuery {
         text,
         folders,
         album,
@@ -477,8 +510,83 @@ fn query_files(
         taken_since,
         stack,
         sort: sort.unwrap_or_default(),
+    }
+}
+
+/// The grid's one query with the semantic path blended in (TASK-07-003,
+/// PLAN §6 P3): the CLIP text vector ranks the `photo_embeddings` ANN table
+/// and the hits fuse (reciprocal rank) with the FTS matches inside the
+/// catalog, so exact text matches are never lost. Errors with
+/// `clip-text-model-missing` when the opt-in model is absent — the caller
+/// falls back to plain FTS and shows the enable hint. Ids + metadata only,
+/// no image bytes over IPC (§3 rule 3).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn query_files_semantic(
+    app: tauri::AppHandle,
+    text: Option<String>,
+    folders: Option<Vec<i64>>,
+    album: Option<i64>,
+    starred: Option<bool>,
+    videos_only: Option<bool>,
+    has_faces: Option<bool>,
+    geotagged: Option<bool>,
+    taken_since: Option<String>,
+    sort: Option<fotobase_catalog::FileSort>,
+    stack: Option<String>,
+) -> Result<Vec<fotobase_catalog::FileInfo>, String> {
+    let Some(text) = text.filter(|t| !t.trim().is_empty()) else {
+        return Err("no-query".into());
     };
-    with_catalog(&state, |cat| cat.query_files(&query, usize::MAX))
+    let model_dir = ai_models_dir(&app);
+    if !model_dir.join(clip_jobs::CLIP_TEXT_MODEL_NAME).exists() {
+        return Err("clip-text-model-missing".into());
+    }
+    let state = app.state::<AppState>();
+    let min_rating = if starred == Some(true) {
+        Some(rating::starred_threshold(ratings_enabled(&state)?))
+    } else {
+        None
+    };
+    let query = grid_file_query(
+        Some(text.clone()),
+        folders,
+        album,
+        min_rating,
+        videos_only,
+        has_faces,
+        geotagged,
+        taken_since,
+        sort,
+        stack,
+    );
+    let cache = &state.clip_text_cache;
+    let cached = cache.get(&text);
+    let path = app.state::<AppState>().catalog_path().to_path_buf();
+    let vector = match cached {
+        Some(vector) => vector,
+        None => {
+            let model_dir = model_dir.clone();
+            let value = text.clone();
+            let vector = tauri::async_runtime::spawn_blocking(move || {
+                let mut engine = clip_jobs::OrtTextEngine::load(&model_dir)?;
+                clip_jobs::TextEngine::embed_text(&mut engine, &value)
+            })
+            .await
+            .map_err(|e| format!("clip text encode task: {e}"))??;
+            app.state::<AppState>().clip_text_cache.put(&text, vector.clone());
+            vector
+        }
+    };
+    let ann = tauri::async_runtime::spawn_blocking(move || {
+        let cat = Catalog::open(path).map_err(|e| e.to_string())?;
+        let hits = cat.search_photo_embeddings(&vector, 200).map_err(|e| e.to_string())?;
+        let ids: Vec<i64> = hits.into_iter().map(|(id, _)| id).collect();
+        cat.query_files_semantic(&query, &ids, usize::MAX).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("semantic search task: {e}"))??;
+    Ok(ann)
 }
 
 /// Geotagged pins for the map's clustered source (TASK-06-002). Hashes and
@@ -3203,6 +3311,7 @@ pub fn run() {
                 codec_support: Mutex::new(None),
                 streams: stream::StreamRegistry::new(),
                 contacts: contacts::system_provider(),
+                clip_text_cache: clip_jobs::TextVectorCache::new(),
             });
             // Display-profile watcher (TASK-02-001): re-read the profile
             // every [`display_profile::POLL_INTERVAL`]; on a fingerprint
@@ -3388,6 +3497,7 @@ pub fn run() {
             run_face_pass,
             run_embed_pass,
             clip_search,
+            query_files_semantic,
             clip_model_status,
             download_clip_model,
             remove_folder,

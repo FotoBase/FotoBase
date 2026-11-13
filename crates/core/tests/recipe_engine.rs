@@ -131,12 +131,12 @@ fn unknown_ops_are_skipped_with_a_warning_not_rejected() {
     // apply must skip the unknown op, not fail
     let img = gradient(8, 8);
     let out = apply_recipe(&img, &recipe);
-    for i in 0..out.data.len() {
-        assert_eq!(out.data[i], out.data[i]); // finite
+    for &v in &out.data {
+        assert!(v.is_finite());
     }
     let g = apply_recipe(&img, &recipe_from_ops(json!([{ "type": "grayscale" }])));
-    for i in 0..g.data.len() {
-        assert_eq!(out.data[i], g.data[i]);
+    for (a, b) in out.data.iter().zip(g.data.iter()) {
+        assert_eq!(a, b);
     }
 }
 

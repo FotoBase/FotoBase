@@ -163,6 +163,54 @@ pub fn job_key() -> String {
     format!("embed-pass-{}", PASS_SEQ.fetch_add(1, Ordering::Relaxed))
 }
 
+/// The last semantic query's encoded text vector (TASK-07-003): a text-tower
+/// inference costs far more than a string compare, so the one-slot cache
+/// lets a re-typed (or unchanged, debounced) query skip the engine
+/// entirely. In-memory only — the vector is derived data, never persisted.
+#[derive(Default)]
+pub struct TextVectorCache(std::sync::Mutex<Option<(String, Vec<f32>)>>);
+
+impl TextVectorCache {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The cached vector for `text`, or `encode(text)`'s result (which then
+    /// becomes the cached slot). An encode failure leaves the cache alone.
+    pub fn get_or_encode(
+        &self,
+        text: &str,
+        encode: impl Fn(&str) -> Result<Vec<f32>, String>,
+    ) -> Result<Vec<f32>, String> {
+        if let Ok(guard) = self.0.lock() {
+            if let Some((cached, vector)) = guard.as_ref() {
+                if cached == text {
+                    return Ok(vector.clone());
+                }
+            }
+        }
+        let vector = encode(text)?;
+        if let Ok(mut guard) = self.0.lock() {
+            *guard = Some((text.to_string(), vector.clone()));
+        }
+        Ok(vector)
+    }
+
+    /// The cached vector for `text`, if one is stored.
+    pub fn get(&self, text: &str) -> Option<Vec<f32>> {
+        let guard = self.0.lock().ok()?;
+        let (cached, vector) = guard.as_ref()?;
+        (cached == text).then(|| vector.clone())
+    }
+
+    /// Store `text`'s vector as the (single-slot) cache content.
+    pub fn put(&self, text: &str, vector: Vec<f32>) {
+        if let Ok(mut guard) = self.0.lock() {
+            *guard = Some((text.to_string(), vector));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,5 +219,44 @@ mod tests {
     fn crate_identity() {
         // The lib.rs smoke test list expects every module to be reachable.
         assert!(!EMBEDDINGS_EVENT.is_empty());
+    }
+
+    /// TASK-07-003: the last query's encoded text vector is cached — a
+    /// second call with the same text must not re-encode.
+    #[test]
+    fn text_vector_cache_skips_reencoding() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let cache = TextVectorCache::new();
+        let calls = std::sync::Arc::new(AtomicUsize::new(0));
+        let encode = |_: &str| -> Result<Vec<f32>, String> {
+            calls.fetch_add(1, Ordering::Relaxed);
+            Ok(vec![0.5; 512])
+        };
+        let first = cache.get_or_encode("dog on the beach", encode).unwrap();
+        let second = cache.get_or_encode("dog on the beach", encode).unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 1, "the second call hit the cache");
+        assert_eq!(first, second);
+        // A different text re-encodes and replaces the slot.
+        let third = cache.get_or_encode("sunset", encode).unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
+        assert_eq!(third, vec![0.5; 512]);
+    }
+
+    #[test]
+    fn text_vector_cache_survives_an_encode_failure() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let cache = TextVectorCache::new();
+        assert!(cache.get_or_encode("", |_| Err("boom".into())).is_err(), "the failure surfaces");
+        let calls = std::sync::Arc::new(AtomicUsize::new(0));
+        let encode = |_: &str| -> Result<Vec<f32>, String> {
+            calls.fetch_add(1, Ordering::Relaxed);
+            Ok(vec![1.0])
+        };
+        let ok = cache.get_or_encode("a", encode).unwrap();
+        // The failed attempt left nothing cached, so "a" encoded fresh once;
+        // a repeat now hits the cache.
+        let again = cache.get_or_encode("a", encode).unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 1, "the empty-text failure cached nothing");
+        assert_eq!(ok, again);
     }
 }

@@ -53,7 +53,7 @@
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadPhotoInfo } from "./lib/info-pane";
   import { resetFaces } from "./lib/people";
-  import { queryLibraryItems, type LibraryView } from "./lib/search";
+  import { queryLibraryItems, queryLibraryItemsSemantic, semanticContributed, type LibraryView } from "./lib/search";
   import { findFileByPath, loadSettings, saveSettings, takeOpenFiles, type Settings } from "./lib/settings";
   import { captionModeFromSettings, settingsWithCaptionMode } from "./lib/captions";
   import {
@@ -537,12 +537,58 @@
         const rows = await loadPhotos(sel, album);
         // A slower, older query must not overwrite a newer one's result.
         if (seq === loadSeq) photos = rows;
+        scheduleSemantic(sel, album, seq);
       } catch {
         // Browser dev / backend down: nothing to show.
         photos = [];
       }
     })();
   });
+
+  // Semantic search (TASK-07-003, PLAN §6 P3): the FTS result stays live
+  // (the effect above); the heavier CLIP blend follows on its own debounce
+  // (they cost a text-tower inference) and replaces the grid only when it
+  // actually contributed ids the FTS result did not have. A missing opt-in
+  // model degrades to FTS-only plus the enable hint; the grid never waits
+  // on the model. No image bytes cross IPC (§3 rule 3).
+  const SEMANTIC_DEBOUNCE_MS = 400;
+  let semanticTimer: ReturnType<typeof setTimeout> | undefined;
+  function scheduleSemantic(sel: number[], album: number | null, seq: number): void {
+    clearTimeout(semanticTimer);
+    const query = gridState.searchQuery.trim();
+    if (query === "") {
+      gridState.semanticActive = false;
+      gridState.semanticHint = false;
+      return;
+    }
+    semanticTimer = setTimeout(() => {
+      void (async () => {
+        const result = await queryLibraryItemsSemantic({
+          folders: album !== null ? [] : sel,
+          album,
+          query,
+          starred: gridState.starredOnly,
+          videosOnly: gridState.videosOnly,
+          hasFaces: gridState.facesOnly,
+          geotagged: gridState.geotaggedOnly,
+          takenSince: cutoffDate(gridState.dateStep),
+          sort: gridState.sort,
+        });
+        if (seq !== loadSeq) return; // a newer query superseded this one
+        if (result === null) {
+          gridState.semanticActive = false;
+          return;
+        }
+        gridState.semanticHint = result.modelMissing;
+        if (result.modelMissing || !semanticContributed(photos, result.items)) {
+          gridState.semanticActive = false;
+          return;
+        }
+        photos = result.items;
+        gridState.semanticActive = true;
+      })();
+    }, SEMANTIC_DEBOUNCE_MS);
+  }
 
   // Context menus (TASK-01-021, PLAN §2 File menu / Folder context menu):
   // the photo menu carries the File-menu P1 entries (locate, delete to

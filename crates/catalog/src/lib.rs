@@ -6,6 +6,7 @@
 //! trigger the rebuild-from-sidecars recovery path.
 
 pub mod albums;
+pub mod blend;
 pub mod datetime;
 pub mod duplicates;
 pub mod embeddings;
@@ -142,7 +143,7 @@ const TAG_SEP: char = '\u{1f}';
 
 /// Grid-row SQL columns; pairs with [`file_info_row`]. `f` is the `files`
 /// alias the caller must use.
-const FILE_INFO_COLS: &str = "f.id, f.filename, f.hash, f.media_type,
+pub(crate) const FILE_INFO_COLS: &str = "f.id, f.filename, f.hash, f.media_type,
      COALESCE((SELECT m.rating FROM metadata m WHERE m.file_id = f.id), 0),
      (f.hidden OR EXISTS (SELECT 1 FROM folders hd WHERE hd.id = f.folder_id AND hd.hidden_eff = 1)),
      (SELECT m.caption FROM metadata m WHERE m.file_id = f.id),

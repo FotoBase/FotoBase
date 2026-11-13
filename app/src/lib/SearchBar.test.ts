@@ -97,4 +97,29 @@ describe("SearchBar", () => {
     vi.advanceTimersByTime(DEBOUNCE_MS);
     expect(gridState.searchQuery).toBe("");
   });
+
+  // TASK-07-003: the small "semantic" indicator shows while the CLIP path
+  // contributed to the current grid; the enable hint shows while the opt-in
+  // model is missing and there is search text.
+  it("shows the semantic indicator only while the CLIP path contributed", async () => {
+    render(SearchBar);
+    expect(screen.queryByTestId("semantic-indicator")).toBeNull();
+
+    gridState.semanticActive = true;
+    await flushSync();
+    expect(screen.getByTestId("semantic-indicator")).toBeTruthy();
+
+    gridState.semanticActive = false;
+    await flushSync();
+    expect(screen.queryByTestId("semantic-indicator")).toBeNull();
+  });
+
+  it("shows the semantic-search enable hint while the model is missing", async () => {
+    render(SearchBar);
+    expect(screen.queryByTestId("semantic-hint")).toBeNull();
+
+    gridState.semanticHint = true;
+    await flushSync();
+    expect(screen.getByTestId("semantic-hint")).toBeTruthy();
+  });
 });

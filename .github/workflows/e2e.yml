@@ -58,8 +58,9 @@ jobs:
             librsvg2-dev \
             libde265-dev \
             libaom-dev \
+            aom-tools \
             libraw-dev \
-            webkit2gtk-driver \
+            webkitgtk-webdriver \
             gdb \
             xvfb \
           || { echo "cache incomplete, falling back to a full download"; sudo apt-get update; sudo apt-get install -y \
@@ -74,8 +75,9 @@ jobs:
             librsvg2-dev \
             libde265-dev \
             libaom-dev \
+            aom-tools \
             libraw-dev \
-            webkit2gtk-driver \
+            webkitgtk-webdriver \
             gdb \
             xvfb; }
           mkdir -p ~/apt-e2e-cache/archives ~/apt-e2e-cache/lists

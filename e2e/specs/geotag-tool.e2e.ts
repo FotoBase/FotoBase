@@ -45,11 +45,9 @@ const openGeotagDialog = async (): Promise<void> => {
         let tries = 0;
         const attempt = (): void => {
           const img = document.querySelector(`img[alt="${alt}"]`);
-          const cell =
-            img?.closest('[data-testid="grid-cell"]') ??
-            document.querySelector('[data-testid="grid-cell"]');
+          const cell = img?.closest('[data-testid="grid-cell"]');
           if (!cell) {
-            if (++tries > 100) return done("no-cell");
+            if (++tries > 250) return done("no-cell");
             setTimeout(attempt, 100);
             return;
           }

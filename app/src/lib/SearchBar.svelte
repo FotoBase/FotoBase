@@ -53,4 +53,26 @@
       {t("search.clear")}
     </button>
   {/if}
+  {#if gridState.semanticActive}
+    <span class="semantic-indicator" data-testid="semantic-indicator" title={t("search.semantic")}>
+      {t("search.semantic")}
+    </span>
+  {/if}
+  {#if gridState.semanticHint}
+    <span class="semantic-hint" data-testid="semantic-hint">{t("search.semanticHint")}</span>
+  {/if}
 </div>
+
+<style>
+  .semantic-indicator {
+    font-size: 0.75rem;
+    color: var(--fb-accent);
+    border: 1px solid var(--fb-accent);
+    border-radius: 999px;
+    padding: 0 0.4em;
+  }
+  .semantic-hint {
+    font-size: 0.75rem;
+    color: var(--fb-muted);
+  }
+</style>
