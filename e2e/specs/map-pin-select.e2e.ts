@@ -123,7 +123,7 @@ describe("map pin selection", () => {
     // edge columns, so pin for the three the specs interact with.
     await dispatchClick('[data-testid="open-map"]');
     await browser.waitUntil(
-      async () => await $('[data-testid="map-cluster"]').isExisting(),
+      async () => (await $$('[data-testid="map-cluster"]')).length > 0,
       { timeoutMsg: "no cluster markers at the world zoom" },
     );
     await browser.execute(() => {
@@ -207,7 +207,7 @@ describe("map pin selection", () => {
     // The panel reopened at the world zoom — wait for the clusters, then
     // zoom back in for pins (same flow as the before hook).
     await browser.waitUntil(
-      async () => await $('[data-testid="map-cluster"]').isExisting(),
+      async () => (await $$('[data-testid="map-cluster"]')).length > 0,
       { timeoutMsg: "no cluster markers after reopen" },
     );
     await browser.execute(() => {

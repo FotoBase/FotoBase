@@ -8,7 +8,7 @@ import { flushSync } from "svelte";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ImportDialog from "./ImportDialog.svelte";
-import { cancelImport, importPhotos, onImportProgress } from "./import-photos";
+import { cancelImport, importPhotos, onImportProgress, type ImportProgress, type ImportReport } from "./import-photos";
 
 vi.mock("./import-photos", () => ({
   importPhotos: vi.fn(),
@@ -25,7 +25,7 @@ const settle = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-let progressCb: ((p: unknown) => void) | null = null;
+let progressCb: ((p: ImportProgress) => void) | null = null;
 
 beforeEach(() => {
   vi.mocked(importPhotos).mockReset().mockResolvedValue({
@@ -36,7 +36,7 @@ beforeEach(() => {
   });
   vi.mocked(cancelImport).mockReset().mockResolvedValue(undefined);
   progressCb = null;
-  vi.mocked(onImportProgress).mockReset().mockImplementation(async (cb: (p: unknown) => void) => {
+  vi.mocked(onImportProgress).mockReset().mockImplementation(async (cb) => {
     progressCb = cb;
     return () => {};
   });
@@ -127,7 +127,7 @@ describe("ImportDialog", () => {
   });
 
   it("while running, cancel is offered and reaches the backend", async () => {
-    let resolveRun: (r: unknown) => void = () => {};
+    let resolveRun: (r: ImportReport) => void = () => {}
     vi.mocked(importPhotos).mockReturnValue(
       new Promise((resolve) => {
         resolveRun = resolve;
@@ -161,7 +161,7 @@ describe("ImportDialog", () => {
   });
 
   it("progress events render while running", async () => {
-    let resolveRun: (r: unknown) => void = () => {};
+    let resolveRun: (r: ImportReport) => void = () => {}
     vi.mocked(importPhotos).mockReturnValue(
       new Promise((resolve) => {
         resolveRun = resolve;

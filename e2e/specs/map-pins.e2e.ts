@@ -57,7 +57,7 @@ describe("map pin clustering", () => {
   it("shows counted clusters at the world zoom", async () => {
     await dispatchClick('[data-testid="open-map"]');
     await browser.waitUntil(
-      async () => await $('[data-testid="map-cluster"]').isExisting(),
+      async () => (await $$('[data-testid="map-cluster"]')).length > 0,
       { timeoutMsg: "no cluster markers at the world zoom" },
     );
     // All photos sit in one tight grid, so the world view must show a
@@ -106,13 +106,13 @@ describe("map pin clustering", () => {
     });
     await browser.pause(1_000);
     await browser.waitUntil(
-      async () => await $('[data-testid="map-pin"] img').isExisting(),
+      async () => (await $$('[data-testid="map-pin"] img')).length > 0,
       {
         timeout: 15_000,
         timeoutMsg: "zoom-in did not resolve clusters into photo pins",
       },
     );
-    const src = await $('[data-testid="map-pin"] img').getAttribute("src");
+    const src = await (await $$('[data-testid="map-pin"] img'))[0].getAttribute("src");
     // Thumbnails travel through the custom scheme, never IPC (§3 rule 3).
     expect(src?.startsWith("thumb://")).toBe(true);
   });
@@ -137,7 +137,7 @@ describe("map pin clustering", () => {
     );
     await dispatchClick('[data-testid="open-map"]');
     await browser.waitUntil(
-      async () => await $('[data-testid="map-pin"]').isExisting(),
+      async () => (await $$('[data-testid="map-pin"]')).length > 0,
       { timeoutMsg: "filtered map shows no pin" },
     );
     const pins = await $$('[data-testid="map-pin"]');

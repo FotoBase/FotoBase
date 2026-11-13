@@ -14,22 +14,24 @@ let lib: Library;
 
 type Reply = { ok: true; value: unknown } | { ok: false; error: string };
 const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
-  const reply = await browser.executeAsync<Reply, [string, object]>(
-    (cmd: string, args: object, done: (r: Reply) => void) => {
+  const reply = (await browser.execute(
+    async (cmd: string, args: object) => {
       const tauri = (
         window as unknown as {
           __TAURI__: {
             core: { invoke: (c: string, a: object) => Promise<unknown> };
           };
         }
-      ).__TAURI__.core.invoke(cmd, args).then(
-        (value) => done({ ok: true, value }),
-        (e) => done({ ok: false, error: String(e) }),
-      );
+      ).__TAURI__;
+      try {
+        return { ok: true as const, value: await tauri.core.invoke(cmd, args) };
+      } catch (e) {
+        return { ok: false as const, error: String(e) };
+      }
     },
     cmd,
     args,
-  );
+  ) as Reply);
   if (!reply.ok) throw new Error(reply.error);
   return reply.value;
 };
@@ -40,8 +42,9 @@ const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
 // task (the same pattern reset-faces uses).
 const openGeotagDialog = async (): Promise<void> => {
   const why = await withDeadline(
-    browser.executeAsync(
-      (alt: string, done: (r: "ok" | "no-cell" | "no-menu") => void): void => {
+    browser.execute(
+      (alt: string): Promise<"ok" | "no-cell" | "no-menu"> =>
+        new Promise((done) => {
         let tries = 0;
         const attempt = (): void => {
           const img = document.querySelector(`img[alt="${alt}"]`);
@@ -75,7 +78,7 @@ const openGeotagDialog = async (): Promise<void> => {
           wait();
         };
         attempt();
-      },
+        }),
       SOLO,
     ),
     30_000,

@@ -114,7 +114,7 @@ fn disabled_folders_are_skipped_by_the_full_library_pass() {
         run_face_pass(&mut cat, &mut FakeEngine { calls: 0 }, &AtomicBool::new(false)).unwrap();
     assert_eq!(report.detected, 0);
     assert_eq!(report.folders_skipped, 2);
-    let pending: usize = cat
+    let pending: i64 = cat
         .conn()
         .query_row("SELECT COUNT(*) FROM files WHERE face_scanned = 0", [], |r| r.get(0))
         .unwrap();

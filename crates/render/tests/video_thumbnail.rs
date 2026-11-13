@@ -52,7 +52,14 @@ fn content_hash(path: &Path) -> String {
     use sha2::{Digest, Sha256};
     let mut file = std::fs::File::open(path).unwrap();
     let mut hasher = Sha256::new();
-    std::io::copy(&mut file, &mut hasher).unwrap();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = std::io::Read::read(&mut file, &mut buf).unwrap();
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
     hasher.finalize()[..16].iter().fold(String::new(), |mut acc, b| {
         use std::fmt::Write as _;
         let _ = write!(acc, "{b:02x}");

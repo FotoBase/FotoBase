@@ -35,20 +35,19 @@ describe("near-duplicate finder", () => {
     await browser.waitUntil(async () =>
       browser.execute(() => Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__)),
     );
-    const error = await browser.executeAsync(
-      (folder: string, done: (e: string | null) => void) => {
+    const error = (await browser.execute(async (folder: string) => {
         const tauri = (
           window as unknown as {
             __TAURI__: { core: { invoke: (cmd: string, args: object) => Promise<unknown> } };
           }
         ).__TAURI__;
-        tauri.core.invoke("set_folder_mode", { path: folder, mode: "once" }).then(
-          () => done(null),
-          (e) => done(String(e)),
-        );
-      },
-      lib.dir,
-    );
+        try {
+          await tauri.core.invoke("set_folder_mode", { path: folder, mode: "once" });
+          return null;
+        } catch (e) {
+          return String(e);
+        }
+      }, lib.dir)) as string | null;
     expect(error).toBeNull();
   });
 
@@ -75,7 +74,9 @@ describe("near-duplicate finder", () => {
   });
 
   it("cancel deletes nothing", async () => {
-    await $('[data-testid="dupe-mark"]').click();
+    // wdio 10 strict selectors: the group holds three members, so the mark
+    // button is not unique — mark the first row's member explicitly.
+    await (await $$('[data-testid="dupe-mark"]'))[0].click();
     await $('[data-testid="dupes-delete"]').click();
     await $('[data-testid="dupes-cancel-delete"]').click();
     await $('[data-testid="dupes-close"]').click();

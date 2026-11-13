@@ -66,7 +66,7 @@ describe("RedEyePanel", () => {
     render(RedEyePanel, { ...props(), onchange });
     await fireEvent.click(screen.getByTestId("manual-button"));
     await drag(screen.getByTestId("stage"), 10, 0); // 20→30px of 100 → x 0.2→0.3
-    const last = onchange.mock.calls.at(-1)[0];
+    const last = onchange.mock.calls.at(-1)![0];
     expect(last.auto).toBe(false);
     expect(last.regions).toHaveLength(1);
     expect(last.regions[0].x).toBeCloseTo(0.25);

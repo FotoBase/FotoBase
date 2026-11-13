@@ -23,11 +23,12 @@ let lib: Library;
 
 type Reply = { ok: true; value: unknown } | { ok: false; error: string };
 
-// WebDriver's async-script callback carries ONE result, so the reply is
-// wrapped; a rejected command throws here.
+// wdio 10 removed `executeAsync`; `execute` awaits an async script instead,
+// so the reply is simply the awaited promise result (a rejected invoke
+// throws here).
 const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
-  const reply = await browser.executeAsync<Reply, [string, object]>(
-    (cmd: string, args: object, done: (r: Reply) => void) => {
+  const reply = await browser.execute(
+    async (cmd: string, args: object) => {
       const tauri = (
         window as unknown as {
           __TAURI__: {
@@ -35,14 +36,15 @@ const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
           };
         }
       ).__TAURI__;
-      tauri.core.invoke(cmd, args).then(
-        (value) => done({ ok: true, value }),
-        (e) => done({ ok: false, error: String(e) }),
-      );
+      try {
+        return { ok: true as const, value: await tauri.core.invoke(cmd, args) };
+      } catch (e) {
+        return { ok: false as const, error: String(e) };
+      }
     },
     cmd,
     args,
-  );
+  ) as Reply;
   if (!reply.ok) throw new Error(`${cmd} failed: ${reply.error}`);
   return reply.value;
 };

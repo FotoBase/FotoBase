@@ -372,8 +372,13 @@ fn decode_with_image(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
 
 fn zune_jpeg_decode(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
     use zune_jpeg::zune_core::{colorspace::ColorSpace, options::DecoderOptions};
-    let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGB);
-    let mut decoder = zune_jpeg::JpegDecoder::new_with_options(bytes, options);
+
+    // zune 0.4 ran strict by default; 0.5 defaults to error tolerance. Keep
+    // strict so the `image` fallback still owns non-conforming files.
+    let options =
+        DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGB).set_strict_mode(true);
+    let mut decoder =
+        zune_jpeg::JpegDecoder::new_with_options(std::io::Cursor::new(bytes), options);
     decoder.decode_headers().map_err(|e| format!("{e}"))?;
     let info = decoder.info().ok_or("no jpeg header info")?;
     let (w, h) = (info.width as u32, info.height as u32);
@@ -695,9 +700,17 @@ pub fn video_thumbnail(
     // first 16 bytes — camera cards hold multi-gigabyte clips, nothing is
     // read whole.
     use sha2::Digest;
+    use std::io::Read;
     let mut file = std::fs::File::open(src)?;
     let mut hasher = Sha256::new();
-    std::io::copy(&mut file, &mut hasher)?;
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
     let hash: String = hasher.finalize()[..16].iter().fold(String::new(), |mut acc, b| {
         use std::fmt::Write;
         let _ = write!(acc, "{b:02x}");

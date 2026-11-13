@@ -210,6 +210,7 @@
     let cancelled = false;
     void (async () => {
       const { Map, Marker, NavigationControl } = await import("maplibre-gl");
+      await import("./maplibre-worker");
       if (cancelled || !container) return;
       markerCtor = Marker;
       map = new Map({

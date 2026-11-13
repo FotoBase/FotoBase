@@ -16,6 +16,9 @@ PLAN §10 names specific drift risks. This doc is the mechanism. Deliberately ma
 | ffmpeg                | patents/licensing      | LGPL build, no non-free codecs, OS decoders where possible                                            | license changes, codec removals                                   |
 | ort / ONNX models     | model licensing        | per-model license manifest checked in CI; permissively licensed only                                  | upstream license changes (InsightFace-style non-commercial traps) |
 | sqlite-vec / rusqlite | catalog layer          | rebuildable cache by design (§3)                                                                      | breaking schema/API changes                                       |
+| ort (ONNX runtime)    | pre-release pin        | pinned to 2.0.0-rc.x; no stable 2.0 exists yet                                                        | 2.0 stable release → bump in same PR as a `cargo test` gate        |
+| libayatana-appindicator | deprecation          | system-tray integration (03-002)                                                                      | deprecation/removal from Ubuntu 24.04+ repos, replacement API      |
+| Pillow (tools/)       | tooling drift          | pinned in `tools/requirements.txt` (`>=11.3,<12`)                                                     | new major releases; fixture determinism after a bump               |
 
 ## Cadence
 

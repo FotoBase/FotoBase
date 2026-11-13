@@ -15,8 +15,8 @@ let lib: Library;
 
 type Reply = { ok: true; value: unknown } | { ok: false; error: string };
 const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
-  const reply = await browser.executeAsync<Reply, [string, object]>(
-    (cmd: string, args: object, done: (r: Reply) => void) => {
+  const reply = (await browser.execute(
+    async (cmd: string, args: object) => {
       const tauri = (
         window as unknown as {
           __TAURI__: {
@@ -24,14 +24,15 @@ const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
           };
         }
       ).__TAURI__;
-      tauri.core.invoke(cmd, args).then(
-        (value) => done({ ok: true, value }),
-        (e) => done({ ok: false, error: String(e) }),
-      );
+      try {
+        return { ok: true as const, value: await tauri.core.invoke(cmd, args) };
+      } catch (e) {
+        return { ok: false as const, error: String(e) };
+      }
     },
     cmd,
     args,
-  );
+  ) as Reply);
   if (!reply.ok) throw new Error(reply.error);
   return reply.value;
 };
@@ -80,12 +81,12 @@ const peopleCount = async (): Promise<number> =>
 // context-menu grab) and raced the lazy thumbnail.
 const openMenuOnSolo = async (answer: boolean): Promise<void> => {
   const why = await withDeadline(
-    browser.executeAsync(
+    browser.execute(
       (
         alt: string,
         answer: boolean,
-        done: (r: "ok" | "no-cell" | "no-menu") => void,
-      ): void => {
+      ): Promise<"ok" | "no-cell" | "no-menu"> =>
+        new Promise((done) => {
         // Stub confirm here, right before the click: a native confirm()
         // dialog would block the flow forever, and a stub set in an earlier
         // WebDriver call is lost when the webview reloads between tests.
@@ -126,7 +127,7 @@ const openMenuOnSolo = async (answer: boolean): Promise<void> => {
           wait();
         };
         attempt();
-      },
+        }),
       SOLO,
       answer,
     ),

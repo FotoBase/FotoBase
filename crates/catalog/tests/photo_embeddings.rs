@@ -52,7 +52,7 @@ fn unit_vector(seed: f32) -> Vec<f32> {
 #[test]
 fn embed_markers_start_pending_and_store_round_trips() {
     let (_lib, mut cat, ids) = fixture(2);
-    let pending: usize = cat
+    let pending: i64 = cat
         .conn()
         .query_row("SELECT COUNT(*) FROM files WHERE embed_scanned = 0", [], |r| r.get(0))
         .unwrap();

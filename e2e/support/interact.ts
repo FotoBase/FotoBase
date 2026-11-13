@@ -62,12 +62,12 @@ export async function activate(
 /// image loads/errors (capture phase: load does not bubble) and the
 /// backend's `thumb-rendered` events. Observes only; changes no app state.
 export async function installVitals(): Promise<void> {
-  await browser.executeAsync((done: () => void) => {
+  await browser.execute(async () => {
     const w = window as unknown as {
       __fbVitals?: Record<string, number>;
       __TAURI__: { event: { listen: (e: string, cb: () => void) => Promise<unknown> } };
     };
-    if (w.__fbVitals) return done();
+    if (w.__fbVitals) return;
     const c: Record<string, number> = { imgLoad: 0, imgError: 0, thumbRendered: 0 };
     w.__fbVitals = c;
     document.addEventListener("load", (e) => e.target instanceof HTMLImageElement && c.imgLoad++, true);
@@ -78,7 +78,7 @@ export async function installVitals(): Promise<void> {
     ) => Promise<unknown>;
     listen("thumb-rendered", () => {
       c.thumbRendered++;
-    }).then(() => done(), () => done());
+    }).then(() => undefined, () => undefined);
   });
 }
 

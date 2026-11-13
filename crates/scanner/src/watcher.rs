@@ -92,6 +92,17 @@ fn make_root_watcher(
 ) -> Result<notify::RecommendedWatcher, notify::Error> {
     notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
         let Ok(ev) = res else { return };
+        // Content-change kinds only. notify 8 subscribes to IN_OPEN (notify 6
+        // did not); pass-through Access events would split the debounce
+        // window into extra waves and defeat the coalescing contract.
+        if !matches!(
+            ev.kind,
+            notify::EventKind::Create(_)
+                | notify::EventKind::Modify(_)
+                | notify::EventKind::Remove(_)
+        ) {
+            return;
+        }
         for path in ev.paths {
             let Some(c) = canonical_event_path(&path) else { continue };
             if c.starts_with(&canon) {

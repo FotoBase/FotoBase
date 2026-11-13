@@ -161,8 +161,8 @@ describe("InfoPane", () => {
   });
 
   it("swaps EXIF when the photo changes (fixture payload per photo)", async () => {
-    vi.mocked(invoke).mockImplementation((_cmd, args: { fileId: number }) =>
-      Promise.resolve(args.fileId === 1 ? PHOTO_A : PHOTO_B),
+    vi.mocked(invoke).mockImplementation((_cmd: string, args?: unknown) =>
+      Promise.resolve((args as { fileId: number }).fileId === 1 ? PHOTO_A : PHOTO_B),
     );
     const { rerender } = renderPane({ id: 1, filename: "a.jpg", hash: "a".repeat(32) });
     await waitFor(() => expect(screen.getByTestId("info-camera").textContent).toBe("Canon EOS R5"));
@@ -328,8 +328,8 @@ describe("Viewer info pane", () => {
   });
 
   it("pane content follows the current photo as the viewer navigates", async () => {
-    vi.mocked(invoke).mockImplementation((_cmd, args: { fileId: number }) =>
-      Promise.resolve(args.fileId === 1 ? PHOTO_A : { ...PHOTO_B, id: 2, camera: "Sony A7 IV" }),
+    vi.mocked(invoke).mockImplementation((_cmd: string, args?: unknown) =>
+      Promise.resolve((args as { fileId: number }).fileId === 1 ? PHOTO_A : { ...PHOTO_B, id: 2, camera: "Sony A7 IV" }),
     );
     render(Viewer, { items: makeItems(2), startIndex: 0 });
     flushSync();

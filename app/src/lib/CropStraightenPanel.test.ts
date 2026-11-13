@@ -64,7 +64,7 @@ describe("CropStraightenPanel", () => {
     const onchange = vi.fn();
     render(CropStraightenPanel, { ...props(), onchange });
     await fireEvent.click(screen.getByTestId("preset-1:1"));
-    const last = onchange.mock.calls.at(-1)[0];
+    const last = onchange.mock.calls.at(-1)![0];
     // Stage stub is 100×50 → image aspect 2 → the largest 1:1 rect is half
     // the width, full height, centered.
     expect(last.crop).toEqual({ x: 0.25, y: 0, w: 0.5, h: 1 });
@@ -76,7 +76,7 @@ describe("CropStraightenPanel", () => {
     const slider = screen.getByTestId("angle-slider") as HTMLInputElement;
     slider.value = "4";
     await fireEvent.input(slider);
-    const last = onchange.mock.calls.at(-1)[0];
+    const last = onchange.mock.calls.at(-1)![0];
     expect(last.angle).toBe(4);
     expect(last.autoFill).toBe(true);
   });
@@ -85,7 +85,7 @@ describe("CropStraightenPanel", () => {
     const onchange = vi.fn();
     render(CropStraightenPanel, { ...props(), onchange });
     await pointer(screen.getByTestId("handle-br"), -40, -10); // -0.4, -0.2 normalized
-    const last = onchange.mock.calls.at(-1)[0];
+    const last = onchange.mock.calls.at(-1)![0];
     expect(last.crop).toEqual({ x: 0, y: 0, w: 0.6, h: 0.8 });
   });
 

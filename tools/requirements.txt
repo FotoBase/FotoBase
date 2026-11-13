@@ -1,0 +1,4 @@
+# tools/ python dependencies. Stdlib-only elsewhere; only Pillow is third-party.
+# Review cadence: monthly or per-release, whichever first (see
+# docs/workflows/dependency-tracking.md).
+Pillow>=11.3,<12

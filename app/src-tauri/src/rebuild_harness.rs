@@ -199,7 +199,7 @@ pub fn snapshot(cat: &Catalog) -> fotobase_catalog::Result<Snapshot> {
 
 fn hash_file(path: &Path) -> Option<String> {
     let bytes = std::fs::read(path).ok()?;
-    Some(format!("{:x}", Sha256::digest(&bytes)))
+    Some(Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect::<String>())
 }
 
 /// Semantic per-field diff of two snapshots. Only differences are reported;
