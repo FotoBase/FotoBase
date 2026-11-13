@@ -79,7 +79,7 @@ export function applyAspectPreset(
   imgAspect = 1,
 ): CropRect {
   if (ratio === null) return { x: 0, y: 0, w: 1, h: 1 };
-  return maxRectWithRatio(imgAspect, 1, ratio);
+  return maxRectWithRatio(imgAspect, ratio);
 }
 
 /// Which crop handle is being dragged.

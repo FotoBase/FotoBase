@@ -69,6 +69,8 @@ const UNNAMED: PeopleEntry = {
   name: null,
   face_count: 3,
   representative: { ...REP, face_id: 202, file_id: 12 },
+  contact_id: null,
+  contact: null,
 };
 const BARE: PeopleEntry = {
   person_id: 6,

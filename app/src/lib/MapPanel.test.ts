@@ -17,6 +17,8 @@ import {
 } from "./map-src";
 import { Map as MapMock, Marker, NavigationControl } from "maplibre-gl";
 
+type maplibreGeoJSONSource = import("maplibre-gl").GeoJSONSource;
+
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("./map-src", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./map-src")>()),
@@ -71,7 +73,7 @@ function mapInstance(): {
   addControl: ReturnType<typeof vi.fn>;
   addSource: ReturnType<typeof vi.fn>;
   addLayer: ReturnType<typeof vi.fn>;
-  getSource: ReturnType<typeof vi.fn>;
+  getSource: ReturnType<typeof vi.fn<(id: string) => unknown>>;
   querySourceFeatures: ReturnType<typeof vi.fn>;
   once: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
@@ -160,7 +162,10 @@ describe("MapPanel — clustered pins", () => {
     vi.mocked(invoke).mockResolvedValue(PINS);
     render(MapPanel, { props: { open: true } });
     await waitFor(() => expect(mapInstance().addSource).toHaveBeenCalled());
-    const [id, source] = mapInstance().addSource.mock.calls[0];
+    const mapInstance0 = mapInstance() as unknown as {
+      addSource: { mock: { calls: [unknown, Record<string, unknown>][] } };
+    };
+    const [id, source] = mapInstance0.addSource.mock.calls[0];
     expect(id).toBe("photos");
     expect(source.cluster).toBe(true);
     expect(source.data).toEqual(pinsToGeoJson(PINS));
@@ -280,14 +285,7 @@ describe("MapPanel — clustered pins", () => {
     ] as never);
     fire(map, "moveend");
     await waitFor(() => expect(Marker).toHaveBeenCalled());
-    console.log("DBG t0 markers", Marker.mock.calls.length);
-    await new Promise((r) => setTimeout(r, 400));
-    console.log(
-      "DBG t+400 markers",
-      Marker.mock.calls.length,
-      "invokeCalls",
-      vi.mocked(invoke).mock.calls.length,
-    );
+    vi.mocked(Marker).mock.calls.length;
     const marker =
       vi.mocked(Marker).mock.results[vi.mocked(Marker).mock.results.length - 1]
         .value;
@@ -348,7 +346,8 @@ describe("MapPanel — filtered pins", () => {
     );
     await waitFor(() => {
       expect(map.getSource).toHaveBeenCalledWith("photos");
-      expect(map.getSource("photos").setData).toHaveBeenCalledWith(
+      const source = map.getSource("photos") as unknown as { setData: (data: string) => void };
+      expect(source.setData).toHaveBeenCalledWith(
         pinsToGeoJson([PINS[1]]),
       );
     });

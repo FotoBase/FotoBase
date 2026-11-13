@@ -23,12 +23,14 @@ vi.mock("./settings", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./settings")>();
   return {
     ...actual,
-    saveSettings: vi.fn(),
-    registerAssociations: vi.fn(),
-    unregisterAssociations: vi.fn(),
-    listCatalogs: vi.fn(),
-    createCatalog: vi.fn(),
-    switchCatalog: vi.fn(),
+    saveSettings: vi.fn<typeof import("./settings")["saveSettings"]>(),
+    registerAssociations:
+      vi.fn<typeof import("./settings")["registerAssociations"]>(),
+    unregisterAssociations:
+      vi.fn<typeof import("./settings")["unregisterAssociations"]>(),
+    listCatalogs: vi.fn<typeof import("./settings")["listCatalogs"]>(),
+    createCatalog: vi.fn<typeof import("./settings")["createCatalog"]>(),
+    switchCatalog: vi.fn<typeof import("./settings")["switchCatalog"]>(),
   };
 });
 
@@ -324,11 +326,11 @@ describe("OptionsDialog catalog switcher (TASK-03-024)", () => {
   });
 
   it("lists catalogs with the active one selected and switching invokes switch_catalog", async () => {
-    listCatalogs.mockResolvedValue([
+    vi.mocked(listCatalogs).mockResolvedValue([
       { name: "Default", dir: "/data", current: true },
       { name: "Work", dir: "/data/catalogs/work", current: false },
     ]);
-    switchCatalog.mockResolvedValue(undefined);
+    vi.mocked(switchCatalog).mockResolvedValue(undefined);
     render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });
     await settle();
 
@@ -340,8 +342,8 @@ describe("OptionsDialog catalog switcher (TASK-03-024)", () => {
   });
 
   it("creates a new catalog and shows an error for a rejected name", async () => {
-    listCatalogs.mockResolvedValue([{ name: "Default", dir: "/data", current: true }]);
-    createCatalog.mockResolvedValueOnce(undefined);
+    vi.mocked(listCatalogs).mockResolvedValue([{ name: "Default", dir: "/data", current: true }]);
+    vi.mocked(createCatalog).mockResolvedValueOnce(undefined);
     render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });
     await settle();
 
@@ -351,7 +353,7 @@ describe("OptionsDialog catalog switcher (TASK-03-024)", () => {
     await settle();
     expect(createCatalog).toHaveBeenCalledWith("Work");
 
-    createCatalog.mockRejectedValueOnce(new Error("a catalog named \"Work\" already exists"));
+    vi.mocked(createCatalog).mockRejectedValueOnce(new Error("a catalog named \"Work\" already exists"));
     fireEvent.input(input, { target: { value: "Work" } });
     fireEvent.click(screen.getByTestId("catalog-create"));
     await settle();

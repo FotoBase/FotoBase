@@ -64,6 +64,8 @@ const ENTRY: PeopleEntry = {
   name: "Alice",
   face_count: 7,
   representative: CLUSTER,
+  contact_id: null,
+  contact: null,
 };
 
 describe("people manager rules", () => {
