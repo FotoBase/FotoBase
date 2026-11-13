@@ -34,7 +34,7 @@ fn seed_cluster(
         s ^= s << 17;
         s as f32 / u64::MAX as f32 - 0.5
     };
-    let offset: usize =
+    let offset: i64 =
         cat.conn().query_row("SELECT COUNT(*) FROM files", [], |r| r.get(0)).unwrap();
     (0..n)
         .map(|i| {
@@ -42,7 +42,7 @@ fn seed_cluster(
             for c in v.iter_mut() {
                 *c += rnd() * 0.01;
             }
-            let file_id = add_photo(cat, dir, &format!("p{}.jpg", offset + i));
+            let file_id = add_photo(cat, dir, &format!("p{}.jpg", offset + i as i64));
             cat.record_face(
                 file_id,
                 &FaceRecord {

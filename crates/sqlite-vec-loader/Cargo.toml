@@ -8,4 +8,4 @@ description = "Registers the sqlite-vec SQLite extension as an auto-extension"
 
 [dependencies]
 sqlite-vec = "0.1"
-rusqlite = "0.32"
+rusqlite = "0.42"

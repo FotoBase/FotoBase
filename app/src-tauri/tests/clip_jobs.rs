@@ -106,7 +106,7 @@ fn failures_are_parked_not_fatal() {
     let report = run_embed_pass(&mut cat, &mut ExplodingEngine, &AtomicBool::new(false)).unwrap();
     assert_eq!(report.failed, 2);
     assert_eq!(report.embedded, 0);
-    let pending: usize = cat
+    let pending: i64 = cat
         .conn()
         .query_row(
             "SELECT COUNT(*) FROM files WHERE media_type = 'image' AND embed_scanned = 0",
@@ -115,7 +115,7 @@ fn failures_are_parked_not_fatal() {
         )
         .unwrap();
     assert_eq!(pending, 0, "failed rows parked");
-    let failed: usize = cat
+    let failed: i64 = cat
         .conn()
         .query_row("SELECT COUNT(*) FROM files WHERE embed_scanned = 2", [], |r| r.get(0))
         .unwrap();
@@ -156,7 +156,7 @@ fn catalog_rebuild_resets_markers_for_recomputation() {
         &|_p| {},
     )
     .unwrap();
-    let pending: usize = cat
+    let pending: i64 = cat
         .conn()
         .query_row(
             "SELECT COUNT(*) FROM files WHERE media_type = 'image' AND embed_scanned = 0",
