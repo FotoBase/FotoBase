@@ -375,9 +375,8 @@ fn zune_jpeg_decode(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
 
     // zune 0.4 ran strict by default; 0.5 defaults to error tolerance. Keep
     // strict so the `image` fallback still owns non-conforming files.
-    let options = DecoderOptions::default()
-        .jpeg_set_out_colorspace(ColorSpace::RGB)
-        .set_strict_mode(true);
+    let options =
+        DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGB).set_strict_mode(true);
     let mut decoder =
         zune_jpeg::JpegDecoder::new_with_options(std::io::Cursor::new(bytes), options);
     decoder.decode_headers().map_err(|e| format!("{e}"))?;

@@ -34,8 +34,7 @@ fn seed_cluster(
         s ^= s << 17;
         s as f32 / u64::MAX as f32 - 0.5
     };
-    let offset: i64 =
-        cat.conn().query_row("SELECT COUNT(*) FROM files", [], |r| r.get(0)).unwrap();
+    let offset: i64 = cat.conn().query_row("SELECT COUNT(*) FROM files", [], |r| r.get(0)).unwrap();
     (0..n)
         .map(|i| {
             let mut v = center;
