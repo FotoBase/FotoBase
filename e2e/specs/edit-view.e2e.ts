@@ -17,8 +17,8 @@ const t0 = Date.now();
 type Reply = { ok: true; value: unknown } | { ok: false; error: string };
 
 const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
-  const reply = await browser.executeAsync<Reply, [string, object]>(
-    (cmd: string, args: object, done: (r: Reply) => void) => {
+  const reply = (await browser.execute(
+    async (cmd: string, args: object) => {
       const tauri = (
         window as unknown as {
           __TAURI__: {
@@ -26,14 +26,15 @@ const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
           };
         }
       ).__TAURI__;
-      tauri.core.invoke(cmd, args).then(
-        (value) => done({ ok: true, value }),
-        (e) => done({ ok: false, error: String(e) }),
-      );
+      try {
+        return { ok: true as const, value: await tauri.core.invoke(cmd, args) };
+      } catch (e) {
+        return { ok: false as const, error: String(e) };
+      }
     },
     cmd,
     args,
-  );
+  ) as Reply);
   if (!reply.ok) throw new Error(`${cmd} failed: ${reply.error}`);
   return reply.value;
 };
@@ -98,8 +99,7 @@ describe("edit view", () => {
         Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__),
       ),
     );
-    const error = await browser.executeAsync(
-      (folder: string, done: (e: string | null) => void) => {
+    const error = (await browser.execute(async (folder: string) => {
         const tauri = (
           window as unknown as {
             __TAURI__: {
@@ -107,15 +107,13 @@ describe("edit view", () => {
             };
           }
         ).__TAURI__;
-        tauri.core
-          .invoke("set_folder_mode", { path: folder, mode: "once" })
-          .then(
-            () => done(null),
-            (e) => done(String(e)),
-          );
-      },
-      lib.dir,
-    );
+        try {
+          await tauri.core.invoke("set_folder_mode", { path: folder, mode: "once" });
+          return null;
+        } catch (e) {
+          return String(e);
+        }
+      }, lib.dir)) as string | null;
     expect(error).toBeNull();
     await waitForCellCount(3);
     await installVitals();

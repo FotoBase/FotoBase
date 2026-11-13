@@ -185,8 +185,7 @@ describe("batch edit", () => {
         Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__),
       ),
     );
-    const error = await browser.executeAsync(
-      (folder: string, done: (e: string | null) => void) => {
+    const error = (await browser.execute(async (folder: string) => {
         const tauri = (
           window as unknown as {
             __TAURI__: {
@@ -194,15 +193,13 @@ describe("batch edit", () => {
             };
           }
         ).__TAURI__;
-        tauri.core
-          .invoke("set_folder_mode", { path: folder, mode: "once" })
-          .then(
-            () => done(null),
-            (e) => done(String(e)),
-          );
-      },
-      lib.dir,
-    );
+        try {
+          await tauri.core.invoke("set_folder_mode", { path: folder, mode: "once" });
+          return null;
+        } catch (e) {
+          return String(e);
+        }
+      }, lib.dir)) as string | null;
     expect(error).toBeNull();
     await waitForCellCount(3);
   });

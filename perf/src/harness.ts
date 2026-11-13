@@ -283,11 +283,11 @@ const JANK_READ = `
  * frames over the run window (§2 scroll_fps). Works for both renderers —
  * each mounts its scroller under a `data-testid` the harness probes. */
 const SCROLL_RUN = `
-  const [durationMs, tickMs, stepPx, done] = arguments;
+  const [durationMs, tickMs, stepPx] = arguments;
   const el =
     document.querySelector('[data-testid="grid-scroll"]') ||
     document.querySelector('[data-testid="canvas-grid-scroll"]');
-  if (!el) { done({ error: "no grid scroller found" }); return; }
+  if (!el) return { error: "no grid scroller found" };
   let frames = 0;
   let jank = 0;
   let last = performance.now();
@@ -299,14 +299,16 @@ const SCROLL_RUN = `
     if (el.scrollTop <= 0) dir = 1;
     el.scrollTop += dir * stepPx;
   }, tickMs);
-  const loop = (now) => {
-    if (now - last > 100) jank += 1;
-    frames += 1;
-    last = now;
-    if (now - t0 < durationMs) { requestAnimationFrame(loop); }
-    else { clearInterval(wheel); done({ frames, elapsedMs: now - t0, jank }); }
-  };
-  requestAnimationFrame(loop);
+  return new Promise((done) => {
+    const loop = (now) => {
+      if (now - last > 100) jank += 1;
+      frames += 1;
+      last = now;
+      if (now - t0 < durationMs) { requestAnimationFrame(loop); }
+      else { clearInterval(wheel); done({ frames, elapsedMs: now - t0, jank }); }
+    };
+    requestAnimationFrame(loop);
+  });
 `;
 
 async function waitUntil(
@@ -512,7 +514,7 @@ async function runFull(args: Args): Promise<number> {
         const el = document.querySelector(sel);
         if (el) el.scrollTop = 0;
       }, '[data-testid="grid-scroll"], [data-testid="canvas-grid-scroll"]');
-      const run = (await browser.executeAsync(
+      const run = (await browser.execute(
         SCROLL_RUN,
         args.scrollS * 1000,
         50,

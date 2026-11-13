@@ -10,25 +10,25 @@ import { makeLibrary, type Library } from "../support/library";
 
 let lib: Library;
 
-// WebDriver's async-script callback carries ONE result, so the reply is
-// wrapped; a rejected command throws here.
+// wdio 10 removed `executeAsync`; `execute` awaits an async script instead.
 type Reply = { ok: true; value: unknown } | { ok: false; error: string };
 const invoke = async (cmd: string, args: object = {}): Promise<unknown> => {
-  const reply = await browser.executeAsync<Reply, [string, object]>(
-    (cmd: string, args: object, done: (r: Reply) => void) => {
+  const reply = (await browser.execute(
+    async (cmd: string, args: object) => {
       const tauri = (
         window as unknown as {
           __TAURI__: { core: { invoke: (c: string, a: object) => Promise<unknown> } };
         }
       ).__TAURI__;
-      tauri.core.invoke(cmd, args).then(
-        (value) => done({ ok: true, value }),
-        (e) => done({ ok: false, error: String(e) }),
-      );
+      try {
+        return { ok: true as const, value: await tauri.core.invoke(cmd, args) };
+      } catch (e) {
+        return { ok: false as const, error: String(e) };
+      }
     },
     cmd,
     args,
-  );
+  ) as Reply);
   if (!reply.ok) throw new Error(reply.error);
   return reply.value;
 };
