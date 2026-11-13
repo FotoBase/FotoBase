@@ -145,7 +145,7 @@ impl ModelRegistry {
         let response = ureq::get(&entry.url).call().map_err(|e| {
             ModelError::ManifestInvalid(format!("download failed for {}: {e}", entry.name))
         })?;
-        let mut reader = response.into_reader();
+        let mut reader = response.into_body().into_reader();
         let mut file = fs::File::create(&tmp)?;
         std::io::copy(&mut reader, &mut file)?;
         drop(file);

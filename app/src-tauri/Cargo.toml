@@ -76,7 +76,7 @@ objc2-foundation = { version = "0.3", features = ["NSArray", "NSPredicate", "NSS
 fotobase-metadata = { path = "../../crates/metadata" }
 # Same verifier tauri-plugin-updater uses — tests exercise the real path.
 base64 = "0.23"
-minisign-verify = "0.2"
+minisign-verify = "0.3"
 # thumb:// scheme tests (TASK-01-011): exercise the real cache + job pipeline.
 fotobase-render = { path = "../../crates/render" }
 fotobase-jobs = { path = "../../crates/jobs" }
