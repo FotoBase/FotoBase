@@ -37,7 +37,7 @@ tokio = { version = "1", features = ["rt"] }
 lcms2 = "6"
 # PNG iCCP inflation (TASK-02-001); already in the tree via the png backend
 # of `image`, declared explicitly because icc.rs calls it directly.
-miniz_oxide = "0.8"
+miniz_oxide = "0.9"
 # TASK-04-014: JPEG XL via jxl-oxide (PLAN §4: pure Rust decoder).
 jxl-oxide = { version = "0.12", optional = true }
 # TASK-04-019: perceptual hashing for the near-duplicate finder.
@@ -59,7 +59,7 @@ fotobase-core = { path = "../core" }
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "macros"] }
 tempfile = "3"
-miniz_oxide = "0.8"
+miniz_oxide = "0.9"
 
 [lints]
 workspace = true

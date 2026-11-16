@@ -20,7 +20,7 @@ sha2 = "0.11"
 ort = { version = "2.0.0-rc.15", default-features = false, features = ["download-binaries", "tls-rustls", "std"] }
 # Opt-in model download (TASK-07-001): HTTPS fetch of pinned weights, only
 # behind the `download` feature so library consumers get no network path.
-ureq = { version = "2", default-features = false, features = ["tls"], optional = true }
+ureq = { version = "3", default-features = false, features = ["rustls"], optional = true }
 # TASK-07-002: the OpenAI CLIP BPE tokenizer for the text tower (OpenCLIP
 # uses the same tokenizer); MIT, pure Rust, vocab bundled by the crate.
 instant-clip-tokenizer = "0.1"
@@ -28,7 +28,7 @@ instant-clip-tokenizer = "0.1"
 [dev-dependencies]
 tempfile = "3"
 # The download tests (TASK-07-001) exercise the real fetch path offline.
-ureq = { version = "2", default-features = false, features = ["tls"] }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [features]
