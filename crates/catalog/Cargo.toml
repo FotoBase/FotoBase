@@ -7,7 +7,7 @@ repository.workspace = true
 description = "SQLite catalog: schema, migrations, queries, FTS (rebuildable cache)"
 
 [dependencies]
-rusqlite = { version = "0.42", features = ["bundled"] }
+rusqlite = { version = "0.43", features = ["bundled"] }
 # TASK-05-008: face-embedding vector index (PLAN §5 `embeddings` virtual
 # table); the extension registration lives in `fotobase-sqlite-vec-loader`
 # (the workspace denies `unsafe_code`, which the one FFI call needs).
@@ -17,14 +17,14 @@ thiserror.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4", "v5"] }
-imagesize = "0.13"
+imagesize = "0.15"
 fotobase-metadata = { path = "../metadata" }
 hdbscan = "0.12.0"
 
 [dev-dependencies]
 tempfile = "3"
 filetime = "0.2"
-jsonschema = { version = "0.60.2", default-features = false }
+jsonschema = { version = "0.61.2", default-features = false }
 
 [lints]
 workspace = true

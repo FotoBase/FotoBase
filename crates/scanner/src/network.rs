@@ -80,6 +80,10 @@ impl FsOps for RealFs {
                 mtime,
             });
         }
+        // Deterministic traversal order: raw readdir order is arbitrary, so
+        // a scan could visit dir02 before dir00. Sorted paths make runs
+        // (and pause/resume checkpoints) reproducible.
+        out.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(out)
     }
 

@@ -44,7 +44,7 @@ trash = "5"
 # Rebuild acceptance harness (TASK-03-026): sidecar content hashing.
 sha2 = "0.11"
 # Harness snapshot queries run against the catalog's own SQLite handle.
-rusqlite = { version = "0.42", features = ["bundled"] }
+rusqlite = { version = "0.43", features = ["bundled"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 # Rating command errors (TASK-03-005).
@@ -60,7 +60,7 @@ flate2 = "1"
 
 # File associations (TASK-01-025): HKCU\Software\Classes registration.
 [target.'cfg(windows)'.dependencies]
-winreg = "0.55"
+winreg = "0.56"
 
 # Local contacts link (TASK-05-011): macOS Contacts framework. Strictly
 # local — this is the only contacts access in the app, and it never touches
@@ -76,11 +76,11 @@ objc2-foundation = { version = "0.3", features = ["NSArray", "NSPredicate", "NSS
 fotobase-metadata = { path = "../../crates/metadata" }
 # Same verifier tauri-plugin-updater uses — tests exercise the real path.
 base64 = "0.23"
-minisign-verify = "0.2"
+minisign-verify = "0.3"
 # thumb:// scheme tests (TASK-01-011): exercise the real cache + job pipeline.
 fotobase-render = { path = "../../crates/render" }
 fotobase-jobs = { path = "../../crates/jobs" }
-rusqlite = { version = "0.42", features = ["bundled"] }
+rusqlite = { version = "0.43", features = ["bundled"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 sha2 = "0.11"
 tempfile = "3"
