@@ -228,6 +228,9 @@ struct AppState {
     /// text tower is expensive, so a repeat query reuses the vector instead
     /// of re-encoding. In-memory only — derived data, never persisted.
     clip_text_cache: clip_jobs::TextVectorCache,
+    /// The auto-tag vocabulary's prompt embeddings (TASK-07-004): encoded
+    /// once per process, in-memory only — derived data, never persisted.
+    tag_prompt_cache: std::sync::Arc<tag_commands::PromptCache>,
 }
 
 impl AppState {
@@ -1258,6 +1261,57 @@ fn rename_tag(old: String, new: String, state: tauri::State<'_, AppState>) -> Re
 #[tauri::command]
 fn list_tags(state: tauri::State<'_, AppState>) -> Result<Vec<tag_commands::TagCount>, String> {
     with_catalog_sync(&state, |cat| tag_commands::all(cat))
+}
+
+/// One photo's stored auto-tag suggestions (TASK-07-004): catalog-derived
+/// rows only — reading them never touches a sidecar.
+#[tauri::command]
+fn get_tag_suggestions(
+    file_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    with_catalog_sync(&state, |cat| tag_commands::suggestions(cat, file_id))
+}
+
+/// Generate auto-tag suggestions for one photo from its stored CLIP
+/// embedding (only possible after the 07-001 model opt-in and embedding
+/// pass). Returns the stored suggestion list.
+#[tauri::command]
+async fn suggest_tags(app: tauri::AppHandle, file_id: i64) -> Result<Vec<String>, String> {
+    let model_dir = ai_models_dir(&app);
+    if !model_dir.join(clip_jobs::CLIP_TEXT_MODEL_NAME).exists() {
+        return Err("clip-text-model-missing".into());
+    }
+    let path = app.state::<AppState>().catalog_path().to_path_buf();
+    let cache = app.state::<AppState>().tag_prompt_cache.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cat = Catalog::open(path).map_err(|e| e.to_string())?;
+        let mut engine = clip_jobs::OrtTextEngine::load(&model_dir).map_err(|e| e.to_string())?;
+        tag_commands::suggest(&mut cat, file_id, &mut engine, &cache)
+    })
+    .await
+    .map_err(|e| format!("suggest tags task: {e}"))?
+}
+
+/// Confirm one suggestion: it becomes an ordinary `dc:subject` tag through
+/// the single sidecar write-through. Returns the updated tag list.
+#[tauri::command]
+fn confirm_tag_suggestion(
+    file_id: i64,
+    tag: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    with_catalog_sync(&state, |cat| tag_commands::confirm(cat, file_id, &tag))
+}
+
+/// Reject one suggestion: the catalog row drops, the sidecar is untouched.
+#[tauri::command]
+fn reject_tag_suggestion(
+    file_id: i64,
+    tag: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<bool, String> {
+    with_catalog_sync(&state, |cat| tag_commands::reject(cat, file_id, &tag))
 }
 
 /// Batch rename preview (TASK-03-011): the names a pattern would give the
@@ -3312,6 +3366,7 @@ pub fn run() {
                 streams: stream::StreamRegistry::new(),
                 contacts: contacts::system_provider(),
                 clip_text_cache: clip_jobs::TextVectorCache::new(),
+                tag_prompt_cache: std::sync::Arc::new(tag_commands::PromptCache::new()),
             });
             // Display-profile watcher (TASK-02-001): re-read the profile
             // every [`display_profile::POLL_INTERVAL`]; on a fingerprint
@@ -3470,6 +3525,10 @@ pub fn run() {
             get_file_albums,
             get_tags,
             add_tag,
+            get_tag_suggestions,
+            suggest_tags,
+            confirm_tag_suggestion,
+            reject_tag_suggestion,
             remove_tag,
             rename_tag,
             list_tags,

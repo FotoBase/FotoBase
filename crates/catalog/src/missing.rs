@@ -53,7 +53,8 @@ impl Catalog {
             self.conn().execute(
                 "INSERT OR IGNORE INTO missing_file_tags (missing_id, tag)
                  SELECT ?1, t.name FROM file_tags ft JOIN tags t ON t.id = ft.tag_id
-                 WHERE ft.file_id = (SELECT id FROM files WHERE path = ?2)",
+                 WHERE ft.file_id = (SELECT id FROM files WHERE path = ?2)
+                   AND ft.origin = 'confirmed'",
                 rusqlite::params![missing_id, path],
             )?;
         }

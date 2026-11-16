@@ -15,6 +15,7 @@ pub mod manifest;
 pub mod runtime;
 
 pub mod clip;
+pub mod keywords;
 
 /// The model manifest embedded at compile time: the installed app has no
 /// `crates/` directory, so the opt-in download flow (TASK-07-001) reads the
@@ -26,6 +27,7 @@ pub use clip::{
     clip_preprocess, clip_tokenize, ClipError, ClipRuntime, ClipTextRuntime, CLIP_EMBEDDING_DIM,
     CLIP_INPUT,
 };
+pub use keywords::{extract_keywords, KeywordHit, Vocabulary, VOCABULARY_JSON};
 pub use manifest::{ManifestEntry, ModelError, ModelRegistry};
 pub use runtime::{align_face, DetectedFace, FaceRuntime, RuntimeError};
 

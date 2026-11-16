@@ -15,7 +15,7 @@
 ## feat: search features
 
 - [x] `07-003` (M) Semantic search in the live search bar ("dog on the beach at sunset"), blended with FTS results.
-- [ ] `07-004` (M) Auto-tagging: content keywords from embeddings → normal tags (`dc:subject`), user-confirmable.
+- [x] `07-004` (M) Auto-tagging: content keywords from embeddings → normal tags (`dc:subject`), user-confirmable.
 - [ ] `07-005` (M) Advanced search syntax: `person:`, `camera:`, `before:` field filters combinable with free text.
 
 ## feat: AI assists

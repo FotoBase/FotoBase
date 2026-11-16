@@ -149,7 +149,7 @@ pub(crate) const FILE_INFO_COLS: &str = "f.id, f.filename, f.hash, f.media_type,
      (SELECT m.caption FROM metadata m WHERE m.file_id = f.id),
      (SELECT group_concat(name, char(31)) FROM
          (SELECT t.name FROM file_tags ft JOIN tags t ON t.id = ft.tag_id
-          WHERE ft.file_id = f.id ORDER BY t.name)),
+          WHERE ft.file_id = f.id AND ft.origin = 'confirmed' ORDER BY t.name)),
      f.width, f.height, f.stack_id,
      CASE WHEN f.stack_id IS NULL THEN 0
           ELSE (SELECT COUNT(*) FROM files s WHERE s.stack_id = f.stack_id) END";

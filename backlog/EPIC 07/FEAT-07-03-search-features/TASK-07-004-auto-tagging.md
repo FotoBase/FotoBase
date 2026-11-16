@@ -1,6 +1,6 @@
 # task: add embedding-based auto-tagging
 
-**Feature:** [FEAT-07-03-search-features](FEAT-07-03-search-features.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** todo
+**Feature:** [FEAT-07-03-search-features](FEAT-07-03-search-features.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** in review (2026-11-16)
 
 ## Description
 Generate content keywords from CLIP embeddings and offer them as normal `dc:subject` tags, user-confirmable (PLAN §6 P3: "Auto-tagging: content keywords generated from embeddings, written as normal tags"). Must survive catalog rebuild as regular tags (epic acceptance, §9).
@@ -24,5 +24,5 @@ Generate content keywords from CLIP embeddings and offer them as normal `dc:subj
 - Unit: rejecting a suggestion never writes to the sidecar.
 
 ## Acceptance criteria
-- [ ] 07-004: Auto-tags from embeddings become normal `dc:subject` tags after user confirmation and survive catalog rebuild as regular tags.
-- [ ] 07-004: Unconfirmed suggestions never touch sidecars and are recomputable.
+- [x] 07-004: Auto-tags from embeddings become normal `dc:subject` tags after user confirmation and survive catalog rebuild as regular tags.
+- [x] 07-004: Unconfirmed suggestions never touch sidecars and are recomputable.

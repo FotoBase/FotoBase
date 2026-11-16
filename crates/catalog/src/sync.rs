@@ -214,6 +214,8 @@ impl Catalog {
             sc.set_hierarchical_tags(hier);
             tags
         })?;
+        // A stale suggestion of the removed tag must not resurrect in the UI.
+        self.clear_suggestion(file_id, &tag)?;
         Ok(tags)
     }
 
@@ -233,7 +235,8 @@ impl Catalog {
         let ids: Vec<i64> = {
             let mut stmt = self.conn().prepare_cached(
                 "SELECT DISTINCT ft.file_id FROM file_tags ft JOIN tags t ON t.id = ft.tag_id
-                 WHERE t.name = ?1 OR t.name LIKE ?2 OR t.name LIKE ?3 OR t.name LIKE ?4
+                 WHERE (t.name = ?1 OR t.name LIKE ?2 OR t.name LIKE ?3 OR t.name LIKE ?4)
+                   AND ft.origin = 'confirmed'
                  ORDER BY ft.file_id",
             )?;
             let rows = stmt
@@ -267,10 +270,11 @@ impl Catalog {
     }
 
     /// A photo's tags from the catalog mirror (derived cache, PLAN §5).
+    /// Suggested auto-tags (TASK-07-004) are not tags yet and never appear.
     pub fn file_tags(&self, file_id: i64) -> Result<Vec<String>> {
         let mut stmt = self.conn().prepare_cached(
             "SELECT t.name FROM tags t JOIN file_tags ft ON ft.tag_id = t.id
-             WHERE ft.file_id = ?1 ORDER BY t.name",
+             WHERE ft.file_id = ?1 AND ft.origin = 'confirmed' ORDER BY t.name",
         )?;
         let rows = stmt.query_map([file_id], |r| r.get(0))?;
         Ok(rows.flatten().collect())
@@ -281,7 +285,7 @@ impl Catalog {
     pub fn all_tags(&self) -> Result<Vec<(String, i64)>> {
         let mut stmt = self.conn().prepare_cached(
             "SELECT t.name, COUNT(ft.file_id) FROM tags t
-             LEFT JOIN file_tags ft ON ft.tag_id = t.id
+             LEFT JOIN file_tags ft ON ft.tag_id = t.id AND ft.origin = 'confirmed'
              GROUP BY t.id HAVING COUNT(ft.file_id) > 0 ORDER BY t.name",
         )?;
         let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
@@ -300,6 +304,70 @@ impl Catalog {
             tags = apply(sc);
         })?;
         Ok(tags)
+    }
+
+    // ---- auto-tagging suggestions (TASK-07-004, PLAN §6 P3) --------------
+
+    /// Store (replacing any previous set) the auto-tag suggestions for one
+    /// photo as derived `suggested` rows. Never touches a sidecar: a
+    /// suggestion is not user data until the user confirms it (§3 rule 2).
+    /// Tags the photo already has confirmed are skipped — no suggestion may
+    /// duplicate a tag.
+    pub fn store_suggestions(&mut self, file_id: i64, tags: &[String]) -> Result<()> {
+        let tx = self.conn_mut().transaction()?;
+        tx.execute("DELETE FROM file_tags WHERE file_id = ?1 AND origin = 'suggested'", [file_id])?;
+        for tag in tags {
+            let tag = tag.trim();
+            if tag.is_empty() {
+                continue;
+            }
+            tx.execute("INSERT OR IGNORE INTO tags (name) VALUES (?1)", [tag])?;
+            tx.execute(
+                "INSERT OR IGNORE INTO file_tags (file_id, tag_id, origin)
+                 SELECT ?1, t.id, 'suggested' FROM tags t WHERE t.name = ?2
+                   AND NOT EXISTS (SELECT 1 FROM file_tags ft WHERE ft.file_id = ?1
+                     AND ft.tag_id = t.id AND ft.origin = 'confirmed')",
+                rusqlite::params![file_id, tag],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// One photo's suggested auto-tags, name-ordered.
+    pub fn file_suggestions(&self, file_id: i64) -> Result<Vec<String>> {
+        let mut stmt = self.conn().prepare_cached(
+            "SELECT t.name FROM tags t JOIN file_tags ft ON ft.tag_id = t.id
+             WHERE ft.file_id = ?1 AND ft.origin = 'suggested' ORDER BY t.name",
+        )?;
+        let rows = stmt.query_map([file_id], |r| r.get(0))?;
+        Ok(rows.flatten().collect())
+    }
+
+    /// Reject one suggestion: drop the catalog row only. Never touches a
+    /// sidecar (the TDD unit criterion) — returns whether a row was removed.
+    pub fn reject_tag_suggestion(&mut self, file_id: i64, tag: &str) -> SyncResult<bool> {
+        self.clear_suggestion(file_id, tag)
+    }
+
+    /// Confirm one suggestion: it becomes an ordinary tag through the single
+    /// write-through pathway (`dc:subject`, merge-on-write) and stops being
+    /// a suggestion. Returns the photo's tag list after the write.
+    pub fn confirm_tag_suggestion(&mut self, file_id: i64, tag: &str) -> SyncResult<Vec<String>> {
+        let tags = self.add_tag(file_id, tag)?;
+        self.clear_suggestion(file_id, tag)?;
+        Ok(tags)
+    }
+
+    /// Delete one `suggested` row (if present); confirmed rows are never
+    /// touched.
+    fn clear_suggestion(&mut self, file_id: i64, tag: &str) -> SyncResult<bool> {
+        let n = self.conn_mut().execute(
+            "DELETE FROM file_tags WHERE file_id = ?1 AND origin = 'suggested'
+             AND tag_id = (SELECT id FROM tags WHERE name = ?2)",
+            rusqlite::params![file_id, tag],
+        )?;
+        Ok(n > 0)
     }
 
     pub fn set_gps(&mut self, file_id: i64, lat: f64, lon: f64) -> SyncResult<()> {
@@ -409,6 +477,9 @@ impl Catalog {
             // the CLIP embeddings — the vec0 table is cleared and every
             // photo returns to the pending marker so the next embedding
             // pass recomputes it. Sidecars are never touched (§3 rule 2).
+            // Auto-tag suggestions are derived the same way (TASK-07-004):
+            // their rows drop so the next suggestion pass recomputes them.
+            self.conn_mut().execute("DELETE FROM file_tags WHERE origin = 'suggested'", [])?;
             self.reset_all_photo_embeddings()?;
         }
         // Folder-level hide lives in `.fotobase`, not in any sidecar (ADR-0007).
@@ -788,6 +859,32 @@ mod tests {
         (cat, file_id, original, sc)
     }
 
+    /// [`Self::catalog_with_photo`] with a custom database path (the
+    /// rebuild test reopens the same file).
+    fn catalog_with_photo_dir(
+        dir: &std::path::Path,
+        db_path: &std::path::Path,
+        name: &str,
+    ) -> (Catalog, i64, PathBuf, PathBuf) {
+        let db = Catalog::open(db_path).unwrap();
+        let mut cat = db;
+        let original = dir.join(name);
+        std::fs::write(&original, b"fake image bytes").unwrap();
+        let folder = dir.to_str().unwrap().to_string();
+        let folder_id = cat.seed_folder(&folder).unwrap();
+        let path = original.to_str().unwrap().to_string();
+        cat.conn_mut()
+            .execute(
+                "INSERT INTO files (folder_id, path, filename, size, mtime, media_type)
+                 VALUES (?1, ?2, ?3, 10, 0.0, 'image')",
+                rusqlite::params![folder_id, path, name],
+            )
+            .unwrap();
+        let file_id = cat.conn_mut().last_insert_rowid();
+        let sc = sidecar_path(&path);
+        (cat, file_id, original, sc)
+    }
+
     fn rating_in(cat: &Catalog, file_id: i64) -> Option<i64> {
         cat.conn()
             .query_row("SELECT rating FROM metadata WHERE file_id = ?1", [file_id], |r| r.get(0))
@@ -1118,5 +1215,117 @@ mod tests {
         let (mut cat, _id, _o, _sc) = catalog_with_photo(dir.path(), "IMG_0012.jpg");
         let err = cat.set_rating(9999, 5).unwrap_err();
         assert!(matches!(err, SyncError::UnknownFile(9999)));
+    }
+
+    // ---- auto-tagging suggestions (TASK-07-004, PLAN §6 P3) --------------
+
+    #[test]
+    fn suggestions_are_catalog_only_and_never_write_a_sidecar() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut cat, id, _o, sc) = catalog_with_photo(dir.path(), "IMG_0013.jpg");
+        assert!(!sc.exists(), "no sidecar before the suggestion");
+
+        cat.store_suggestions(id, &["dog".to_string(), "beach".to_string()]).unwrap();
+        assert_eq!(cat.file_suggestions(id).unwrap(), vec!["beach", "dog"]);
+        // Derived data: not in `file_tags`, not in FTS, no sidecar.
+        assert!(cat.file_tags(id).unwrap().is_empty(), "suggestions are not tags yet");
+        assert!(!sc.exists(), "a suggestion must never create a sidecar");
+        let fts: String = cat
+            .conn()
+            .query_row("SELECT tags FROM files_fts WHERE rowid = ?1", [id], |r| r.get(0))
+            .unwrap_or_default();
+        assert_eq!(fts, "", "suggestions must not be searchable");
+
+        // Re-storing replaces the suggestion set instead of accumulating.
+        cat.store_suggestions(id, &["cat".to_string()]).unwrap();
+        assert_eq!(cat.file_suggestions(id).unwrap(), vec!["cat"]);
+    }
+
+    /// The TDD unit criterion: rejecting a suggestion only drops the
+    /// catalog row — no sidecar write of any kind.
+    #[test]
+    fn rejecting_a_suggestion_never_writes_the_sidecar() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut cat, id, _o, sc) = catalog_with_photo(dir.path(), "IMG_0014.jpg");
+        cat.store_suggestions(id, &["dog".to_string()]).unwrap();
+
+        cat.reject_tag_suggestion(id, "dog").unwrap();
+        assert!(cat.file_suggestions(id).unwrap().is_empty());
+        assert!(!sc.exists(), "rejection must not create a sidecar");
+        // Rejecting an unknown suggestion is a silent no-op.
+        assert!(!cat.reject_tag_suggestion(id, "dog").unwrap());
+    }
+
+    /// The TDD integration criterion: confirming writes `dc:subject`
+    /// through the single sidecar pathway and the tag is no longer a
+    /// suggestion.
+    #[test]
+    fn confirming_a_suggestion_writes_dc_subject_to_the_sidecar() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut cat, id, _o, sc) = catalog_with_photo(dir.path(), "IMG_0015.jpg");
+        cat.store_suggestions(id, &["dog".to_string(), "beach".to_string()]).unwrap();
+
+        let tags = cat.confirm_tag_suggestion(id, "dog").unwrap();
+        assert!(tags.contains(&"dog".to_string()));
+        let sc_tags = fotobase_metadata::Sidecar::read(&sc).unwrap().tags();
+        assert!(sc_tags.contains(&"dog".to_string()), "dc:subject written");
+        assert!(!cat.file_suggestions(id).unwrap().contains(&"dog".to_string()));
+        assert_eq!(cat.file_tags(id).unwrap(), vec!["dog"], "confirmed = ordinary tag");
+        // FTS sees confirmed tags only.
+        let fts: String = cat
+            .conn()
+            .query_row("SELECT tags FROM files_fts WHERE rowid = ?1", [id], |r| r.get(0))
+            .unwrap();
+        assert_eq!(fts, "dog");
+        // Suggesting an already-confirmed tag must not duplicate it.
+        cat.store_suggestions(id, &["dog".to_string(), "cat".to_string()]).unwrap();
+        assert_eq!(cat.file_suggestions(id).unwrap(), vec!["cat"]);
+    }
+
+    /// The TDD rebuildability criterion: a confirmed auto-tag is a regular
+    /// tag — delete the catalog, reopen, rebuild from sidecars, the tag is
+    /// still there (feeds 07-009).
+    #[test]
+    fn confirmed_auto_tags_survive_a_catalog_rebuild() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("catalog.db");
+        let (mut cat, id, _o, _sc) = catalog_with_photo_dir(dir.path(), &db, "IMG_0016.jpg");
+        cat.store_suggestions(id, &["dog".to_string()]).unwrap();
+        cat.confirm_tag_suggestion(id, "dog").unwrap();
+        drop(cat);
+
+        // "Delete the catalog" = a fresh database; the files are re-found by
+        // the scan (same paths), then user data converges from the sidecars.
+        std::fs::remove_file(&db).unwrap();
+        let mut cat = Catalog::open(&db).unwrap();
+        cat.seed_folder(dir.path().to_str().unwrap()).unwrap();
+        cat.conn()
+            .execute(
+                "INSERT INTO files (folder_id, path, filename, size, mtime, media_type)
+                 VALUES ((SELECT id FROM folders LIMIT 1), ?1, 'IMG_0016.jpg', 10, 0.0, 'image')",
+                [dir.path().join("IMG_0016.jpg").to_str().unwrap()],
+            )
+            .unwrap();
+        let new_id: i64 = cat.conn().query_row("SELECT id FROM files", [], |r| r.get(0)).unwrap();
+        assert!(cat.file_tags(new_id).unwrap().is_empty(), "fresh catalog has no tags");
+        cat.rebuild_from_sidecars(true).unwrap();
+        assert_eq!(cat.file_tags(new_id).unwrap(), vec!["dog"], "survives as a regular tag");
+        assert!(cat.file_suggestions(new_id).unwrap().is_empty(), "suggestions are derived");
+    }
+
+    /// Removing a tag also clears a stale suggestion of the same name, and
+    /// a full rebuild drops suggestion rows (derived, recomputed).
+    #[test]
+    fn remove_tag_and_full_rebuild_clear_suggestions() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut cat, id, _o, _sc) = catalog_with_photo(dir.path(), "IMG_0017.jpg");
+        cat.add_tag(id, "sea").unwrap();
+        cat.store_suggestions(id, &["sea".to_string(), "dog".to_string()]).unwrap();
+        cat.remove_tag(id, "sea").unwrap();
+        assert!(!cat.file_suggestions(id).unwrap().contains(&"sea".to_string()));
+
+        cat.rebuild_from_sidecars(true).unwrap();
+        assert!(cat.file_suggestions(id).unwrap().is_empty(), "suggestions recomputed on rebuild");
+        assert!(cat.file_tags(id).unwrap().is_empty(), "confirmed tag went with the sidecar");
     }
 }
