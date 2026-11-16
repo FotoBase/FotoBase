@@ -104,3 +104,68 @@ describe("Tag editor (TASK-03-006)", () => {
     });
   });
 });
+
+describe("Tag editor auto-tag suggestions (TASK-07-004)", () => {
+  it("shows suggestions as visually distinct chips with confirm/reject", async () => {
+    invokeMock.mockImplementation((_cmd: string) => {
+      if (_cmd === "get_tags") return Promise.resolve([]);
+      if (_cmd === "get_tag_suggestions") return Promise.resolve(["dog", "beach"]);
+      return Promise.resolve([]);
+    });
+    render(TagEditor, { props: { photoId: 1 } });
+    await settle();
+
+    const dog = screen.getByTestId("suggestion-chip-dog");
+    expect(dog.className).toContain("suggestion-chip");
+    expect(screen.getByTestId("suggestion-chip-beach")).toBeTruthy();
+    expect(screen.getAllByTestId("suggestion-confirm")).toHaveLength(2);
+    expect(screen.getAllByTestId("suggestion-reject")).toHaveLength(2);
+  });
+
+  it("confirming a suggestion adds it as an ordinary tag chip", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "get_tags") return Promise.resolve([]);
+      if (cmd === "get_tag_suggestions") return Promise.resolve(["dog"]);
+      if (cmd === "confirm_tag_suggestion") return Promise.resolve(["dog"]);
+      return Promise.resolve([]);
+    });
+    render(TagEditor, { props: { photoId: 1 } });
+    await settle();
+
+    fireEvent.click(screen.getAllByTestId("suggestion-confirm")[0]);
+    await settle();
+    expect(screen.getByTestId("tag-chip-dog")).toBeTruthy();
+    expect(screen.queryByTestId("suggestion-chip-dog")).toBeNull();
+  });
+
+  it("rejecting a suggestion removes it without adding a tag chip", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "get_tags") return Promise.resolve([]);
+      if (cmd === "get_tag_suggestions") return Promise.resolve(["dog"]);
+      if (cmd === "reject_tag_suggestion") return Promise.resolve(true);
+      return Promise.resolve([]);
+    });
+    render(TagEditor, { props: { photoId: 1 } });
+    await settle();
+
+    fireEvent.click(screen.getAllByTestId("suggestion-reject")[0]);
+    await settle();
+    expect(screen.queryByTestId("suggestion-chip-dog")).toBeNull();
+    expect(screen.queryByTestId("tag-chip-dog")).toBeNull();
+  });
+
+  it("the suggest button generates suggestions via suggest_tags", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "get_tags") return Promise.resolve([]);
+      if (cmd === "get_tag_suggestions") return Promise.resolve([]);
+      if (cmd === "suggest_tags") return Promise.resolve(["dog"]);
+      return Promise.resolve([]);
+    });
+    render(TagEditor, { props: { photoId: 1 } });
+    await settle();
+
+    fireEvent.click(screen.getByTestId("suggest-tags"));
+    await settle();
+    expect(screen.getByTestId("suggestion-chip-dog")).toBeTruthy();
+  });
+});

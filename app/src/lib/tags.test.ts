@@ -71,3 +71,47 @@ describe("toggleTag (backend round-trip)", () => {
     expect(result).toEqual(["sea"]);
   });
 });
+
+describe("auto-tag suggestions (TASK-07-004)", () => {
+  it("reads suggestions from get_tag_suggestions", async () => {
+    invokeMock.mockResolvedValue(["dog", "beach"]);
+    const { getTagSuggestions } = await import("./tags");
+    const result = await getTagSuggestions(7);
+    expect(invokeMock).toHaveBeenCalledWith("get_tag_suggestions", { fileId: 7 });
+    expect(result).toEqual(["dog", "beach"]);
+  });
+
+  it("generates suggestions via suggest_tags", async () => {
+    invokeMock.mockResolvedValue(["dog"]);
+    const { suggestTags } = await import("./tags");
+    expect(await suggestTags(7)).toEqual(["dog"]);
+    expect(invokeMock).toHaveBeenCalledWith("suggest_tags", { fileId: 7 });
+  });
+
+  it("confirms through confirm_tag_suggestion (sidecar write-through)", async () => {
+    invokeMock.mockResolvedValue(["dog"]);
+    const { confirmTagSuggestion } = await import("./tags");
+    const result = await confirmTagSuggestion(7, "dog");
+    expect(invokeMock).toHaveBeenCalledWith("confirm_tag_suggestion", {
+      fileId: 7,
+      tag: "dog",
+    });
+    expect(result).toEqual(["dog"]);
+  });
+
+  it("rejects through reject_tag_suggestion without touching the sidecar path", async () => {
+    invokeMock.mockResolvedValue(true);
+    const { rejectTagSuggestion } = await import("./tags");
+    expect(await rejectTagSuggestion(7, "dog")).toBe(true);
+    expect(invokeMock).toHaveBeenCalledWith("reject_tag_suggestion", {
+      fileId: 7,
+      tag: "dog",
+    });
+  });
+
+  it("unconfirmedSuggestions drops suggestions that are already tags", async () => {
+    const { unconfirmedSuggestions } = await import("./tags");
+    expect(unconfirmedSuggestions(["dog", "beach"], ["dog"])).toEqual(["beach"]);
+    expect(unconfirmedSuggestions([], ["dog"])).toEqual([]);
+  });
+});

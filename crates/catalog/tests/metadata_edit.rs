@@ -312,7 +312,8 @@ fn migrating_an_older_catalog_makes_the_next_rebuild_reread_sidecars() {
          ALTER TABLE files DROP COLUMN embed_scanned;
          ALTER TABLE folders DROP COLUMN face_detect;
          ALTER TABLE metadata DROP COLUMN artist;
-         ALTER TABLE metadata DROP COLUMN copyright;",
+         ALTER TABLE metadata DROP COLUMN copyright;
+         ALTER TABLE file_tags DROP COLUMN origin;",
     )
     .unwrap();
     conn.pragma_update(None, "user_version", 9).unwrap();

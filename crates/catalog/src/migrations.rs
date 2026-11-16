@@ -29,6 +29,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V20,
     MIGRATION_V21,
     MIGRATION_V22,
+    MIGRATION_V23,
 ];
 
 const MIGRATION_V1: &str = "
@@ -500,7 +501,8 @@ macro_rules! fts_refresh {
     INSERT INTO files_fts(rowid, filename, folder, caption, tags, people, place)
         SELECT f.id, f.filename, d.path, m.caption,
                (SELECT group_concat(t.name, ' ') FROM file_tags ft
-                JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id),
+                JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id
+                  AND ft.origin = 'confirmed'),
                (SELECT group_concat(name, ' ') FROM
                 (SELECT DISTINCT p.name AS name FROM faces fa
                  JOIN persons p ON p.id = fa.person_id WHERE fa.file_id = f.id)),
@@ -869,6 +871,121 @@ INSERT INTO files_fts(rowid, filename, folder, caption, tags, people, place)
            (SELECT name FROM places WHERE id = f.place_id)
     FROM files f JOIN folders d ON d.id = f.folder_id
     LEFT JOIN metadata m ON m.file_id = f.id;
+"
+);
+
+/// TASK-07-004: auto-tagging suggestions (PLAN §6 P3). `file_tags` gains an
+/// `origin` flag: `confirmed` (user data, mirrored from `dc:subject`) vs
+/// `suggested` (derived keyword suggestions from the CLIP embeddings, never
+/// written to a sidecar). Suggestion rows must not be searchable or count as
+/// tags, so the FTS triggers' tags subquery filters to confirmed rows — the
+/// triggers are recreated here because an existing database's triggers carry
+/// the SQL text they were created with — and the `tags` column is
+/// recomputed. Suggestion rows are derived data: a full rebuild drops them
+/// (the sync engine re-stores them from the embeddings).
+const MIGRATION_V23: &str = concat!(
+    "
+ALTER TABLE file_tags ADD COLUMN origin TEXT NOT NULL DEFAULT 'confirmed'
+    CHECK(origin IN ('confirmed', 'suggested'));
+DROP TRIGGER IF EXISTS files_fts_insert;
+DROP TRIGGER IF EXISTS files_fts_update;
+DROP TRIGGER IF EXISTS files_fts_caption_insert;
+DROP TRIGGER IF EXISTS files_fts_caption_update;
+DROP TRIGGER IF EXISTS files_fts_caption_delete;
+DROP TRIGGER IF EXISTS files_fts_tags_insert;
+DROP TRIGGER IF EXISTS files_fts_tags_delete;
+DROP TRIGGER IF EXISTS files_fts_people_insert;
+DROP TRIGGER IF EXISTS files_fts_people_update;
+DROP TRIGGER IF EXISTS files_fts_people_delete;
+DROP TRIGGER IF EXISTS files_fts_person_rename;
+
+CREATE TRIGGER files_fts_insert AFTER INSERT ON files BEGIN
+    ",
+    fts_refresh!("NEW.id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_update AFTER UPDATE ON files BEGIN
+    DELETE FROM files_fts WHERE rowid = OLD.id;
+    ",
+    fts_refresh!("NEW.id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_caption_insert AFTER INSERT ON metadata
+WHEN NEW.caption IS NOT NULL BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_caption_update AFTER UPDATE OF caption ON metadata
+WHEN OLD.caption IS NOT NEW.caption BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_caption_delete AFTER DELETE ON metadata
+WHEN OLD.caption IS NOT NULL BEGIN
+    ",
+    fts_refresh!("OLD.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_tags_insert AFTER INSERT ON file_tags BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_tags_delete AFTER DELETE ON file_tags BEGIN
+    ",
+    fts_refresh!("OLD.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_people_insert AFTER INSERT ON faces
+WHEN NEW.person_id IS NOT NULL BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_people_update AFTER UPDATE OF person_id ON faces
+WHEN NEW.person_id IS NOT OLD.person_id BEGIN
+    ",
+    fts_refresh!("NEW.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_people_delete AFTER DELETE ON faces
+WHEN OLD.person_id IS NOT NULL BEGIN
+    ",
+    fts_refresh!("OLD.file_id"),
+    "
+END;
+
+CREATE TRIGGER files_fts_person_rename AFTER UPDATE OF name ON persons BEGIN
+    DELETE FROM files_fts WHERE rowid IN (SELECT file_id FROM faces WHERE person_id = NEW.id);
+    INSERT INTO files_fts(rowid, filename, folder, caption, tags, people, place)
+        SELECT f.id, f.filename, d.path, m.caption,
+               (SELECT group_concat(t.name, ' ') FROM file_tags ft
+                JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = f.id
+                  AND ft.origin = 'confirmed'),
+               (SELECT group_concat(name, ' ') FROM
+                (SELECT DISTINCT p.name AS name FROM faces fa
+                 JOIN persons p ON p.id = fa.person_id WHERE fa.file_id = f.id)),
+               (SELECT name FROM places WHERE id = f.place_id)
+        FROM files f JOIN folders d ON d.id = f.folder_id
+        LEFT JOIN metadata m ON m.file_id = f.id
+        WHERE f.id IN (SELECT file_id FROM faces WHERE person_id = NEW.id);
+END;
+
+UPDATE files_fts SET tags = COALESCE(
+    (SELECT group_concat(t.name, ' ') FROM file_tags ft
+     JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = files_fts.rowid
+       AND ft.origin = 'confirmed'), '');
 "
 );
 
