@@ -63,6 +63,15 @@ pub struct FileQuery {
     pub geotagged: bool,
     /// Date-slider cutoff, `YYYY-MM-DD`, inclusive.
     pub taken_since: Option<String>,
+    /// Field-filter grammar (TASK-07-005): `person:` → `persons` name
+    /// (case-insensitive) joined through named faces.
+    pub person: Option<String>,
+    /// `camera:` → substring of the EXIF Make/Model mirror in `metadata`.
+    pub camera: Option<String>,
+    /// `before:` → exclusive `YYYY-MM-DD` upper bound on the capture date.
+    pub taken_before: Option<String>,
+    /// `after:` → inclusive `YYYY-MM-DD` lower bound on the capture date.
+    pub taken_after: Option<String>,
     /// Expand one stack (TASK-03-021): its members, top first, instead of
     /// the collapsed grid. Without it every stack shows as its top only.
     pub stack: Option<String>,
@@ -164,6 +173,31 @@ impl Catalog {
         }
         if let Some(cutoff) = &query.taken_since {
             params.push(Box::new(cutoff.clone()));
+            conds.push_str(&format!(" AND {FILE_DATE} >= ?"));
+        }
+        // Field-filter grammar (TASK-07-005): each filter ANDs like every
+        // other one, so it composes with starred/date-slider/map selection.
+        if let Some(person) = &query.person {
+            params.push(Box::new(person.clone()));
+            conds.push_str(
+                " AND f.id IN (SELECT fa.file_id FROM faces fa \
+                 JOIN persons p ON p.id = fa.person_id \
+                 WHERE p.name = ? COLLATE NOCASE)",
+            );
+        }
+        if let Some(camera) = &query.camera {
+            params.push(Box::new(camera.clone()));
+            conds.push_str(
+                " AND f.id IN (SELECT m.file_id FROM metadata m \
+                 WHERE m.camera LIKE '%' || ? || '%')",
+            );
+        }
+        if let Some(bound) = &query.taken_before {
+            params.push(Box::new(bound.clone()));
+            conds.push_str(&format!(" AND {FILE_DATE} < ?"));
+        }
+        if let Some(bound) = &query.taken_after {
+            params.push(Box::new(bound.clone()));
             conds.push_str(&format!(" AND {FILE_DATE} >= ?"));
         }
         Ok(Some(CompiledFilters { conds, params, from: from.to_string() }))
