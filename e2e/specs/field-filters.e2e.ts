@@ -8,6 +8,7 @@
 
 import { $, $$, browser, expect } from "@wdio/globals";
 
+import { dispatchClick } from "../support/interact";
 import { makeLibrary } from "../support/library";
 
 let libDir: string;
@@ -78,7 +79,9 @@ describe("field filter syntax", () => {
       async () => (await $$('[data-testid="grid-cell"]').length) === 0,
       { timeout: 20_000, timeoutMsg: "before:2024 did not empty the grid" },
     );
-    await input.setValue("");
+    // `setValue("")` is not an option: WebDriver rejects an empty text
+    // parameter. The search bar's clear button is the user path.
+    await dispatchClick('[data-testid="search-clear"]');
     await browser.waitUntil(
       async () => (await $$('[data-testid="grid-cell"]').length) === 3,
       { timeout: 20_000, timeoutMsg: "clearing did not restore the grid" },
