@@ -36,6 +36,7 @@ An open, versioned format. Any tool can read and apply a Fotobase recipe from th
 |---|---|---|
 | `crop` | `x, y, w, h` (normalized rect) | applied before downstream ops |
 | `straighten` | `angle` (deg, CW), `auto_fill: bool` | rotates; auto_fill scales to avoid empty corners |
+| `auto_rotate` | `angle_deg` (deg, CW, required, −45…45) | AI-estimated leveling (TASK-07-007); same rotate + auto-crop math as `straighten` with `auto_fill: true` |
 | `rotate` | `angle` (deg, CW; multiple of 90, default 0) | quarter-turn rotation (batch edit); lossless, output dimensions swap for 90/270 |
 | `auto_color` | — | white-balance fix (I'm Feeling Lucky color pass) |
 | `auto_contrast` | — | tone-curve stretch |

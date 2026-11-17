@@ -21,6 +21,6 @@
 ## feat: AI assists
 
 - [x] `07-006` (M) Burst grouping + AI culling: rank by sharpness/quality, pick best (feeds EPIC-03 stacking).
-- [ ] `07-007` (M) Auto-rotate / horizon leveling as a recipe op (AI-estimated rotation).
+- [x] `07-007` (M) Auto-rotate / horizon leveling as a recipe op (AI-estimated rotation).
 - [ ] `07-008` (M) Memories: "On this day" resurfacing view.
 - [ ] `07-009` (M) Rebuildability tests: embeddings recomputable, auto-tags survive as regular tags (§9).

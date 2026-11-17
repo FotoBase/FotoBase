@@ -15,6 +15,7 @@ pub mod manifest;
 pub mod runtime;
 
 pub mod clip;
+pub mod horizon;
 pub mod keywords;
 pub mod quality;
 
@@ -28,6 +29,7 @@ pub use clip::{
     clip_preprocess, clip_tokenize, ClipError, ClipRuntime, ClipTextRuntime, CLIP_EMBEDDING_DIM,
     CLIP_INPUT,
 };
+pub use horizon::{estimate_horizon, HorizonEstimate, MIN_CONFIDENCE};
 pub use keywords::{extract_keywords, KeywordHit, Vocabulary, VOCABULARY_JSON};
 pub use manifest::{ManifestEntry, ModelError, ModelRegistry};
 pub use quality::{gray_from_rgb, quality_score, QualityScore};

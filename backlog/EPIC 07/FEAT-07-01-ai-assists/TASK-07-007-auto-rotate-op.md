@@ -1,6 +1,6 @@
 # task: add auto-rotate horizon leveling recipe op
 
-**Feature:** [FEAT-07-01-ai-assists](FEAT-07-01-ai-assists.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** todo
+**Feature:** [FEAT-07-01-ai-assists](FEAT-07-01-ai-assists.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** in review (2026-11-17)
 
 ## Description
 AI-estimate the horizon angle and offer auto-rotate/leveling as a recipe op (PLAN §2 2026 additions: "Auto-rotate / level horizon: AI-estimated rotation applied as a recipe op"). Non-destructive: preview equals export because it's just another op in the EPIC-04 recipe engine.
@@ -22,5 +22,5 @@ AI-estimate the horizon angle and offer auto-rotate/leveling as a recipe op (PLA
 - Unit: flat-cloud sky image (no horizon) → low confidence → no op applied.
 
 ## Acceptance criteria
-- [ ] 07-007: Auto-rotate/horizon leveling is a recipe op — non-destructive, preview = export.
-- [ ] 07-007: Low-confidence estimates never apply an op silently.
+- [x] 07-007: Auto-rotate/horizon leveling is a recipe op — non-destructive, preview = export.
+- [x] 07-007: Low-confidence estimates never apply an op silently.

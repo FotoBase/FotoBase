@@ -188,3 +188,44 @@ describe("editHistory", () => {
     expect(undo(h)).toBeNull();
   });
 });
+
+// TASK-07-007: auto-rotate (AI-estimated leveling) is a first-class state
+// field, emitted as the v1 `auto_rotate` op and restored on reopen.
+describe("auto_rotate", () => {
+  it("an autoRotate angle emits an auto_rotate op in the geometry group", () => {
+    const state: EditState = { ...untouched, autoRotate: -5 };
+    expect(opsFromEditState(state)).toEqual([
+      { type: "auto_rotate", params: { angle_deg: -5 } },
+    ]);
+  });
+
+  it("no estimate means no op", () => {
+    expect(opsFromEditState({ ...untouched, autoRotate: null })).toEqual([]);
+    expect(isEmptyState({ ...untouched, autoRotate: null })).toBe(true);
+  });
+
+  it("round-trips through recipeFromState / stateFromRecipe", () => {
+    const state: EditState = { ...untouched, autoRotate: 3.5 };
+    const restored = stateFromRecipe(recipeFromState(state));
+    expect(restored.autoRotate).toBeCloseTo(3.5);
+  });
+
+  it("a stored auto_rotate op restores the angle", () => {
+    const restored = stateFromRecipe({
+      spec: "fotobase.recipe",
+      version: 1,
+      ops: [{ type: "auto_rotate", params: { angle_deg: -2.5 } }],
+    });
+    expect(restored.autoRotate).toBeCloseTo(-2.5);
+  });
+
+  it("composes with the manual straighten slider", () => {
+    const state: EditState = {
+      ...untouched,
+      autoRotate: -5,
+      crop: { crop: { x: 0, y: 0, w: 1, h: 1 }, angle: 2, autoFill: true },
+    };
+    const types = opsFromEditState(state).map((op) => op.type);
+    expect(types).toEqual(["straighten", "auto_rotate"]);
+  });
+});

@@ -376,3 +376,58 @@ describe("EditView save as… & save a copy", () => {
     ).toContain("denied");
   });
 });
+
+// TASK-07-007: the Auto-level action estimates the horizon on the job
+// queue, applies the estimate as an auto_rotate op, and never guesses when
+// the estimator declines.
+describe("auto-level", () => {
+  it("a confident estimate is applied as an auto_rotate op and persisted", async () => {
+    vi.useFakeTimers();
+    render(EditView, props());
+    await settleMicro();
+    invokeMock.mockClear();
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "auto_level_estimate"
+        ? Promise.resolve({ angle_deg: -4.2, confidence: 0.9 })
+        : Promise.resolve(null),
+    );
+    fireEvent.click(screen.getByTestId("auto-level"));
+    await settleMicro();
+    expect(invokeMock).toHaveBeenCalledWith("auto_level_estimate", { fileId: 1 });
+    vi.advanceTimersByTime(400);
+    await vi.runAllTimersAsync();
+    const renderCall = invokeMock.mock.calls.find(
+      (c) => c[0] === "render_edit_preview",
+    );
+    expect(renderCall).toBeTruthy();
+    const recipe = JSON.parse(renderCall![1].recipe);
+    expect(recipe.ops).toEqual([
+      { type: "auto_rotate", params: { angle_deg: -4.2 } },
+    ]);
+    // The action reports what it did, not silently.
+    expect(screen.getByTestId("auto-level-message").textContent).toContain("-4.2");
+    vi.useRealTimers();
+  });
+
+  it("a declined estimate (no confident horizon) shows a message and applies nothing", async () => {
+    vi.useFakeTimers();
+    render(EditView, props());
+    await settleMicro();
+    invokeMock.mockClear();
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "auto_level_estimate" ? Promise.resolve(null) : Promise.resolve(null),
+    );
+    fireEvent.click(screen.getByTestId("auto-level"));
+    await settleMicro();
+    vi.advanceTimersByTime(400);
+    await vi.runAllTimersAsync();
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "render_edit_preview",
+      expect.anything(),
+    );
+    expect(screen.getByTestId("auto-level-message").textContent).toContain(
+      "horizon",
+    );
+    vi.useRealTimers();
+  });
+});

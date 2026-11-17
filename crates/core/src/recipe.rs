@@ -40,6 +40,7 @@ pub const V1_OP_TYPES: &[&str] = &[
     "bw",
     "sharpen",
     "film_grain",
+    "auto_rotate",
     "undo_all",
 ];
 
@@ -128,6 +129,11 @@ pub fn parse_value(value: &Value) -> Result<(Recipe, Vec<String>), RecipeError> 
             }
             Some(_) => return err(format!("ops[{i}].params must be an object")),
         };
+        // auto_rotate requires an explicit angle: the estimate is always a
+        // concrete number, never defaulted (TASK-07-007).
+        if op_type == "auto_rotate" && params.is_none() {
+            return err(format!("ops[{i}] auto_rotate.angle_deg is required"));
+        }
         let extra = validate_extra_params(op_type, &params, i)?;
         warnings.extend(extra);
         parsed.push(Op { op_type: op_type.to_string(), params });
@@ -368,6 +374,19 @@ fn validate_params(op_type: &str, params: &Value, idx: usize) -> Result<(), Reci
             }
         }
         "auto_color" | "auto_contrast" | "undo_all" => {}
+        "auto_rotate" => {
+            // TASK-07-007: AI-estimated leveling. `angle_deg` is required —
+            // the estimate is always a concrete number, never a default —
+            // and shares straighten's ±45° range.
+            let angle = num(p, "angle_deg").ok_or_else(|| {
+                RecipeError(format!("ops[{idx}] auto_rotate.angle_deg must be a number"))
+            })?;
+            if !angle.is_finite() || !(-45.0..=45.0).contains(&angle) {
+                return err(format!(
+                    "ops[{idx}] auto_rotate.angle_deg must be a finite number in [-45, 45] (got {angle})"
+                ));
+            }
+        }
         other => return err(format!("ops[{idx}] unknown op type {other:?}")),
     }
     Ok(())
@@ -384,6 +403,7 @@ fn validate_extra_params(
     let documented: &[&str] = match op_type {
         "crop" => &["x", "y", "w", "h"],
         "straighten" => &["angle", "auto_fill"],
+        "auto_rotate" => &["angle_deg"],
         "fill_light" | "highlight_recovery" | "shadow_recovery" | "sepia" | "warm_colors"
         | "cool_colors" | "saturation" | "brightness" | "sharpen" | "bw" => &["amount"],
         "temperature" => &["kelvin_shift"],

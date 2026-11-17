@@ -33,6 +33,7 @@ const FULL_SCALE: u32 = 4;
 const TOLERANCES: &[(&str, f64)] = &[
     ("auto_color", 1.0),
     ("auto_contrast", 1.0),
+    ("auto_rotate", 2.0),
     ("brightness", 1.0),
     ("bw", 1.0),
     ("cool_colors", 1.0),
@@ -185,6 +186,13 @@ fn cases() -> Vec<GoldenCase> {
             name: "auto_contrast",
             recipe: op("auto_contrast", json!({})),
             tol: by_op("auto_contrast"),
+        },
+        // TASK-07-007: AI-estimated leveling, same rotate + auto-crop math
+        // as straighten (auto_fill on).
+        GoldenCase {
+            name: "auto_rotate",
+            recipe: op("auto_rotate", json!({ "angle_deg": -5.0 })),
+            tol: by_op("auto_rotate"),
         },
         // TASK-04-009 starter effects: golden per effect at the effect's
         // default strength and at mid strength (0.5).
