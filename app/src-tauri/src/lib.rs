@@ -16,6 +16,7 @@ pub mod associations;
 pub mod basemap;
 pub mod batch_commands;
 pub mod batch_edit;
+pub mod burst_jobs;
 pub mod catalog_registry;
 pub mod clip_jobs;
 pub mod codec;
@@ -188,6 +189,9 @@ struct AppState {
     /// Bounded queue for CLIP embedding passes (TASK-07-001): background
     /// priority, the shared battery hook (PLAN §3 rule 4, §10).
     embeddings: fotobase_jobs::Queue<clip_jobs::EmbedReport>,
+    /// Bounded queue for the burst-culling quality pass (TASK-07-006);
+    /// shares the battery hook — background work pauses on battery (§10).
+    culling: fotobase_jobs::Queue<burst_jobs::QualityReport>,
     /// Cancel token of the most recently started import (TASK-01-017):
     /// `cancel_import` trips it, the running job observes the flag.
     import_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
@@ -1072,6 +1076,72 @@ fn stack_suggestions(
         i64::from(guard.stack_window_secs)
     };
     with_catalog(&state, |cat| cat.stack_suggestions(window))
+}
+
+/// Burst groups the quality pass ranked (TASK-07-006): unstacked photos
+/// clustered by capture-time gaps with the same camera, best shot first.
+/// Catalog data only — nothing is stacked until the user accepts.
+#[tauri::command]
+fn burst_suggestions(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::BurstSuggestion>, String> {
+    with_catalog(&state, |cat| cat.burst_suggestions(fotobase_catalog::DEFAULT_BURST_GAP_SECS))
+}
+
+/// The blocking body of the culling pass (TASK-07-006): own catalog
+/// connection so a 50k pass never holds the UI's catalog mutex (§9). Pure
+/// heuristics — no model, nothing to opt into.
+fn run_culling_pass_blocking(
+    app: &tauri::AppHandle,
+    cancelled: bool,
+) -> Result<burst_jobs::QualityReport, String> {
+    let path = app.state::<AppState>().catalog_path().to_path_buf();
+    let mut cat = Catalog::open(path).map_err(|e| e.to_string())?;
+    let mut engine = burst_jobs::PureQualityEngine;
+    let flag = std::sync::atomic::AtomicBool::new(cancelled);
+    burst_jobs::run_quality_pass(&mut cat, &mut engine, &flag)
+}
+
+/// Run a full-library quality-scoring pass now (TASK-07-006). Background
+/// priority, battery hook; progress streams on the `culling-progress` event.
+#[tauri::command]
+async fn run_culling_pass(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<burst_jobs::QualityReport, String> {
+    let queue = state.culling.clone();
+    let key = burst_jobs::job_key();
+    let job_app = app.clone();
+    let handle = queue
+        .try_enqueue(
+            key,
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |ctx| {
+                let app = job_app.clone();
+                let emitter = job_app.clone();
+                async move {
+                    let cancelled = ctx.is_cancelled();
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        run_culling_pass_blocking(&app, cancelled)
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(report)) => {
+                            let _ = emitter.emit(burst_jobs::CULLING_EVENT, &report);
+                            fotobase_jobs::Outcome::Done(report)
+                        }
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("culling pass task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue culling pass: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("culling pass cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
 }
 
 /// Folders whose folder-ini migration offer is still unanswered
@@ -3354,6 +3424,12 @@ pub fn run() {
                     face_battery.clone() as std::sync::Arc<dyn fotobase_jobs::ThrottleHook>,
                 )
             });
+            let culling = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::with_throttle(
+                    CLIP_QUEUE_CAPACITY,
+                    face_battery.clone() as std::sync::Arc<dyn fotobase_jobs::ThrottleHook>,
+                )
+            });
             let persisted = settings::Settings::load(&data_dir);
             // Catalog registry (TASK-03-024): which catalog opens at launch
             // (the last-used one, functional spec). The default entry keeps
@@ -3400,6 +3476,7 @@ pub fn run() {
                 dupes,
                 faces,
                 embeddings,
+                culling,
                 batch_edit_cancel: Mutex::new(None),
                 geotag_tool: geotag_tool_queue,
                 geotag_undo: geotag_undo_queue,
@@ -3546,6 +3623,8 @@ pub fn run() {
             unstack,
             list_stack,
             stack_suggestions,
+            burst_suggestions,
+            run_culling_pass,
             people_queue,
             people_queue_bulk,
             people_manager_list,

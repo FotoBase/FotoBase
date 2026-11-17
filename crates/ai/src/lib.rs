@@ -16,6 +16,7 @@ pub mod runtime;
 
 pub mod clip;
 pub mod keywords;
+pub mod quality;
 
 /// The model manifest embedded at compile time: the installed app has no
 /// `crates/` directory, so the opt-in download flow (TASK-07-001) reads the
@@ -29,6 +30,7 @@ pub use clip::{
 };
 pub use keywords::{extract_keywords, KeywordHit, Vocabulary, VOCABULARY_JSON};
 pub use manifest::{ManifestEntry, ModelError, ModelRegistry};
+pub use quality::{gray_from_rgb, quality_score, QualityScore};
 pub use runtime::{align_face, DetectedFace, FaceRuntime, RuntimeError};
 
 /// Re-export the SHA-256 helper used for checksum verification.

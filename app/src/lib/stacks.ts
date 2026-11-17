@@ -7,11 +7,14 @@
 import type { GridItem } from "./grid";
 
 /// A group the backend offers to stack (nothing is stacked until accepted).
+/// Bursts (TASK-07-006) come ranked best-first; `best_file_id` marks the
+/// suggested best shot when the quality pass has scored the group.
 export interface StackSuggestion {
-  kind: "raw_jpeg" | "edited";
+  kind: "raw_jpeg" | "edited" | "burst";
   /// Proposed order: the top first.
   file_ids: number[];
   filenames: string[];
+  best_file_id?: number;
 }
 
 /// Badge geometry in px, shared by the DOM badge's CSS and the canvas
