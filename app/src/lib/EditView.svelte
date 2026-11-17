@@ -168,6 +168,41 @@
     }
   }
 
+  // --- Auto-level (TASK-07-007, PLAN §2 2026 additions) ----------------------
+  // "Auto-level" asks the backend for a horizon estimate (job queue, visible
+  // priority) and applies it as an `auto_rotate` op. A declined estimate
+  // (`null` — no confident horizon) shows a message and applies nothing:
+  // never guess. The recipe render at screen resolution is the live preview;
+  // the op is undoable like every other edit.
+
+  let autoLevelBusy = $state(false);
+  let autoLevelMessage: string | null = $state(null);
+
+  async function doAutoLevel(): Promise<void> {
+    const photo = current;
+    if (photo === null || autoLevelBusy) return;
+    autoLevelBusy = true;
+    autoLevelMessage = null;
+    try {
+      const estimate = await invoke<{ angle_deg: number; confidence: number } | null>(
+        "auto_level_estimate",
+        { fileId: photo.id },
+      );
+      if (estimate === null) {
+        autoLevelMessage = t("edit.autoLevel.notFound");
+        return;
+      }
+      mergeTab({ autoRotate: estimate.angle_deg });
+      autoLevelMessage = t("edit.autoLevel.applied", {
+        angle: estimate.angle_deg.toFixed(1),
+      });
+    } catch (e) {
+      autoLevelMessage = String(e);
+    } finally {
+      autoLevelBusy = false;
+    }
+  }
+
   // --- Save / Revert (TASK-04-016, PLAN §2F) ---------------------------------
   // Save is the one path that modifies an original: the backend archives
   // the untouched original into `.originals/`, renders the recipe at full
@@ -416,6 +451,19 @@
   {#key panelEpoch}
     <div class="edit-view-panel">
       {#if tab === "basic"}
+        <div class="auto-level-row">
+          <button
+            type="button"
+            data-testid="auto-level"
+            disabled={autoLevelBusy}
+            onclick={() => void doAutoLevel()}
+          >
+            {t("edit.autoLevel.action")}
+          </button>
+          {#if autoLevelMessage !== null}
+            <span data-testid="auto-level-message" role="status">{autoLevelMessage}</span>
+          {/if}
+        </div>
         <CropStraightenPanel
           previewSrc={baseUri ?? ""}
           initial={state.crop}

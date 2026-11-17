@@ -38,15 +38,14 @@ export const DEFAULT_AUTO_FIX: AutoFixState = {
 
 export const DEFAULT_RED_EYE: RedEyeState = { auto: false, regions: [] };
 
-export const DEFAULT_EFFECTS: EffectsState = {};
-
-/// The untouched edit state: every tab at its neutral position.
+export const DEFAULT_EFFECTS: EffectsState = {};/// The untouched edit state: every tab at its neutral position.
 export const EMPTY_EDIT_STATE: EditState = {
   crop: DEFAULT_CROP,
   redEye: DEFAULT_RED_EYE,
   autoFix: DEFAULT_AUTO_FIX,
   tuning: DEFAULT_TUNING,
   effects: DEFAULT_EFFECTS,
+  autoRotate: null,
   extra: [],
 };
 
@@ -56,6 +55,9 @@ export interface EditState {
   autoFix: AutoFixState;
   tuning: TuningState;
   effects: EffectsState;
+  /// AI-estimated leveling angle in degrees (TASK-07-007), `null` when no
+  /// estimate was applied. Emitted as the v1 `auto_rotate` op.
+  autoRotate: number | null;
   /// Ops no tab owns (text, retouch, rotate, film grain — written by the
   /// batch flow or future tooling). Passed through verbatim so saving an
   /// edit never destroys edits the tabs cannot represent (spec §5: a
@@ -71,6 +73,9 @@ export type RecipeOp = { type: string; params: Record<string, unknown> };
 export function opsFromEditState(state: EditState): RecipeOp[] {
   return [
     ...cropOps(state.crop),
+    ...(state.autoRotate !== null
+      ? [{ type: "auto_rotate", params: { angle_deg: state.autoRotate } } satisfies RecipeOp]
+      : []),
     ...autoFixOps(state.autoFix),
     ...tuningOps(state.tuning),
     ...redEyeOps(state.redEye),
@@ -104,6 +109,7 @@ export function stateFromRecipe(recipe: {
     autoFix: { ...DEFAULT_AUTO_FIX },
     tuning: { ...DEFAULT_TUNING },
     effects: { ...DEFAULT_EFFECTS },
+    autoRotate: null,
     extra: [],
   };
   for (const op of recipe.ops ?? []) {
@@ -126,6 +132,9 @@ export function stateFromRecipe(recipe: {
           angle: num(params.angle, 0),
           autoFill: params.auto_fill !== false,
         };
+        break;
+      case "auto_rotate":
+        state.autoRotate = num(params.angle_deg, 0);
         break;
       case "auto_color":
         state.autoFix = { ...state.autoFix, autoColor: true };

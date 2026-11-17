@@ -39,6 +39,12 @@ fn apply_op(img: &LinearImage, op: &Op) -> LinearImage {
     match op.op_type.as_str() {
         "crop" => crop(img, op),
         "straighten" => straighten(img, op),
+        "auto_rotate" => {
+            // Leveling (TASK-07-007): the estimated angle, auto-fill on so
+            // no empty corners show. Same pure function as straighten.
+            let angle = fnum(op, "angle_deg", 0.0).to_radians();
+            rotate_auto_crop(img, angle, true)
+        }
         "rotate" => rotate(img, op),
         "auto_color" => auto_color(img),
         "auto_contrast" => auto_contrast(img),
@@ -413,6 +419,13 @@ fn bilinear(img: &LinearImage, u: f64, v: f64) -> [f32; 3] {
 fn straighten(img: &LinearImage, op: &Op) -> LinearImage {
     let angle = fnum(op, "angle", 0.0).to_radians();
     let auto_fill = fbool(op, "auto_fill", true);
+    rotate_auto_crop(img, angle, auto_fill)
+}
+
+/// Shared rotate + auto-crop math (TASK-07-007): `straighten` and
+/// `auto_rotate` both come through here, so preview and export (and the AI
+/// leveling op) use one pure function.
+fn rotate_auto_crop(img: &LinearImage, angle: f64, auto_fill: bool) -> LinearImage {
     let (w, h) = (img.width as f64, img.height as f64);
     // Rotate about the center; auto_fill scales the sampling window so the
     // rotated frame stays inside the source (no empty corners). For output

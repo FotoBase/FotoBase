@@ -430,3 +430,84 @@ fn red_eye_auto_param_is_validated_and_documented() {
     .unwrap();
     assert!(Recipe::parse(&bad.to_string()).is_err(), "auto must be a boolean");
 }
+
+// ---------------------------------------------------------------------------
+// auto_rotate (TASK-07-007): AI-estimated leveling as a recipe op
+// ---------------------------------------------------------------------------
+
+#[test]
+fn auto_rotate_is_a_known_v1_op() {
+    let recipe = recipe_from_ops(json!([
+        { "type": "auto_rotate", "params": { "angle_deg": -5.0 } }
+    ]));
+    assert_eq!(recipe.ops.len(), 1);
+    assert_eq!(recipe.ops[0].op_type, "auto_rotate");
+    // Round-trip: serialize → parse yields the identical op.
+    let round = Recipe::parse(&recipe.to_json()).unwrap().0;
+    assert_eq!(round, recipe);
+}
+
+#[test]
+fn auto_rotate_angle_is_validated() {
+    let bad = [
+        // out of the ±45° straighten range
+        json!({ "spec": "fotobase.recipe", "version": 1,
+                "ops": [{ "type": "auto_rotate", "params": { "angle_deg": 50.0 } }] }),
+        json!({ "spec": "fotobase.recipe", "version": 1,
+                "ops": [{ "type": "auto_rotate", "params": { "angle_deg": -50.0 } }] }),
+        // not a number
+        json!({ "spec": "fotobase.recipe", "version": 1,
+                "ops": [{ "type": "auto_rotate", "params": { "angle_deg": "5" } }] }),
+        // missing: the estimate is always a concrete number, never defaulted
+        json!({ "spec": "fotobase.recipe", "version": 1,
+                "ops": [{ "type": "auto_rotate" }] }),
+    ];
+    for case in bad {
+        assert!(
+            Recipe::parse(&serde_json::to_string(&case).unwrap()).is_err(),
+            "case must be rejected: {case}"
+        );
+    }
+}
+
+#[test]
+fn auto_rotate_applies_leveling_with_auto_fill() {
+    // Same math as straighten's rotate + auto-crop: an auto_rotate at the
+    // leveling angle must equal a straighten with auto_fill at that angle.
+    let img = gradient(32, 24);
+    let auto = apply_recipe(
+        &img,
+        &recipe_from_ops(json!([{ "type": "auto_rotate", "params": { "angle_deg": 5.0 } }])),
+    );
+    let manual = apply_recipe(
+        &img,
+        &recipe_from_ops(json!([
+            { "type": "straighten", "params": { "angle": 5.0, "auto_fill": true } }
+        ])),
+    );
+    for (a, b) in auto.data.iter().zip(manual.data.iter()) {
+        assert!((a - b).abs() < 1e-6, "auto_rotate must reuse the straighten math");
+    }
+}
+
+#[test]
+fn auto_rotate_matches_across_resolutions() {
+    // Preview vs export parity (PLAN §3 rule 5): same op, both resolutions,
+    // within the geometry tolerance.
+    let recipe = recipe_from_ops(json!([
+        { "type": "auto_rotate", "params": { "angle_deg": -4.5 } }
+    ]));
+    let small = apply_recipe(&gradient(64, 48), &recipe);
+    let big = apply_recipe(&gradient(256, 192), &recipe);
+    let (mean, max) = diff_aligned(&small, &big, 4);
+    assert!(mean <= 0.03 && max <= 0.1, "auto_rotate within tolerance (mean {mean}, max {max})");
+}
+
+#[test]
+fn auto_rotate_params_are_documented() {
+    // An undocumented param is preserved but warned about (spec §5).
+    let doc = json!({ "spec": "fotobase.recipe", "version": 1,
+        "ops": [{ "type": "auto_rotate", "params": { "angle_deg": 3.0, "bogus": 1 } }] });
+    let (_, warnings) = Recipe::parse(&serde_json::to_string(&doc).unwrap()).unwrap();
+    assert!(warnings.iter().any(|w| w.contains("auto_rotate has undocumented params")));
+}

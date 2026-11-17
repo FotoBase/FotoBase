@@ -33,6 +33,7 @@ pub mod folder_manager;
 pub mod geocode;
 pub mod geotag_tool;
 pub mod import;
+pub mod level_jobs;
 pub mod people;
 pub mod perf_probe;
 pub mod preview;
@@ -192,6 +193,9 @@ struct AppState {
     /// Bounded queue for the burst-culling quality pass (TASK-07-006);
     /// shares the battery hook — background work pauses on battery (§10).
     culling: fotobase_jobs::Queue<burst_jobs::QualityReport>,
+    /// Bounded queue for user-invoked auto-level horizon estimates
+    /// (TASK-07-007): visible priority — the user is waiting on the answer.
+    level: fotobase_jobs::Queue<Result<Option<level_jobs::HorizonEstimate>, String>>,
     /// Cancel token of the most recently started import (TASK-01-017):
     /// `cancel_import` trips it, the running job observes the flag.
     import_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
@@ -1140,6 +1144,54 @@ async fn run_culling_pass(
     match handle.result().await.as_ref() {
         fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
         fotobase_jobs::Outcome::Cancelled => Err("culling pass cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Estimate the horizon for one photo (TASK-07-007): decodes in the bounded
+/// queue at visible priority (the user is waiting) and returns the leveling
+/// angle ± confidence, or `None` when no confident horizon is found — the
+/// UI must say so instead of applying a guessed op. Pure estimate: nothing
+/// is written here; applying is the user's explicit recipe edit.
+#[tauri::command]
+async fn auto_level_estimate(
+    state: tauri::State<'_, AppState>,
+    file_id: i64,
+) -> Result<Option<level_jobs::HorizonEstimate>, String> {
+    let path = with_catalog(&state, |cat| {
+        edit::path_for(cat, file_id).ok_or_else(|| {
+            fotobase_catalog::CatalogError::Corrupted(format!("file {file_id} not found"))
+        })
+    })?;
+    let queue = state.level.clone();
+    let job_path = std::sync::Arc::new(path);
+    let handle = queue
+        .try_enqueue(
+            format!("auto-level-{file_id}"),
+            fotobase_jobs::Priority::Visible,
+            fotobase_jobs::job(move |_ctx| {
+                let path = job_path.clone();
+                async move {
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        let mut engine = level_jobs::PureHorizonEngine;
+                        level_jobs::estimate_for_path(
+                            std::path::Path::new(path.as_str()),
+                            &mut engine,
+                        )
+                    })
+                    .await;
+                    match joined {
+                        Ok(result) => fotobase_jobs::Outcome::Done(result),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("auto-level task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue auto-level estimate: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(Ok(estimate)) => Ok(*estimate),
+        fotobase_jobs::Outcome::Done(Err(e)) => Err(e.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("auto-level estimate cancelled".into()),
         fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
     }
 }
@@ -3430,6 +3482,9 @@ pub fn run() {
                     face_battery.clone() as std::sync::Arc<dyn fotobase_jobs::ThrottleHook>,
                 )
             });
+            let level = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(EDIT_QUEUE_CAPACITY)
+            });
             let persisted = settings::Settings::load(&data_dir);
             // Catalog registry (TASK-03-024): which catalog opens at launch
             // (the last-used one, functional spec). The default entry keeps
@@ -3477,6 +3532,7 @@ pub fn run() {
                 faces,
                 embeddings,
                 culling,
+                level,
                 batch_edit_cancel: Mutex::new(None),
                 geotag_tool: geotag_tool_queue,
                 geotag_undo: geotag_undo_queue,
@@ -3625,6 +3681,7 @@ pub fn run() {
             stack_suggestions,
             burst_suggestions,
             run_culling_pass,
+            auto_level_estimate,
             people_queue,
             people_queue_bulk,
             people_manager_list,

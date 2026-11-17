@@ -54,6 +54,7 @@ pub const V1_OP_TYPES: &[&str] = &[
     "bw",
     "sharpen",
     "film_grain",
+    "auto_rotate",
     "undo_all",
 ];
 
