@@ -1,6 +1,6 @@
 # task: add burst grouping and ai culling
 
-**Feature:** [FEAT-07-01-ai-assists](FEAT-07-01-ai-assists.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** todo
+**Feature:** [FEAT-07-01-ai-assists](FEAT-07-01-ai-assists.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** in review (2026-11-17)
 
 ## Description
 Group burst sequences and rank them by sharpness/quality, picking a best shot that feeds EPIC-03 stacking (PLAN §6 P3: "AI culling: burst grouping ranked by sharpness/quality to pick the best shot"; §2 2026 additions). User confirms or overrides the pick.
@@ -23,5 +23,5 @@ Group burst sequences and rank them by sharpness/quality, picking a best shot th
 - Integration: user promotes a different shot → rebuild preserves the user's pick (stack from sidecar/user data, not re-culled).
 
 ## Acceptance criteria
-- [ ] 07-006: Burst grouping + AI culling ranks by sharpness/quality, picks a best shot feeding EPIC-03 stacking; user confirms or overrides.
-- [ ] 07-006: User overrides survive catalog rebuild.
+- [x] 07-006: Burst grouping + AI culling ranks by sharpness/quality, picks a best shot feeding EPIC-03 stacking; user confirms or overrides.
+- [x] 07-006: User overrides survive catalog rebuild.

@@ -1,8 +1,9 @@
 <!--
-  Stack suggestions (TASK-03-021): the backend's RAW+JPEG pairs and edited
-  versions, offered to the user. Nothing is stacked until a group is accepted
-  (one by one, or all). Bursts have no auto-detection — they are stacked by
-  hand from the photo menu.
+  Stack suggestions (TASK-03-021 + TASK-07-006): the backend's RAW+JPEG
+  pairs, edited versions and bursts, offered to the user. Nothing is stacked
+  until a group is accepted (one by one, or all). A burst's suggested best
+  shot is marked; accepting stacks with it on top, and the stack picker's
+  promote action moves any other member up.
 -->
 <script lang="ts">
   import { t } from "./i18n.svelte.js";
@@ -71,7 +72,16 @@
         {#each groups as group, i (group.file_ids.join(","))}
           <li data-testid="stack-suggestion">
             <span class="ss-kind">{t(`stacks.kind.${group.kind}`)}</span>
-            <span class="ss-files">{group.filenames.join(", ")}</span>
+            <span class="ss-files">
+              {group.filenames.join(", ")}
+              {#if group.kind === "burst" && group.best_file_id !== undefined}
+                <span class="ss-best" data-testid="stack-suggestion-best">
+                  {t("stacks.best", {
+                    name: group.filenames[group.file_ids.indexOf(group.best_file_id)] ?? "",
+                  })}
+                </span>
+              {/if}
+            </span>
             <button
               type="button"
               data-testid="stack-suggestion-accept"
@@ -155,6 +165,11 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+  .ss-best {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--fb-accent, #0a66c2);
   }
   .ss-error {
     color: var(--fb-error, #b00020);

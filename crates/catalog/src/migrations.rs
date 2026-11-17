@@ -30,6 +30,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V21,
     MIGRATION_V22,
     MIGRATION_V23,
+    MIGRATION_V24,
 ];
 
 const MIGRATION_V1: &str = "
@@ -988,6 +989,18 @@ UPDATE files_fts SET tags = COALESCE(
        AND ft.origin = 'confirmed'), '');
 "
 );
+
+/// TASK-07-006: burst culling. `files.quality_scanned` marks the cheap
+/// sharpness/quality pass (the embed-scanned sentinel pattern); the scores
+/// themselves live in `photo_quality` — derived data (PLAN §5), never a
+/// sidecar field, dropped by a rebuild and re-derived by the next pass.
+const MIGRATION_V24: &str = "
+ALTER TABLE files ADD COLUMN quality_scanned INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE photo_quality (
+    file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+    score   REAL NOT NULL
+);
+";
 
 /// Apply all pending migrations, in order, each in its own transaction.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {

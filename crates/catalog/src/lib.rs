@@ -7,6 +7,7 @@
 
 pub mod albums;
 pub mod blend;
+pub mod bursts;
 pub mod datetime;
 pub mod duplicates;
 pub mod embeddings;
@@ -29,6 +30,7 @@ pub mod sync;
 pub mod trash;
 
 pub use albums::AlbumInfo;
+pub use bursts::{group_bursts, BurstCandidate, BurstSuggestion, DEFAULT_BURST_GAP_SECS};
 pub use datetime::{AdjustError, AdjustFailure, AdjustReport, TimeAdjustment, TimePreview};
 pub use duplicates::{group_by_phash, DuplicateGroup, DEFAULT_DUPLICATE_THRESHOLD_BITS};
 pub use face_clusters::ClusterRow;

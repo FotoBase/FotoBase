@@ -33,16 +33,23 @@ const EDIT_SEPARATORS: &[char] = &['-', '_', ' ', '('];
 pub enum StackKind {
     RawJpeg,
     Edited,
+    /// A burst (TASK-07-006): ranked by the derived quality score, the
+    /// suggested best first.
+    Burst,
 }
 
 /// A group the detector offers to stack. The user decides: nothing is
 /// stacked until the ids are handed to [`Catalog::stack_photos`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StackSuggestion {
     pub kind: StackKind,
-    /// Proposed order: the top first.
+    /// Proposed order: the top first. For a burst this is the quality
+    /// ranking, so accepting stacks the suggested best shot on top.
     pub file_ids: Vec<i64>,
     pub filenames: Vec<String>,
+    /// The suggested best shot of a burst (TASK-07-006); `None` for the
+    /// other kinds.
+    pub best_file_id: Option<i64>,
 }
 
 /// What the pair detector needs of one photo.
@@ -134,6 +141,7 @@ pub fn detect_groups(candidates: &[Candidate], window_secs: i64) -> Vec<StackSug
             kind,
             file_ids: members.iter().map(|c| c.id).collect(),
             filenames: members.iter().map(|c| c.filename.clone()).collect(),
+            best_file_id: None,
         })
         .collect()
 }
@@ -141,6 +149,8 @@ pub fn detect_groups(candidates: &[Candidate], window_secs: i64) -> Vec<StackSug
 impl Catalog {
     /// Groups worth offering to stack: unstacked photos only, so accepting
     /// a suggestion (or declining it) never re-offers the same photos.
+    /// Bursts (TASK-07-006) are appended, ranked best-first by the derived
+    /// quality score.
     pub fn stack_suggestions(&self, window_secs: i64) -> Result<Vec<StackSuggestion>> {
         let sql = format!(
             "SELECT f.id, f.folder_id, f.filename, {CAPTURE_TS}, f.has_recipe
@@ -158,7 +168,20 @@ impl Catalog {
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(detect_groups(&candidates, window_secs))
+        let mut all = detect_groups(&candidates, window_secs);
+
+        let bursts = self.burst_suggestions(super::bursts::DEFAULT_BURST_GAP_SECS)?;
+        let names: BTreeMap<i64, String> =
+            candidates.iter().map(|c| (c.id, c.filename.clone())).collect();
+        for b in bursts {
+            all.push(StackSuggestion {
+                kind: StackKind::Burst,
+                file_ids: b.file_ids.clone(),
+                filenames: b.file_ids.iter().filter_map(|id| names.get(id).cloned()).collect(),
+                best_file_id: Some(b.best_file_id),
+            });
+        }
+        Ok(all)
     }
 
     /// The photos of one stack, top first, then by path.
