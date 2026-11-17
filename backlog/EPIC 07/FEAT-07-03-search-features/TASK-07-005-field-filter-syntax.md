@@ -1,6 +1,6 @@
 # task: add advanced search field filter syntax
 
-**Feature:** [FEAT-07-03-search-features](FEAT-07-03-search-features.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** todo
+**Feature:** [FEAT-07-03-search-features](FEAT-07-03-search-features.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** in review (2026-11-16)
 
 ## Description
 Extend the search bar with a field-filter grammar — `person:`, `camera:`, `before:` (and symmetric `after:`) — combinable with free text and semantic results in one query (PLAN §2 2026 additions: "Advanced search syntax: `person:anna camera:X100V before:2023`").
@@ -22,5 +22,5 @@ Extend the search bar with a field-filter grammar — `person:`, `camera:`, `bef
 - E2E: typing a field filter in the search bar narrows the grid live.
 
 ## Acceptance criteria
-- [ ] 07-005: Field filters (`person:`, `camera:`, `before:`) combine with free text and semantic results in one query syntax.
-- [ ] 07-005: Malformed filter tokens degrade to literal text search without errors.
+- [x] 07-005: Field filters (`person:`, `camera:`, `before:`) combine with free text and semantic results in one query syntax.
+- [x] 07-005: Malformed filter tokens degrade to literal text search without errors.

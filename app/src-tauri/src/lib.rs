@@ -441,6 +441,22 @@ fn list_files(
     })
 }
 
+/// Split the search bar's field-filter tokens (TASK-07-005, PLAN §2 2026
+/// additions) from the free text: `person:` / `camera:` / `before:` /
+/// `after:` become structured catalog filters, everything else — unknown
+/// fields, malformed values — stays literal search text. Pure string work;
+/// the SQL side lives in the catalog's `compile_filters`.
+fn split_field_filters(text: Option<String>) -> (Option<String>, fotobase_catalog::ParsedQuery) {
+    match text {
+        Some(raw) => {
+            let parsed = fotobase_catalog::parse_field_filters(&raw);
+            let free = (!parsed.text.is_empty()).then(|| parsed.text.clone());
+            (free, parsed)
+        }
+        None => (None, fotobase_catalog::ParsedQuery::default()),
+    }
+}
+
 /// The grid's one query (TASK-03-014, PLAN §2 C): folder selection, album
 /// view, live search text and the filter buttons / date slider AND-combine
 /// in a single catalog query. `starred` resolves to the rating threshold for
@@ -473,7 +489,8 @@ fn query_files(
     } else {
         None
     };
-    let query = grid_file_query(
+    let (text, parsed) = split_field_filters(text);
+    let mut query = grid_file_query(
         text,
         folders,
         album,
@@ -485,6 +502,10 @@ fn query_files(
         sort,
         stack,
     );
+    query.person = parsed.person;
+    query.camera = parsed.camera;
+    query.taken_before = parsed.before;
+    query.taken_after = parsed.after;
     with_catalog(&state, |cat| cat.query_files(&query, usize::MAX))
 }
 
@@ -511,6 +532,10 @@ fn grid_file_query(
         has_faces: has_faces == Some(true),
         geotagged: geotagged == Some(true),
         taken_since,
+        person: None,
+        camera: None,
+        taken_before: None,
+        taken_after: None,
         stack,
         sort: sort.unwrap_or_default(),
     }
@@ -538,9 +563,15 @@ async fn query_files_semantic(
     sort: Option<fotobase_catalog::FileSort>,
     stack: Option<String>,
 ) -> Result<Vec<fotobase_catalog::FileInfo>, String> {
-    let Some(text) = text.filter(|t| !t.trim().is_empty()) else {
+    let (text, parsed) = split_field_filters(text);
+    let filters_only = text.is_none()
+        && (parsed.person.is_some()
+            || parsed.camera.is_some()
+            || parsed.before.is_some()
+            || parsed.after.is_some());
+    if text.is_none() && !filters_only {
         return Err("no-query".into());
-    };
+    }
     let model_dir = ai_models_dir(&app);
     if !model_dir.join(clip_jobs::CLIP_TEXT_MODEL_NAME).exists() {
         return Err("clip-text-model-missing".into());
@@ -551,8 +582,8 @@ async fn query_files_semantic(
     } else {
         None
     };
-    let query = grid_file_query(
-        Some(text.clone()),
+    let mut query = grid_file_query(
+        text.clone(),
         folders,
         album,
         min_rating,
@@ -563,6 +594,16 @@ async fn query_files_semantic(
         sort,
         stack,
     );
+    query.person = parsed.person;
+    query.camera = parsed.camera;
+    query.taken_before = parsed.before;
+    query.taken_after = parsed.after;
+    // A filters-only query (`person:anna` with no words) needs no CLIP
+    // text encoding: the field filters alone define the result set.
+    if filters_only {
+        return with_catalog(&state, |cat| cat.query_files(&query, usize::MAX));
+    }
+    let text = text.expect("checked above: not filters-only means text present");
     let cache = &state.clip_text_cache;
     let cached = cache.get(&text);
     let path = app.state::<AppState>().catalog_path().to_path_buf();
@@ -622,7 +663,8 @@ fn map_pins_filtered(
     } else {
         None
     };
-    let query = fotobase_catalog::FileQuery {
+    let (text, parsed) = split_field_filters(text);
+    let mut query = fotobase_catalog::FileQuery {
         text,
         folders,
         album,
@@ -631,9 +673,17 @@ fn map_pins_filtered(
         has_faces: has_faces == Some(true),
         geotagged: geotagged == Some(true),
         taken_since,
+        person: None,
+        camera: None,
+        taken_before: None,
+        taken_after: None,
         stack: None,
         sort: Default::default(),
     };
+    query.person = parsed.person;
+    query.camera = parsed.camera;
+    query.taken_before = parsed.before;
+    query.taken_after = parsed.after;
     with_catalog(&state, |cat| cat.geotagged_pins_filtered(&query))
 }
 

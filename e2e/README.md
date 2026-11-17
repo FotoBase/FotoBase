@@ -22,6 +22,10 @@ action feeds exactly those photos to the Photo Tray.
 narrowing a mixed library to its geotagged photos, combined with a search
 term, and mirrored by the map's pins.
 
+`specs/field-filters.e2e.ts` (TASK-07-005) — typing `before:` / `after:` /
+`person:` / `camera:` field filters in the search bar narrows the grid live;
+valid filters with no matches empty it without erroring.
+
 ## Platforms
 
 `tauri-driver` has no macOS support, so the suite runs on Linux (CI, or a Linux
