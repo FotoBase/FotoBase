@@ -695,6 +695,50 @@ fn map_pins_filtered(
     with_catalog(&state, |cat| cat.geotagged_pins_filtered(&query))
 }
 
+/// "On this day" memories (TASK-07-008, PLAN §2 2026 additions): photos
+/// taken on `today`'s (`YYYY-MM-DD`, the user's local date) month/day, grouped
+/// by year newest first. Takes the grid's filter arguments so the view
+/// respects them; hidden photos stay excluded. Read-only catalog query —
+/// ids and metadata only, no image bytes over IPC (§3 rule 3).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+fn memories(
+    today: String,
+    text: Option<String>,
+    folders: Option<Vec<i64>>,
+    album: Option<i64>,
+    starred: Option<bool>,
+    videos_only: Option<bool>,
+    has_faces: Option<bool>,
+    geotagged: Option<bool>,
+    taken_since: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::MemoryYear>, String> {
+    let min_rating = if starred == Some(true) {
+        Some(rating::starred_threshold(ratings_enabled(&state)?))
+    } else {
+        None
+    };
+    let (text, parsed) = split_field_filters(text);
+    let mut query = grid_file_query(
+        text,
+        folders,
+        album,
+        min_rating,
+        videos_only,
+        has_faces,
+        geotagged,
+        taken_since,
+        None,
+        None,
+    );
+    query.person = parsed.person;
+    query.camera = parsed.camera;
+    query.taken_before = parsed.before;
+    query.taken_after = parsed.after;
+    with_catalog(&state, |cat| cat.memories(&query, &today))
+}
+
 fn ratings_enabled(state: &AppState) -> Result<bool, String> {
     let guard = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
     Ok(guard.ratings_enabled)
@@ -3665,6 +3709,7 @@ pub fn run() {
             query_files,
             map_pins,
             map_pins_filtered,
+            memories,
             set_rating,
             get_caption,
             set_caption,

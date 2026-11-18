@@ -113,3 +113,47 @@ export function makeGeotaggedLibrary(
   }
   return { dir, checksums };
 }
+
+// TASK-07-008: a library for the "On this day" specs. Sidecar capture dates
+// (`exif:DateTimeOriginal`, the source of the catalog's `taken_at`) put two
+// photos on today's month/day in one past year, one in another, and one on
+// the next day of the first year (must not surface). Years step back by 4 so
+// a leap-day "today" stays a valid date.
+export function makeMemoriesLibrary(now: Date = new Date()): Library & {
+  years: [number, number];
+} {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fb-e2e-mem-"));
+  const jpeg = Buffer.from(TINY_JPEG_BASE64, "base64");
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const md = `${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const newer = now.getFullYear() - 4;
+  const older = now.getFullYear() - 8;
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const otherDay = `${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
+  const photos: [string, string][] = [
+    ["mem_a.jpg", `${newer}-${md}T09:00:00`],
+    ["mem_b.jpg", `${newer}-${md}T17:30:00`],
+    ["mem_c.jpg", `${older}-${md}T12:00:00`],
+    ["other_day.jpg", `${newer}-${otherDay}T09:00:00`],
+  ];
+  const checksums: Record<string, string> = {};
+  photos.forEach(([name, taken], i) => {
+    fs.writeFileSync(path.join(dir, name), Buffer.concat([jpeg, Buffer.from([i])]));
+    fs.writeFileSync(
+      path.join(dir, `${name}.xmp`),
+      `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:exif="http://ns.adobe.com/exif/1.0/"
+   exif:DateTimeOriginal="${taken}">
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>
+`,
+    );
+    checksums[name] = sha256(path.join(dir, name));
+  });
+  return { dir, checksums, years: [newer, older] };
+}
