@@ -157,8 +157,16 @@ impl Watcher {
         let paused = Arc::new(AtomicBool::new(false));
         let scanning = Arc::new(AtomicBool::new(false));
         let scan_count = Arc::new(AtomicUsize::new(0));
+        // Roots currently watched, keyed by canonical path. The worker
+        // consults it before scanning: some backends (Windows
+        // ReadDirectoryChangesW in particular) can still deliver an event
+        // buffered at drop time, and an event queued before `remove_root`
+        // flushes through the debounce window afterwards. Either way the
+        // root must not be scanned once removal is acknowledged.
 
         let mut threads = Vec::new();
+        let active_roots: Arc<Mutex<HashSet<PathBuf>>> =
+            Arc::new(Mutex::new(roots.iter().filter_map(|r| fs::canonicalize(r).ok()).collect()));
 
         // Watch thread: one backend per root. Local filesystems get a notify
         // watcher (one per root — recommending a shared watcher is
@@ -170,6 +178,7 @@ impl Watcher {
         // scan worker are unchanged.
         {
             let event_tx = event_tx.clone();
+            let active_roots = active_roots.clone();
             let mut watchers: HashMap<PathBuf, Backend> = HashMap::new();
             for root in roots {
                 let canon = fs::canonicalize(root)?;
@@ -194,6 +203,7 @@ impl Watcher {
                         Cmd::Add(given, reply) => {
                             match fs::canonicalize(&given) {
                                 Ok(canon) => {
+                                    active_roots.lock().unwrap().insert(canon.clone());
                                     if is_network_path(&canon) {
                                         // Polling backend (TASK-02-008):
                                         // notify never fires over SMB/NFS.
@@ -250,6 +260,11 @@ impl Watcher {
                         }
                         Cmd::Remove(given, reply) => {
                             if let Ok(canon) = fs::canonicalize(&given) {
+                                // Unmark before dropping the watcher: any
+                                // event that still slips through after the
+                                // drop (buffered delivery on some backends)
+                                // must find the root inactive in the worker.
+                                active_roots.lock().unwrap().remove(&canon);
                                 // Dropping the watcher stops its stream; a
                                 // poll backend is stopped explicitly so its
                                 // thread joins (the notify watcher needs only
@@ -320,6 +335,7 @@ impl Watcher {
             let scanning = scanning.clone();
             let scan_count = scan_count.clone();
             let on_change = on_change;
+            let active_roots = active_roots.clone();
             threads.push(thread::Builder::new().name("fb-scan".into()).spawn(move || {
                 // Park while paused (TASK-03-025): queued events stay in the
                 // work channel and are scanned once the gate lifts, so a
@@ -343,6 +359,16 @@ impl Watcher {
                         wait_gate(&paused, &cancel);
                         if cancel.load(Ordering::Relaxed) {
                             break;
+                        }
+                        // Skip roots removed while their events were queued
+                        // or still in flight (see `active_roots`).
+                        let still_watched =
+                            fs::canonicalize(&root).is_ok_and(|c| {
+                                active_roots.lock().unwrap().contains(&c)
+                            });
+                        if !still_watched {
+                            tracing::debug!(root = %root.display(), "skipping scan of removed root");
+                            continue;
                         }
                         scanning.store(true, Ordering::Relaxed);
                         let report = {
