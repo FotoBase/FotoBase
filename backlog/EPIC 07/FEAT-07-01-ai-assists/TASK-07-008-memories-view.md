@@ -1,6 +1,6 @@
 # task: add on-this-day memories view
 
-**Feature:** [FEAT-07-01-ai-assists](FEAT-07-01-ai-assists.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** in progress (2026-11-18)
+**Feature:** [FEAT-07-01-ai-assists](FEAT-07-01-ai-assists.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** in review (2026-11-18)
 
 ## Description
 A "Memories" view that resurfaces photos taken on today's date in past years (PLAN §2 2026 additions: "Memories ('On this day'): resurface photos taken on this date in past years"). Pure catalog query — no AI model required.
