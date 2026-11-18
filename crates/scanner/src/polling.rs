@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 /// Default poll bounds ("e.g. 5s–5min" per the task spec).
 pub const DEFAULT_POLL_MIN: Duration = Duration::from_secs(5);
@@ -142,7 +142,7 @@ impl Poller {
     /// snapshot changes (the same contract the notify watcher fulfills for
     /// local roots). Backend selection is the caller's ([`is_network_path`]
     /// at watch-registration time); the poller always polls.
-    pub fn spawn(root: PathBuf, event_tx: Sender<PathBuf>, config: PollConfig) -> Self {
+    pub fn spawn(root: PathBuf, event_tx: Sender<(PathBuf, Instant)>, config: PollConfig) -> Self {
         Self::spawn_with_classification(root, event_tx, config, |_| true)
     }
 
@@ -150,7 +150,7 @@ impl Poller {
     /// testing the backend selection without a real network mount.
     pub fn spawn_with_classification(
         root: PathBuf,
-        event_tx: Sender<PathBuf>,
+        event_tx: Sender<(PathBuf, Instant)>,
         config: PollConfig,
         classify: impl Fn(&Path) -> bool + Send + 'static,
     ) -> Self {
@@ -181,7 +181,7 @@ impl Poller {
                             // its own closing scan; here the same event
                             // channel is fed only on real deltas).
                             if last.is_some() && changed {
-                                let _ = event_tx.send(root.clone());
+                                let _ = event_tx.send((root.clone(), Instant::now()));
                             }
                             interval.step(latency, changed && last.is_some());
                             last = Some(snap);
