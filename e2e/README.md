@@ -26,6 +26,10 @@ term, and mirrored by the map's pins.
 `person:` / `camera:` field filters in the search bar narrows the grid live;
 valid filters with no matches empty it without erroring.
 
+`specs/memories.e2e.ts` (TASK-07-008) — the "On this day" Memories view groups
+today's photos by year (newest first), leaves other days out, and a click opens
+the normal viewer.
+
 ## Platforms
 
 `tauri-driver` has no macOS support, so the suite runs on Linux (CI, or a Linux

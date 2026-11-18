@@ -17,6 +17,7 @@
   import FolderTree from "./lib/FolderTree.svelte";
   import ImportDialog from "./lib/ImportDialog.svelte";
   import MapPanel from "./lib/MapPanel.svelte";
+  import MemoriesPanel from "./lib/MemoriesPanel.svelte";
   import OptionsDialog from "./lib/OptionsDialog.svelte";
   import PhotoTray from "./lib/PhotoTray.svelte";
   import FolderIniDialog from "./lib/FolderIniDialog.svelte";
@@ -88,6 +89,10 @@
   let peopleOpen = $state(false);
   // Offline map panel (TASK-06-001): the bundled world basemap.
   let mapOpen = $state(false);
+  let memoriesOpen = $state(false);
+  // Memories open their photos in the normal viewer, paging through the
+  // memory list instead of the grid's; closing the viewer returns to them.
+  let memoryItems = $state<GridItem[] | null>(null);
   // The map's pins mirror the grid's filtered view (TASK-06-003): the same
   // LibraryView the grid query sends, so a search/filter change re-pins
   // the map live.
@@ -180,7 +185,7 @@
   let edit = $state<{ open: boolean; index: number }>({ open: false, index: 0 });
 
   function openEdit(item: GridItem): void {
-    const index = photos.findIndex((p) => p.id === item.id);
+    const index = (memoryItems ?? photos).findIndex((p) => p.id === item.id);
     edit = { open: true, index: index < 0 ? 0 : index };
   }
 
@@ -953,6 +958,11 @@
   <button type="button" onclick={() => (mapOpen = true)} data-testid="open-map">
     {t("app.map")}
   </button>
+  <!-- "On this day" (TASK-07-008): read-only resurfacing of this date's
+       photos from past years. -->
+  <button type="button" onclick={() => (memoriesOpen = true)} data-testid="open-memories">
+    {t("app.memories")}
+  </button>
   {#if settings}
     <OptionsDialog
       bind:open={optionsOpen}
@@ -1000,6 +1010,19 @@
       if (item) openViewer(item);
     }}
     ontray={(selected) => tray.add(selected)}
+  />
+  <MemoriesPanel
+    bind:open={memoriesOpen}
+    view={mapView}
+    onopenphoto={(item, all) => {
+      memoryItems = all;
+      memoriesOpen = false;
+      viewer = {
+        open: true,
+        index: Math.max(0, all.findIndex((p) => p.id === item.id)),
+        slideshow: false,
+      };
+    }}
   />
   <StackPicker
     bind:open={stackPicker.open}
@@ -1092,7 +1115,7 @@
   />
   {#if viewer.open && !edit.open}
     <Viewer
-      items={photos}
+      items={memoryItems ?? photos}
       startIndex={viewer.index}
       startSlideshow={viewer.slideshow}
       ratingsEnabled={settings?.ratings_enabled ?? false}
@@ -1100,13 +1123,19 @@
         photos = photos.map((p) => (p.id === id ? { ...p, rating } : p));
       }}
       onalbumschanged={() => void refreshAlbums()}
-      onclose={() => (viewer = { open: false, index: 0, slideshow: false })}
+      onclose={() => {
+        viewer = { open: false, index: 0, slideshow: false };
+        if (memoryItems) {
+          memoryItems = null;
+          memoriesOpen = true;
+        }
+      }}
       onedit={openEdit}
     />
   {/if}
   {#if edit.open}
     <EditView
-      items={photos}
+      items={memoryItems ?? photos}
       startIndex={edit.index}
       onclose={() => (edit = { open: false, index: 0 })}
     />

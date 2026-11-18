@@ -1,6 +1,6 @@
 # task: add on-this-day memories view
 
-**Feature:** [FEAT-07-01-ai-assists](FEAT-07-01-ai-assists.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** todo
+**Feature:** [FEAT-07-01-ai-assists](FEAT-07-01-ai-assists.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** in review (2026-11-18)
 
 ## Description
 A "Memories" view that resurfaces photos taken on today's date in past years (PLAN §2 2026 additions: "Memories ('On this day'): resurface photos taken on this date in past years"). Pure catalog query — no AI model required.
@@ -21,5 +21,5 @@ A "Memories" view that resurfaces photos taken on today's date in past years (PL
 - E2E: Memories view renders and a photo click opens the viewer.
 
 ## Acceptance criteria
-- [ ] 07-008: Memories view resurfaces "on this day" content grouped by year, read-only.
-- [ ] 07-008: Hidden photos and empty years are excluded with a clean empty state.
+- [x] 07-008: Memories view resurfaces "on this day" content grouped by year, read-only.
+- [x] 07-008: Hidden photos and empty years are excluded with a clean empty state.
