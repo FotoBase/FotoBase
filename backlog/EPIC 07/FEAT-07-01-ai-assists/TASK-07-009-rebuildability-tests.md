@@ -1,6 +1,6 @@
 # task: add smart-search rebuildability tests
 
-**Feature:** [FEAT-07-01-ai-assists](FEAT-07-01-ai-assists.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** todo
+**Feature:** [FEAT-07-01-ai-assists](FEAT-07-01-ai-assists.md) · **Epic:** [EPIC-07 — Smart search](../EPIC-07.md) · **Status:** in review (2026-11-18)
 
 ## Description
 Verify per PLAN §9 (Rebuildability: "delete catalog → rebuild → diff all user data against pre-delete snapshot") that embeddings are recomputable and confirmed auto-tags survive as regular tags. This is the epic's second acceptance criterion made executable.
@@ -21,5 +21,5 @@ Verify per PLAN §9 (Rebuildability: "delete catalog → rebuild → diff all us
 - Regression: this test fails if any smart-search feature starts writing derived data into sidecars.
 
 ## Acceptance criteria
-- [ ] 07-009: Rebuildability tests prove embeddings recomputable and auto-tags survive catalog rebuild as regular tags (§9).
-- [ ] 07-009: Rebuild creates no duplicate tags.
+- [x] 07-009: Rebuildability tests prove embeddings recomputable and auto-tags survive catalog rebuild as regular tags (§9).
+- [x] 07-009: Rebuild creates no duplicate tags.
