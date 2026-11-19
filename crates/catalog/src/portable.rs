@@ -55,6 +55,11 @@ pub const V1_OP_TYPES: &[&str] = &[
     "sharpen",
     "film_grain",
     "auto_rotate",
+    "warmify",
+    "soft_focus",
+    "vignette",
+    "border",
+    "drop_shadow",
     "undo_all",
 ];
 

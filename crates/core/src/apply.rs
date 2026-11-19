@@ -50,7 +50,24 @@ fn apply_op(img: &LinearImage, op: &Op) -> LinearImage {
         "auto_contrast" => auto_contrast(img),
         "fill_light" => per_pixel(img, |px| fill_light(px, fnum(op, "amount", 0.5))),
         "temperature" => per_pixel(img, |px| temperature(px, fnum(op, "kelvin_shift", 0.0))),
-        "tint" => per_pixel(img, |px| tint(px, fnum(op, "green_magenta", 0.0))),
+        // `tint` is two ops under one name (TASK-08-001): with a `color`
+        // param it is the Effects-tab color wash, without it the Tuning-tab
+        // green/magenta white-balance shift.
+        "tint" => match param(op, "color").and_then(Value::as_str).and_then(parse_hex_color) {
+            Some(color) => match fnum(op, "amount", 0.5) {
+                a if a <= 0.0 => img.clone(),
+                a => per_pixel(img, |px| tint_color(px, color, a)),
+            },
+            None => per_pixel(img, |px| tint(px, fnum(op, "green_magenta", 0.0))),
+        },
+        "warmify" => match fnum(op, "amount", 0.5) {
+            a if a <= 0.0 => img.clone(),
+            a => per_pixel(img, |px| warmify(px, a)),
+        },
+        "soft_focus" => soft_focus(img, fnum(op, "amount", 0.5)),
+        "vignette" => vignette(img, fnum(op, "amount", 0.5)),
+        "border" => border(img, op),
+        "drop_shadow" => drop_shadow(img, op),
         // amount 0 is a no-op: skip the per-pixel pass so the buffer is
         // bit-identical (TASK-04-009 strength-0 semantics).
         "saturation" => match fnum(op, "amount", 0.0) {
@@ -132,6 +149,25 @@ fn temperature(px: [f32; 3], shift: f64) -> [f32; 3] {
 fn tint(px: [f32; 3], green_magenta: f64) -> [f32; 3] {
     let s = green_magenta as f32;
     [clamp01(px[0] + 0.15 * s), clamp01(px[1] - 0.15 * s), clamp01(px[2] + 0.15 * s)]
+}
+
+/// Effects-tab Tint: wash the photo toward `color`, keeping each pixel's
+/// luminance so the image does not get brighter or darker.
+fn tint_color(px: [f32; 3], color: [f32; 3], amount: f64) -> [f32; 3] {
+    let a = amount as f32;
+    let scale = luminance(px) / luminance(color).max(1e-4);
+    let mut out = [0.0; 3];
+    for c in 0..3 {
+        let target = clamp01(color[c] * scale);
+        out[c] = clamp01(px[c] + (target - px[c]) * a);
+    }
+    out
+}
+
+/// Warmify: a warm temperature shift plus a gentle saturation lift, so skin
+/// and foliage glow instead of just turning orange.
+fn warmify(px: [f32; 3], amount: f64) -> [f32; 3] {
+    saturation(temperature(px, 0.5 * amount), 0.25 * amount)
 }
 
 fn saturation(px: [f32; 3], amount: f64) -> [f32; 3] {
@@ -391,6 +427,181 @@ fn film_grain(img: &LinearImage, amount: f64, op: &Op) -> LinearImage {
             out.set(x, y, px);
         }
     }
+    out
+}
+
+// ---------------------------------------------------------------------------
+// Soft focus, vignette (TASK-08-001)
+// ---------------------------------------------------------------------------
+
+/// One separable box-blur pass over `C` interleaved channels with a sliding
+/// window (O(1) per sample, edge pixels replicated), so cost does not grow
+/// with the radius.
+fn box_pass<const C: usize>(
+    src: &[f32],
+    dst: &mut [f32],
+    w: usize,
+    h: usize,
+    radius: usize,
+    horizontal: bool,
+) {
+    let (len, lines, step, line_step) =
+        if horizontal { (w, h, C, w * C) } else { (h, w, w * C, C) };
+    let r = radius as isize;
+    let n = (2 * radius + 1) as f64;
+    let at = |base: usize, i: isize| base + i.clamp(0, len as isize - 1) as usize * step;
+    for line in 0..lines {
+        let base = line * line_step;
+        let mut acc = [0.0f64; C];
+        for k in -r..=r {
+            let o = at(base, k);
+            for c in 0..C {
+                acc[c] += f64::from(src[o + c]);
+            }
+        }
+        for i in 0..len {
+            let o = base + i * step;
+            for c in 0..C {
+                dst[o + c] = (acc[c] / n) as f32;
+            }
+            let (add, sub) = (at(base, i as isize + r + 1), at(base, i as isize - r));
+            for c in 0..C {
+                acc[c] += f64::from(src[add + c]) - f64::from(src[sub + c]);
+            }
+        }
+    }
+}
+
+/// Three box passes per axis approximate a Gaussian. Two buffers are
+/// allocated once per call, never per pixel.
+fn blur_approx_gaussian<const C: usize>(data: &mut [f32], w: usize, h: usize, radius: usize) {
+    if radius == 0 {
+        return;
+    }
+    let mut tmp = vec![0.0f32; data.len()];
+    for _ in 0..3 {
+        box_pass::<C>(data, &mut tmp, w, h, radius, true);
+        box_pass::<C>(&tmp, data, w, h, radius, false);
+    }
+}
+
+/// Soft focus: blend toward a heavy blur (radius ∝ the shorter side, so
+/// preview and export agree) and add a faint highlight bloom.
+fn soft_focus(img: &LinearImage, amount: f64) -> LinearImage {
+    if amount <= 0.0 {
+        return img.clone();
+    }
+    let short = img.width.min(img.height) as f64;
+    let radius = (0.012 * short).round().max(1.0) as usize;
+    let mut blurred = img.data.clone();
+    blur_approx_gaussian::<3>(&mut blurred, img.width as usize, img.height as usize, radius);
+    let a = amount as f32;
+    let mut out = img.clone();
+    for (o, b) in out.data.iter_mut().zip(blurred) {
+        let soft = *o + (b - *o) * 0.7 * a;
+        let glow = 0.3 * a * b;
+        *o = clamp01(1.0 - (1.0 - soft) * (1.0 - glow));
+    }
+    out
+}
+
+/// Vignette: darken radially from the frame center. The distance is
+/// normalized per axis, so the falloff is elliptical and resolution
+/// independent; the central 35% is left bit-identical.
+fn vignette(img: &LinearImage, amount: f64) -> LinearImage {
+    if amount <= 0.0 {
+        return img.clone();
+    }
+    let (w, h) = (img.width as f32, img.height as f32);
+    let strength = 0.8 * amount as f32;
+    let mut out = img.clone();
+    for y in 0..img.height {
+        let ny = ((y as f32 + 0.5) / h - 0.5) * 2.0;
+        for x in 0..img.width {
+            let nx = ((x as f32 + 0.5) / w - 0.5) * 2.0;
+            let d = (nx * nx + ny * ny).sqrt() / std::f32::consts::SQRT_2;
+            let t = ((d - 0.35) / 0.65).clamp(0.0, 1.0);
+            if t == 0.0 {
+                continue;
+            }
+            let factor = 1.0 - strength * t * t * (3.0 - 2.0 * t);
+            let px = img.get(x, y);
+            out.set(x, y, [px[0] * factor, px[1] * factor, px[2] * factor]);
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
+// Frames (TASK-08-001): the canvas grows; sizes are fractions of the shorter
+// side so a recipe yields the same framing at any resolution.
+// ---------------------------------------------------------------------------
+
+fn color_param_or(op: &Op, default: [f32; 3]) -> [f32; 3] {
+    param(op, "color").and_then(Value::as_str).and_then(parse_hex_color).unwrap_or(default)
+}
+
+/// Frame thickness in pixels: `amount` scales up to 10% of the shorter side.
+fn frame_px(img: &LinearImage, amount: f64) -> usize {
+    (amount * 0.1 * img.width.min(img.height) as f64).round().max(0.0) as usize
+}
+
+/// Copy `img` into `canvas` with its top-left corner at (`x0`, `y0`).
+fn blit(canvas: &mut LinearImage, img: &LinearImage, x0: usize, y0: usize) {
+    let row = img.width as usize * 3;
+    for y in 0..img.height as usize {
+        let dst = ((y0 + y) * canvas.width as usize + x0) * 3;
+        canvas.data[dst..dst + row].copy_from_slice(&img.data[y * row..(y + 1) * row]);
+    }
+}
+
+fn filled(width: usize, height: usize, color: [f32; 3]) -> LinearImage {
+    let mut canvas = LinearImage::new(width as u32, height as u32);
+    for px in canvas.data.as_chunks_mut::<3>().0 {
+        *px = color;
+    }
+    canvas
+}
+
+/// Border: a solid frame (default white) around the photo.
+fn border(img: &LinearImage, op: &Op) -> LinearImage {
+    let b = frame_px(img, fnum(op, "amount", 0.5));
+    if b == 0 {
+        return img.clone();
+    }
+    let mut out = filled(
+        img.width as usize + 2 * b,
+        img.height as usize + 2 * b,
+        color_param_or(op, [1.0; 3]),
+    );
+    blit(&mut out, img, b, b);
+    out
+}
+
+/// Drop shadow: the photo on a (default white) canvas with a soft shadow
+/// offset toward the bottom-right.
+fn drop_shadow(img: &LinearImage, op: &Op) -> LinearImage {
+    const OPACITY: f32 = 0.6;
+    let m = frame_px(img, fnum(op, "amount", 0.5));
+    if m == 0 {
+        return img.clone();
+    }
+    let (w, h) = (img.width as usize + 2 * m, img.height as usize + 2 * m);
+    let offset = m / 3;
+    let mut mask = vec![0.0f32; w * h];
+    for y in 0..img.height as usize {
+        let row = (m + offset + y) * w + m + offset;
+        mask[row..row + img.width as usize].fill(1.0);
+    }
+    blur_approx_gaussian::<1>(&mut mask, w, h, (m / 6).max(1));
+
+    let bg = color_param_or(op, [1.0; 3]);
+    let mut out = filled(w, h, bg);
+    for (px, shade) in out.data.as_chunks_mut::<3>().0.iter_mut().zip(mask) {
+        let keep = 1.0 - OPACITY * shade;
+        *px = [px[0] * keep, px[1] * keep, px[2] * keep];
+    }
+    blit(&mut out, img, m, m);
     out
 }
 

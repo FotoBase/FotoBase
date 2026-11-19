@@ -14,6 +14,11 @@
   { "name": "retouch", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "retouch", "params": { "strokes": [ { "points": [[0.4, 0.4], [0.42, 0.41]], "radius": 0.01 } ] } } ] } },
   { "name": "grayscale_sharpen", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "grayscale", "params": { "enabled": true } }, { "type": "sharpen", "params": { "amount": 0.3 } } ] } },
   { "name": "bw", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "bw", "params": { "amount": 1.0 } } ] } },
+  { "name": "warmify", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "warmify", "params": { "amount": 0.5 } } ] } },
+  { "name": "tint_color", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "tint", "params": { "color": "#3a7bd5", "amount": 0.4 } } ] } },
+  { "name": "film_grain", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "film_grain", "params": { "amount": 0.4, "seed": 7 } } ] } },
+  { "name": "soft_focus_vignette", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "soft_focus", "params": { "amount": 0.5 } }, { "type": "vignette", "params": { "amount": 0.6 } } ] } },
+  { "name": "frames", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "border", "params": { "amount": 0.3, "color": "#000000" } }, { "type": "drop_shadow", "params": { "amount": 0.6 } } ] } },
   { "name": "undo_all", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "undo_all" } ] } },
   { "name": "full_pipeline", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "crop", "params": { "x": 0.05, "y": 0.0, "w": 0.9, "h": 1.0 } }, { "type": "auto_color" }, { "type": "fill_light", "params": { "amount": 0.3 } }, { "type": "temperature", "params": { "kelvin_shift": 0.1 } }, { "type": "sepia", "params": { "amount": 0.2 } }, { "type": "sharpen", "params": { "amount": 0.2 } } ] } }
 ]

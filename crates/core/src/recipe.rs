@@ -41,6 +41,11 @@ pub const V1_OP_TYPES: &[&str] = &[
     "sharpen",
     "film_grain",
     "auto_rotate",
+    "warmify",
+    "soft_focus",
+    "vignette",
+    "border",
+    "drop_shadow",
     "undo_all",
 ];
 
@@ -204,6 +209,15 @@ fn require_range(
     }
 }
 
+/// Optional `color` param of the effect/frame ops: `"#rrggbb"` (or `#rgb`).
+fn color_param(p: &Map<String, Value>, op_type: &str, idx: usize) -> Result<(), RecipeError> {
+    match p.get("color") {
+        None => Ok(()),
+        Some(Value::String(hex)) if crate::apply::parse_hex_color(hex).is_some() => Ok(()),
+        Some(_) => err(format!("ops[{idx}] {op_type}.color must be \"#rrggbb\"")),
+    }
+}
+
 fn validate_params(op_type: &str, params: &Value, idx: usize) -> Result<(), RecipeError> {
     use crate::apply::parse_hex_color;
     let p = params.as_object().unwrap();
@@ -233,7 +247,16 @@ fn validate_params(op_type: &str, params: &Value, idx: usize) -> Result<(), Reci
         "fill_light" | "highlight_recovery" | "shadow_recovery" | "sepia" | "warm_colors"
         | "cool_colors" => unit("amount", 0.0, 1.0)?,
         "temperature" => unit("kelvin_shift", -1.0, 1.0)?,
-        "tint" => unit("green_magenta", -1.0, 1.0)?,
+        "tint" => {
+            unit("green_magenta", -1.0, 1.0)?;
+            unit("amount", 0.0, 1.0)?;
+            color_param(p, op_type, idx)?;
+        }
+        "warmify" | "soft_focus" | "vignette" => unit("amount", 0.0, 1.0)?,
+        "border" | "drop_shadow" => {
+            unit("amount", 0.0, 1.0)?;
+            color_param(p, op_type, idx)?;
+        }
         "saturation" | "brightness" => unit("amount", -1.0, 1.0)?,
         "sharpen" => unit("amount", 0.0, 1.0)?,
         "bw" => unit("amount", 0.0, 1.0)?,
@@ -407,7 +430,10 @@ fn validate_extra_params(
         "fill_light" | "highlight_recovery" | "shadow_recovery" | "sepia" | "warm_colors"
         | "cool_colors" | "saturation" | "brightness" | "sharpen" | "bw" => &["amount"],
         "temperature" => &["kelvin_shift"],
-        "tint" => &["green_magenta"],
+        "tint" => &["green_magenta", "amount", "color"],
+        "warmify" | "soft_focus" | "vignette" => &["amount"],
+        "border" | "drop_shadow" => &["amount", "color"],
+        "film_grain" => &["amount", "seed"],
         "grayscale" => &["enabled"],
         "red_eye" => &["regions", "auto"],
         "text" => &["text", "x", "y", "size", "color", "font", "rotation"],

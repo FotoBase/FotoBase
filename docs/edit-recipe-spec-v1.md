@@ -42,7 +42,7 @@ An open, versioned format. Any tool can read and apply a Fotobase recipe from th
 | `auto_contrast` | — | tone-curve stretch |
 | `fill_light` | `amount` [0..1] (0.5) | shadow lift |
 | `temperature` | `kelvin_shift` [-1..1] | warm/cool |
-| `tint` | `green_magenta` [-1..1] | |
+| `tint` | `green_magenta` [-1..1] **or** `color` (`#rrggbb`), `amount` [0..1] (0.5) | two forms under one type: without `color`, the Tuning-tab green/magenta white-balance shift; with `color`, the Effects-tab wash toward `color` that keeps each pixel's luminance (TASK-08-001) |
 | `saturation` | `amount` [-1..1] | |
 | `brightness` | `amount` [-1..1] | |
 | `highlight_recovery` | `amount` [0..1] | |
@@ -55,8 +55,15 @@ An open, versioned format. Any tool can read and apply a Fotobase recipe from th
 | `grayscale` | `enabled: bool` | |
 | `bw` | `amount` [0..1] (1.0) | B&W blend strength; recipe op, distinct from the view-only B&W display mode |
 | `sharpen` | `amount` [0..1] | |
+| `warmify` | `amount` [0..1] (0.5) | Effects tab: warm temperature shift plus a gentle saturation lift; distinct from the Tuning-tab `warm_colors` |
+| `soft_focus` | `amount` [0..1] (0.5) | blend toward a Gaussian-like blur (radius = 1.2% of the shorter side) plus a faint highlight bloom |
+| `vignette` | `amount` [0..1] (0.5) | radial darkening toward the corners; elliptical, central 35% untouched |
+| `border` | `amount` [0..1] (0.5), `color` (`#rrggbb`, default `#ffffff`) | frame; thickness = `amount` × 10% of the shorter side (rounded to whole pixels). **Grows the canvas** by that thickness on every side |
+| `drop_shadow` | `amount` [0..1] (0.5), `color` (`#rrggbb` background, default `#ffffff`) | photo on a margin canvas with a soft shadow (60% opacity) offset toward the bottom-right; margin = `amount` × 10% of the shorter side. **Grows the canvas** |
 | `film_grain` | `amount` [0..1], `seed` (integer, default 0) | deterministic per-pixel noise; pure function of (x, y, seed), so the same op always yields the same pixels |
 | `undo_all` | — | clears all ops (equivalent to empty `ops[]`; kept for menu semantics) |
+
+Frame ops (`border`, `drop_shadow`) change the output dimensions, like `crop` and `rotate`; write them after every photo-content op so grain, vignette, etc. act on the photo and not on the frame. Thickness is rounded to whole pixels per resolution, so preview and export canvases may differ by a pixel per side.
 
 Future ops (curves, HSL, perspective, lens correction — F2 Pro tab) will bump the spec version or add op types additively; readers skip unknown types (§2).
 
