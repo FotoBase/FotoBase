@@ -34,11 +34,14 @@ const TOLERANCES: &[(&str, f64)] = &[
     ("auto_color", 1.0),
     ("auto_contrast", 1.0),
     ("auto_rotate", 2.0),
+    ("border", 2.0),
     ("brightness", 1.0),
     ("bw", 1.0),
     ("cool_colors", 1.0),
     ("crop", 2.0),
+    ("drop_shadow", 2.0),
     ("fill_light", 1.0),
+    ("film_grain", 1.0),
     ("grayscale", 1.0),
     ("highlight_recovery", 1.0),
     ("red_eye", 1.0),
@@ -47,14 +50,18 @@ const TOLERANCES: &[(&str, f64)] = &[
     ("sepia", 1.0),
     ("shadow_recovery", 1.0),
     ("sharpen", 2.0),
+    ("soft_focus", 2.0),
     ("straighten", 2.0),
     ("temperature", 1.0),
     ("text", 1.0),
     ("tint", 1.0),
+    ("tint_color", 1.0),
     // PNG goldens are quantized to 8 bit, so even a bit-exact op shows
     // ±1 on the 0–255 scale after a decode/compare round trip.
     ("undo_all", 1.0),
+    ("vignette", 1.0),
     ("warm_colors", 1.0),
+    ("warmify", 1.0),
 ];
 
 fn fixture_dir() -> PathBuf {
@@ -212,6 +219,44 @@ fn cases() -> Vec<GoldenCase> {
             name: "crop",
             recipe: op("crop", json!({ "x": 0.1, "y": 0.1, "w": 0.6, "h": 0.6 })),
             tol: by_op("crop"),
+        },
+        // TASK-08-001: remaining effects + frames, one golden each at a
+        // mid strength. Frames change the canvas size, so their goldens
+        // are sized differently from the fixture.
+        GoldenCase {
+            name: "border",
+            recipe: op("border", json!({ "amount": 0.5, "color": "#ffffff" })),
+            tol: by_op("border"),
+        },
+        GoldenCase {
+            name: "drop_shadow",
+            recipe: op("drop_shadow", json!({ "amount": 0.8, "color": "#ffffff" })),
+            tol: by_op("drop_shadow"),
+        },
+        GoldenCase {
+            name: "film_grain",
+            recipe: op("film_grain", json!({ "amount": 0.5, "seed": 42 })),
+            tol: by_op("film_grain"),
+        },
+        GoldenCase {
+            name: "soft_focus",
+            recipe: op("soft_focus", json!({ "amount": 0.7 })),
+            tol: by_op("soft_focus"),
+        },
+        GoldenCase {
+            name: "tint_color",
+            recipe: op("tint", json!({ "color": "#3a7bd5", "amount": 0.6 })),
+            tol: by_op("tint_color"),
+        },
+        GoldenCase {
+            name: "vignette",
+            recipe: op("vignette", json!({ "amount": 0.7 })),
+            tol: by_op("vignette"),
+        },
+        GoldenCase {
+            name: "warmify",
+            recipe: op("warmify", json!({ "amount": 0.6 })),
+            tol: by_op("warmify"),
         },
         GoldenCase {
             name: "fill_light",
@@ -410,6 +455,72 @@ fn every_recipe_op_matches_its_goldens() {
     for case in cases() {
         check_case(&case, &preview, "preview").unwrap_or_else(|e| panic!("{e}"));
         check_case(&case, &full, "full").unwrap_or_else(|e| panic!("{e}"));
+    }
+}
+
+/// TASK-08-001 feature acceptance: preview matches export. Each effect is
+/// rendered at preview and full resolution; the full render is downscaled
+/// back (×4 box average) and must agree with the preview render within a
+/// small RMS. Film grain is excluded by design — its noise is a pure
+/// function of the pixel grid (spec §3), so it is reproducible, not
+/// resolution independent.
+#[test]
+fn new_effects_match_between_preview_and_export_resolution() {
+    // A smooth scene sampled at both resolutions: the fixture's hard patch
+    // edges would measure resampling, not the ops.
+    let scene = |w: u32, h: u32| {
+        LinearImage::from_fn(w, h, |x, y| {
+            let (fx, fy) = ((x as f32 + 0.5) / w as f32, (y as f32 + 0.5) / h as f32);
+            [0.15 + 0.7 * fx, 0.15 + 0.7 * fy, 0.6 - 0.4 * fx * fy]
+        })
+    };
+    let preview = scene(PREVIEW_W, PREVIEW_H);
+    let full = scene(PREVIEW_W * FULL_SCALE, PREVIEW_H * FULL_SCALE);
+    let op = |name: &str, params: serde_json::Value| json!({ "spec": "fotobase.recipe", "version": 1, "ops": [{ "type": name, "params": params }] });
+    let recipes = [
+        op("warmify", json!({ "amount": 0.6 })),
+        op("tint", json!({ "color": "#3a7bd5", "amount": 0.6 })),
+        op("soft_focus", json!({ "amount": 0.7 })),
+        op("vignette", json!({ "amount": 0.7 })),
+        op("border", json!({ "amount": 0.5 })),
+        op("drop_shadow", json!({ "amount": 0.8 })),
+    ];
+    for doc in recipes {
+        let (recipe, _) = Recipe::parse(&doc.to_string()).unwrap();
+        let small = apply_recipe(&preview, &recipe);
+        let big = apply_recipe(&full, &recipe);
+        // Frames round their thickness to whole pixels per resolution, so
+        // the canvas may differ by a pixel per side; pixel parity is only
+        // meaningful for the ops that keep the canvas.
+        let (ew, eh) = (small.width * FULL_SCALE, small.height * FULL_SCALE);
+        if (big.width, big.height) != (ew, eh) {
+            assert!(
+                big.width.abs_diff(ew) <= 4 && big.height.abs_diff(eh) <= 4,
+                "{doc}: framed canvas {}x{} vs expected ~{ew}x{eh}",
+                big.width,
+                big.height
+            );
+            continue;
+        }
+        let down = LinearImage::from_fn(small.width, small.height, |x, y| {
+            let mut acc = [0.0f32; 3];
+            for dy in 0..FULL_SCALE {
+                for dx in 0..FULL_SCALE {
+                    let p = big.get(x * FULL_SCALE + dx, y * FULL_SCALE + dy);
+                    for c in 0..3 {
+                        acc[c] += p[c];
+                    }
+                }
+            }
+            acc.map(|v| v / (FULL_SCALE * FULL_SCALE) as f32)
+        });
+        let report = compare(&down, &small);
+        assert!(
+            report.rms < 3.0,
+            "{doc}: preview vs export RMS {:.3} (max {:.0})",
+            report.rms,
+            report.max_delta
+        );
     }
 }
 

@@ -26,7 +26,8 @@
         "temperature", "tint", "saturation", "brightness",
         "highlight_recovery", "shadow_recovery", "sepia",
         "warm_colors", "cool_colors", "red_eye", "text", "retouch",
-        "grayscale", "bw", "sharpen", "film_grain", "auto_rotate", "undo_all"
+        "grayscale", "bw", "sharpen", "film_grain", "auto_rotate",
+        "warmify", "soft_focus", "vignette", "border", "drop_shadow", "undo_all"
       ]
     }
   }

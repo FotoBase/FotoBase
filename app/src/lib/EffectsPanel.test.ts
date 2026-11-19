@@ -71,4 +71,43 @@ describe("EffectsPanel", () => {
       sharpen: DEFAULT_STRENGTH.sharpen,
     });
   });
+
+  // TASK-08-001
+  it("renders buttons for the remaining effects and frames", () => {
+    render(EffectsPanel, props());
+    for (const name of [
+      "Warmify",
+      "Tint",
+      "Film Grain",
+      "Soft Focus",
+      "Vignette",
+      "Border",
+      "Drop Shadow",
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeTruthy();
+    }
+  });
+
+  it("each new effect applies at its default and exposes a strength slider", async () => {
+    const onchange = vi.fn();
+    render(EffectsPanel, { ...props(), onchange });
+    await fireEvent.click(screen.getByRole("button", { name: "Vignette" }));
+    expect(onchange).toHaveBeenLastCalledWith({
+      vignette: DEFAULT_STRENGTH.vignette,
+    });
+    const slider = screen.getByTestId("strength-vignette") as HTMLInputElement;
+    await fireEvent.input(slider, { target: { value: "0.8" } });
+    expect(onchange).toHaveBeenLastCalledWith({ vignette: 0.8 });
+  });
+
+  it("frames compose with photo effects in one state", async () => {
+    const onchange = vi.fn();
+    render(EffectsPanel, { ...props(), onchange });
+    await fireEvent.click(screen.getByRole("button", { name: "Soft Focus" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Border" }));
+    expect(onchange).toHaveBeenLastCalledWith({
+      soft_focus: DEFAULT_STRENGTH.soft_focus,
+      border: DEFAULT_STRENGTH.border,
+    });
+  });
 });

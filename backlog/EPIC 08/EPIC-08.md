@@ -9,7 +9,7 @@
 
 ## feat: remaining editor tools
 
-- [ ] `08-001` (M) Remaining effects: Warmify, Film Grain, Tint, Soft Focus, Vignette + frames (Border, Drop Shadow).
+- [x] `08-001` (M) Remaining effects: Warmify, Film Grain, Tint, Soft Focus, Vignette + frames (Border, Drop Shadow).
 - [ ] `08-002` (L) Retouch heal brush (strokes as recipe op).
 - [ ] `08-003` (M) Text tool: font, size, color, outline, transparency (recipe op).
 

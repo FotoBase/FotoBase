@@ -12,7 +12,11 @@ import {
   opsFromState as cropOps,
   type CropStraightenState,
 } from "./crop-straighten";
-import { opsFromEffects as effectOps, type EffectsState } from "./effects";
+import {
+  effectFromOp,
+  opsFromEffects as effectOps,
+  type EffectsState,
+} from "./effects";
 import { opsFromState as redEyeOps, type RedEyeState } from "./red-eye";
 import {
   DEFAULT_TUNING,
@@ -114,6 +118,11 @@ export function stateFromRecipe(recipe: {
   };
   for (const op of recipe.ops ?? []) {
     const params = op.params ?? {};
+    const owned = effectFromOp(op.type, params);
+    if (owned !== null) {
+      state.effects = { ...state.effects, [owned[0]]: owned[1] };
+      continue;
+    }
     switch (op.type) {
       case "crop":
         state.crop = {
@@ -158,7 +167,17 @@ export function stateFromRecipe(recipe: {
         };
         break;
       case "tint":
-        state.tuning = { ...state.tuning, tint: num(params.green_magenta, 0) };
+        // A `tint` with `color` is the Effects-tab wash (TASK-08-001); one
+        // the tab does not own verbatim (custom color) is kept, never
+        // squeezed into the white-balance slider.
+        if ("color" in params) {
+          state.extra = [...state.extra, { type: op.type, params }];
+        } else {
+          state.tuning = {
+            ...state.tuning,
+            tint: num(params.green_magenta, 0),
+          };
+        }
         break;
       case "red_eye":
         if (params.auto === true) {
@@ -175,12 +194,6 @@ export function stateFromRecipe(recipe: {
             ),
           };
         }
-        break;
-      case "sharpen":
-      case "sepia":
-      case "bw":
-      case "saturation":
-        state.effects = { ...state.effects, [op.type]: num(params.amount, 0) };
         break;
       default:
         // An op no tab owns (text, retouch, rotate, film grain — the batch

@@ -229,3 +229,70 @@ describe("auto_rotate", () => {
     expect(types).toEqual(["straighten", "auto_rotate"]);
   });
 });
+
+// TASK-08-001: the new effects and frames round-trip through the recipe and
+// keep working with undo/redo.
+describe("remaining effects and frames", () => {
+  const effects = {
+    warmify: 0.5,
+    tint: 0.4,
+    film_grain: 0.3,
+    soft_focus: 0.6,
+    vignette: 0.7,
+    border: 0.5,
+    drop_shadow: 0.8,
+  };
+
+  it("emit in canonical order after tuning, frames last", () => {
+    const state: EditState = {
+      ...untouched,
+      tuning: { ...DEFAULT_TUNING, tint: 0.2 },
+      effects,
+    };
+    expect(opsFromEditState(state).map((o) => o.type)).toEqual([
+      "tint", // Tuning-tab white-balance tint
+      "warmify",
+      "tint", // Effects-tab color tint
+      "film_grain",
+      "soft_focus",
+      "vignette",
+      "border",
+      "drop_shadow",
+    ]);
+  });
+
+  it("round-trip through recipeFromState / stateFromRecipe", () => {
+    const state: EditState = {
+      ...untouched,
+      tuning: { ...DEFAULT_TUNING, tint: 0.2 },
+      effects,
+    };
+    expect(stateFromRecipe(recipeFromState(state))).toEqual(state);
+  });
+
+  it("a colored tint never leaks into the Tuning tint slider", () => {
+    const restored = stateFromRecipe({
+      spec: "fotobase.recipe",
+      version: 1,
+      ops: [{ type: "tint", params: { color: "#ff0000", amount: 0.5 } }],
+    });
+    expect(restored.tuning.tint).toBe(DEFAULT_TUNING.tint);
+    // Custom color: not the tab's own op, so it is preserved verbatim.
+    expect(restored.extra).toEqual([
+      { type: "tint", params: { color: "#ff0000", amount: 0.5 } },
+    ]);
+  });
+
+  it("undo/redo step through effect changes", () => {
+    let h = editHistory(untouched);
+    h = pushEditState(h, { ...untouched, effects: { vignette: 0.5 } });
+    h = pushEditState(h, {
+      ...untouched,
+      effects: { vignette: 0.5, border: 0.5 },
+    });
+    h = undo(h)!;
+    expect(h.present.effects).toEqual({ vignette: 0.5 });
+    h = redo(h)!;
+    expect(h.present.effects).toEqual({ vignette: 0.5, border: 0.5 });
+  });
+});

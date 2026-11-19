@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_STRENGTH,
   clampedStrength,
+  EFFECTS,
+  effectFromOp,
   opsFromEffects,
   toggleEffect,
   type EffectsState,
@@ -62,5 +64,87 @@ describe("effects", () => {
     for (const effect of ["sharpen", "sepia", "bw", "saturation"] as const) {
       expect(DEFAULT_STRENGTH[effect]).toBeGreaterThan(0);
     }
+  });
+});
+
+// TASK-08-001: Warmify, Film Grain, Tint, Soft Focus, Vignette and the
+// Border / Drop Shadow frames join the Effects tab.
+describe("remaining effects and frames", () => {
+  const NEW = [
+    "warmify",
+    "tint",
+    "film_grain",
+    "soft_focus",
+    "vignette",
+    "border",
+    "drop_shadow",
+  ] as const;
+
+  it("every new effect has a one-click default strength", () => {
+    for (const effect of NEW) {
+      expect(EFFECTS).toContain(effect);
+      expect(DEFAULT_STRENGTH[effect]).toBeGreaterThan(0);
+      expect(clampedStrength(effect, 5)).toBe(1);
+      expect(clampedStrength(effect, -5)).toBe(0);
+    }
+  });
+
+  it("one click emits the op with its default strength", () => {
+    for (const effect of NEW) {
+      const ops = opsFromEffects(toggleEffect({}, effect));
+      expect(ops).toHaveLength(1);
+      expect(ops[0].type).toBe(effect);
+      expect(ops[0].params.amount).toBe(DEFAULT_STRENGTH[effect]);
+    }
+  });
+
+  it("tint emits a color so it is never read as the white-balance tint", () => {
+    const [op] = opsFromEffects({ tint: 0.4 });
+    expect(op.params).toEqual({
+      amount: 0.4,
+      color: expect.stringMatching(/^#[0-9a-f]{6}$/i),
+    });
+  });
+
+  it("film grain emits the same params the batch flow writes", () => {
+    expect(opsFromEffects({ film_grain: 0.5 })[0].params).toEqual({
+      amount: 0.5,
+      seed: 0,
+    });
+  });
+
+  it("frames come last so photo effects never act on the frame", () => {
+    const state: EffectsState = {
+      drop_shadow: 0.5,
+      border: 0.5,
+      vignette: 0.5,
+      sharpen: 0.5,
+      film_grain: 0.5,
+    };
+    expect(opsFromEffects(state).map((o) => o.type)).toEqual([
+      "sharpen",
+      "film_grain",
+      "vignette",
+      "border",
+      "drop_shadow",
+    ]);
+  });
+
+  it("effectFromOp only claims ops the tab would emit itself", () => {
+    expect(effectFromOp("vignette", { amount: 0.3 })).toEqual([
+      "vignette",
+      0.3,
+    ]);
+    expect(effectFromOp("film_grain", { amount: 0.5, seed: 0 })).toEqual([
+      "film_grain",
+      0.5,
+    ]);
+    // Foreign seed / custom colors / white-balance tint belong elsewhere.
+    expect(effectFromOp("film_grain", { amount: 0.5, seed: 3 })).toBeNull();
+    expect(
+      effectFromOp("border", { amount: 0.5, color: "#ff0000" }),
+    ).toBeNull();
+    expect(effectFromOp("tint", { green_magenta: 0.2 })).toBeNull();
+    expect(effectFromOp("temperature", { kelvin_shift: 0.2 })).toBeNull();
   });
 });
