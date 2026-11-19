@@ -18,7 +18,7 @@
 //! (TASK-01-009) will later own scan execution; until then the worker keeps
 //! the same serial, cancellable contract.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -65,11 +65,72 @@ enum Cmd {
     Remove(PathBuf, Sender<()>),
 }
 
+/// A work item: the root to scan plus the instant its triggering event was
+/// first observed (by the debouncer). The worker compares that instant
+/// against the root's removal time to tell a closing scan (enqueued while
+/// the root was still watched, may drain after `remove_root`) from a
+/// straggler event delivered by a backend after the watcher was dropped.
+struct Work {
+    root: PathBuf,
+    observed_at: Instant,
+}
+
 /// Which backend watches a root (TASK-02-008): `notify` for local
 /// filesystems, polling for SMB/NFS where inotify/FSEvents never fire.
 enum Backend {
     Notify(notify::RecommendedWatcher),
     Poll(Poller),
+}
+
+/// Live root liveness bookkeeping, shared between the watch thread (which
+/// marks/unmarks) and the worker (which consults it).
+///
+/// `active: HashMap<canon, ()>` — roots currently watched. `removed_at` —
+/// when a root was unmarked, kept until re-added. The worker uses the
+/// timestamps to distinguish two cases with the same symptom (an event
+/// arriving after `remove_root` acknowledged):
+///
+/// - a *closing scan*: queued while the root was still watched and drained
+///   after removal (debounce window, busy worker). It reflects disk state
+///   the user asked for — it must run.
+/// - a *straggler event*: some backends (Windows ReadDirectoryChangesW,
+///   macOS FSEvents) can deliver an event buffered at watcher-drop time.
+///   Scanning on it would resurrect a just-unwatched folder — it must be
+///   skipped.
+///
+/// The rule: an observed_at **before** `removed_at` is a closing scan; at
+/// or after it is a straggler. (Windows CI: `removed_root_stops_scanning`
+/// failed 1-in-N on windows-latest, also on main in run 44129595050.)
+#[derive(Default)]
+struct RootLiveness {
+    active: HashMap<PathBuf, ()>,
+    removed_at: HashMap<PathBuf, Instant>,
+}
+
+impl RootLiveness {
+    fn mark_active(&mut self, canon: &Path) {
+        self.active.insert(canon.to_path_buf(), ());
+        self.removed_at.remove(canon);
+    }
+
+    /// Unmark and record when; returns the removal instant.
+    fn mark_removed(&mut self, canon: &Path) {
+        self.active.remove(canon);
+        self.removed_at.insert(canon.to_path_buf(), Instant::now());
+    }
+
+    /// Whether a work item observed at `observed_at` may still scan.
+    fn may_scan(&self, canon: &Path, observed_at: Instant) -> bool {
+        if self.active.contains_key(canon) {
+            return true;
+        }
+        match self.removed_at.get(canon) {
+            // Removed before the event was even observed: straggler.
+            Some(&removed) => observed_at < removed,
+            // Removed and forgotten (e.g. never canonicalized here): skip.
+            None => false,
+        }
+    }
 }
 
 /// Canonicalize an event path; for vanished files fall back to
@@ -88,7 +149,7 @@ fn canonical_event_path(path: &Path) -> Option<PathBuf> {
 fn make_root_watcher(
     canon: PathBuf,
     given: PathBuf,
-    event_tx: Sender<PathBuf>,
+    event_tx: Sender<(PathBuf, Instant)>,
 ) -> Result<notify::RecommendedWatcher, notify::Error> {
     notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
         let Ok(ev) = res else { return };
@@ -106,7 +167,7 @@ fn make_root_watcher(
         for path in ev.paths {
             let Some(c) = canonical_event_path(&path) else { continue };
             if c.starts_with(&canon) {
-                let _ = event_tx.send(given.clone());
+                let _ = event_tx.send((given.clone(), Instant::now()));
             }
         }
     })
@@ -125,8 +186,8 @@ pub struct Watcher {
     /// show idle / watching / scanning.
     scanning: Arc<AtomicBool>,
     cmd_tx: Option<Sender<Cmd>>,
-    event_tx: Option<Sender<PathBuf>>,
-    work_tx: Option<Sender<PathBuf>>,
+    event_tx: Option<Sender<(PathBuf, Instant)>>,
+    work_tx: Option<Sender<Work>>,
     threads: Vec<JoinHandle<()>>,
 }
 
@@ -150,15 +211,27 @@ impl Watcher {
         debounce: Duration,
         on_change: Option<ScanHook>,
     ) -> Result<Self, WatcherError> {
-        let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
-        let (work_tx, work_rx) = mpsc::channel::<PathBuf>();
+        let (event_tx, event_rx) = mpsc::channel::<(PathBuf, Instant)>();
+        let (work_tx, work_rx) = mpsc::channel::<Work>();
         let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
         let cancel = Arc::new(AtomicBool::new(false));
         let paused = Arc::new(AtomicBool::new(false));
         let scanning = Arc::new(AtomicBool::new(false));
         let scan_count = Arc::new(AtomicUsize::new(0));
+        // Roots currently watched, keyed by canonical path. The worker
+        // consults it before scanning: some backends (Windows
+        // ReadDirectoryChangesW in particular) can still deliver an event
+        // buffered at drop time, and an event queued before `remove_root`
+        // flushes through the debounce window afterwards. Either way the
+        // root must not be scanned once removal is acknowledged.
 
         let mut threads = Vec::new();
+        let liveness: Arc<Mutex<RootLiveness>> = Arc::new(Mutex::new(RootLiveness::default()));
+        for root in roots {
+            if let Ok(canon) = fs::canonicalize(root) {
+                liveness.lock().unwrap().mark_active(&canon);
+            }
+        }
 
         // Watch thread: one backend per root. Local filesystems get a notify
         // watcher (one per root — recommending a shared watcher is
@@ -170,6 +243,7 @@ impl Watcher {
         // scan worker are unchanged.
         {
             let event_tx = event_tx.clone();
+            let liveness = liveness.clone();
             let mut watchers: HashMap<PathBuf, Backend> = HashMap::new();
             for root in roots {
                 let canon = fs::canonicalize(root)?;
@@ -194,6 +268,7 @@ impl Watcher {
                         Cmd::Add(given, reply) => {
                             match fs::canonicalize(&given) {
                                 Ok(canon) => {
+                                    liveness.lock().unwrap().mark_active(&canon);
                                     if is_network_path(&canon) {
                                         // Polling backend (TASK-02-008):
                                         // notify never fires over SMB/NFS.
@@ -210,7 +285,7 @@ impl Watcher {
                                                 PollConfig::default(),
                                             )),
                                         );
-                                        let _ = event_tx.send(given.clone());
+                                        let _ = event_tx.send((given.clone(), Instant::now()));
                                         let _ = reply.send(());
                                     } else {
                                         match make_root_watcher(
@@ -229,7 +304,7 @@ impl Watcher {
                                                     // scan through the debounce pipeline closes
                                                     // that gap; it is a fast no-op when nothing
                                                     // changed.
-                                                    let _ = event_tx.send(given.clone());
+                                                    let _ = event_tx.send((given.clone(), Instant::now()));
                                                 } else {
                                                     tracing::warn!(path = %given.display(), "cannot watch folder");
                                                 }
@@ -250,6 +325,11 @@ impl Watcher {
                         }
                         Cmd::Remove(given, reply) => {
                             if let Ok(canon) = fs::canonicalize(&given) {
+                                // Unmark before dropping the watcher: any
+                                // event that still slips through after the
+                                // drop (buffered delivery on some backends)
+                                // must find the root inactive in the worker.
+                                liveness.lock().unwrap().mark_removed(&canon);
                                 // Dropping the watcher stops its stream; a
                                 // poll backend is stopped explicitly so its
                                 // thread joins (the notify watcher needs only
@@ -271,11 +351,13 @@ impl Watcher {
         // root after a quiet window. The deadline rolls forward on every
         // event (backends deliver a burst like write-then-rename-in in
         // several waves hundreds of ms apart), capped at 2 s from the first
-        // pending event so continuous churn still flushes.
+        // pending event so continuous churn still flushes. The work item
+        // carries the *first* observation instant of the burst — the
+        // worker's closing-scan/straggler rule keys on it.
         {
             let work_tx = work_tx.clone();
             threads.push(thread::Builder::new().name("fb-debounce".into()).spawn(move || {
-                let mut pending: HashSet<PathBuf> = HashSet::new();
+                let mut pending: HashMap<PathBuf, Instant> = HashMap::new();
                 let mut quiet_deadline: Option<Instant> = None;
                 let mut window_start: Option<Instant> = None;
                 loop {
@@ -288,22 +370,24 @@ impl Watcher {
                         (None, _) => Duration::from_secs(3600),
                     };
                     match event_rx.recv_timeout(timeout) {
-                        Ok(root) => {
-                            pending.insert(root);
+                        Ok((root, observed_at)) => {
+                            // First observation wins; later waves of the
+                            // same burst leave the stamp alone.
+                            pending.entry(root).or_insert(observed_at);
                             let now = Instant::now();
                             quiet_deadline = Some(now + debounce);
                             window_start.get_or_insert(now);
                         }
                         Err(RecvTimeoutError::Timeout) => {
-                            for root in pending.drain() {
-                                let _ = work_tx.send(root);
+                            for (root, observed_at) in pending.drain() {
+                                let _ = work_tx.send(Work { root, observed_at });
                             }
                             quiet_deadline = None;
                             window_start = None;
                         }
                         Err(RecvTimeoutError::Disconnected) => {
-                            for root in pending.drain() {
-                                let _ = work_tx.send(root);
+                            for (root, observed_at) in pending.drain() {
+                                let _ = work_tx.send(Work { root, observed_at });
                             }
                             break;
                         }
@@ -320,6 +404,7 @@ impl Watcher {
             let scanning = scanning.clone();
             let scan_count = scan_count.clone();
             let on_change = on_change;
+            let liveness = liveness.clone();
             threads.push(thread::Builder::new().name("fb-scan".into()).spawn(move || {
                 // Park while paused (TASK-03-025): queued events stay in the
                 // work channel and are scanned once the gate lifts, so a
@@ -334,15 +419,28 @@ impl Watcher {
                     if cancel.load(Ordering::Relaxed) {
                         break;
                     }
-                    let mut batch = HashSet::new();
-                    batch.insert(first);
+                    let mut batch: HashMap<PathBuf, Instant> = HashMap::new();
+                    batch.insert(first.root, first.observed_at);
                     while let Ok(more) = work_rx.try_recv() {
-                        batch.insert(more);
+                        batch.entry(more.root).or_insert(more.observed_at);
                     }
-                    for root in batch {
+                    for (root, observed_at) in batch {
                         wait_gate(&paused, &cancel);
                         if cancel.load(Ordering::Relaxed) {
                             break;
+                        }
+                        // Closing scan vs straggler (see `RootLiveness`):
+                        // an event observed before the root was removed is
+                        // a legitimate queued scan and must run; an event
+                        // observed at/after removal was delivered by a
+                        // backend after the watcher was dropped and must
+                        // not resurrect the root.
+                        let may_scan = fs::canonicalize(&root).is_ok_and(|c| {
+                            liveness.lock().unwrap().may_scan(&c, observed_at)
+                        });
+                        if !may_scan {
+                            tracing::debug!(root = %root.display(), "skipping event for removed root");
+                            continue;
                         }
                         scanning.store(true, Ordering::Relaxed);
                         let report = {
