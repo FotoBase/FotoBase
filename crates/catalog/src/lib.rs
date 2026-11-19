@@ -6,6 +6,7 @@
 //! trigger the rebuild-from-sidecars recovery path.
 
 pub mod albums;
+pub mod backup;
 pub mod blend;
 pub mod bursts;
 pub mod datetime;
