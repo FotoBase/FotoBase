@@ -1,6 +1,6 @@
 # task: build backup manager with incremental sets
 
-**Feature:** [FEAT-08-01-backup](FEAT-08-01-backup.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-01-backup](FEAT-08-01-backup.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-19)
 
 ## Description
 Backup Manager (Tools menu) creating incremental backup sets of catalog + sidecars + settings to an external location (PLAN §2 Tools menu Backup Manager; §6 P4 "Incremental backup + restore"). Backs up user data per the PLAN §5 authority split — sidecars and settings are the crown jewels; the catalog DB rides along for speed.
@@ -22,5 +22,5 @@ Backup Manager (Tools menu) creating incremental backup sets of catalog + sideca
 - Integration: unplug simulation (destination becomes read-only mid-run) → no partial manifest written.
 
 ## Acceptance criteria
-- [ ] 08-014: Backup Manager creates incremental backup sets (catalog + sidecars + settings) to an external location with progress and scheduling.
-- [ ] 08-014: Incremental sets contain only the delta; sets are self-describing.
+- [x] 08-014: Backup Manager creates incremental backup sets (catalog + sidecars + settings) to an external location with progress and scheduling.
+- [x] 08-014: Incremental sets contain only the delta; sets are self-describing.

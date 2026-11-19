@@ -25,6 +25,7 @@
   import QuickTags from "./lib/QuickTags.svelte";
   import StackPicker from "./lib/StackPicker.svelte";
   import StackSuggestionsDialog from "./lib/StackSuggestionsDialog.svelte";
+  import BackupManagerDialog from "./lib/BackupManagerDialog.svelte";
   import DuplicateFinderDialog from "./lib/DuplicateFinderDialog.svelte";
   import PeoplePanel from "./lib/PeoplePanel.svelte";
   import PeopleManagerDialog from "./lib/PeopleManagerDialog.svelte";
@@ -75,6 +76,8 @@
   let folderManagerOpen = $state(false);
   let importOpen = $state(false);
   let trashOpen = $state(false);
+  // Backup Manager (TASK-08-014, PLAN §2L Tools menu).
+  let backupOpen = $state(false);
   // Folder ini migration offer (TASK-03-022): folders a scan found an ini
   // in; the dialog opens whenever one is waiting for an answer.
   let folderIniOpen = $state(false);
@@ -958,6 +961,9 @@
   <button type="button" onclick={() => (mapOpen = true)} data-testid="open-map">
     {t("app.map")}
   </button>
+  <button type="button" onclick={() => (backupOpen = true)} data-testid="open-backup">
+    {t("app.backup")}
+  </button>
   <!-- "On this day" (TASK-07-008): read-only resurfacing of this date's
        photos from past years. -->
   <button type="button" onclick={() => (memoriesOpen = true)} data-testid="open-memories">
@@ -989,6 +995,7 @@
     onmigrated={() => void refreshLibrary()}
   />
   <StackSuggestionsDialog bind:open={stackSuggestionsOpen} onapplied={() => void refreshView()} />
+  <BackupManagerDialog bind:open={backupOpen} />
   <DuplicateFinderDialog bind:open={duplicateFinderOpen} onapplied={() => void refreshView()} />
   <PeoplePanel bind:open={peopleOpen} onchanged={() => void refreshView()} />
   <PeopleManagerDialog

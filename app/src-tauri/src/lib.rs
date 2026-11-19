@@ -13,6 +13,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 pub mod associations;
+pub mod backup;
 pub mod basemap;
 pub mod batch_commands;
 pub mod batch_edit;
@@ -81,6 +82,10 @@ const DATETIME_QUEUE_CAPACITY: usize = 4;
 /// Capacity of the portable-export queue (TASK-03-023): bounded, per PLAN
 /// §3 rule 4; exports are cheap reads, the single worker serializes them.
 const EXPORT_QUEUE_CAPACITY: usize = 2;
+/// Capacity of the backup queue (TASK-08-014): bounded, per PLAN §3 rule
+/// 4; runs key on their destination, so a scheduled run coalesces onto a
+/// user-started one to the same drive.
+const BACKUP_QUEUE_CAPACITY: usize = 2;
 /// Capacity of the photo-export queue (TASK-04-015): one batch at a time,
 /// the single worker serializes them (PLAN §3 rule 4).
 const PHOTO_EXPORT_QUEUE_CAPACITY: usize = 1;
@@ -161,6 +166,15 @@ struct AppState {
     datetime_jobs: fotobase_jobs::Queue<fotobase_catalog::AdjustReport>,
     /// Bounded queue for portable user-data exports (TASK-03-023).
     exports: fotobase_jobs::Queue<fotobase_catalog::ExportReport>,
+    /// Bounded queue for Backup Manager runs (TASK-08-014).
+    backups: fotobase_jobs::Queue<fotobase_catalog::backup::BackupReport>,
+    /// Cancel token of the running backup (TASK-08-014).
+    backup_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
+    /// Backup Manager destination + schedule, mirrored in backup.json.
+    backup_config: Mutex<backup::BackupConfig>,
+    /// Shared power state (TASK-05-002): background queues pause on it,
+    /// backup hashing paces on it (TASK-08-014).
+    battery: std::sync::Arc<fotobase_jobs::BatteryHook>,
     /// Bounded queue for export-dialog batches (TASK-04-015); one batch at
     /// a time, per-photo progress emitted as `photo-export-progress`.
     photo_exports: fotobase_jobs::Queue<export_dialog::ExportBatch>,
@@ -1795,6 +1809,145 @@ async fn export_user_data(
         fotobase_jobs::Outcome::Cancelled => Err("export cancelled".into()),
         fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
     }
+}
+
+/// Backup Manager (TASK-08-014, PLAN §2L): one backup set of the catalog,
+/// sidecars and settings into `dest`, incremental to the newest set there.
+/// Runs in the bounded job queue on a blocking thread with its own catalog
+/// connection; progress streams on [`backup::BACKUP_EVENT`].
+#[tauri::command]
+async fn run_backup(
+    dest: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<fotobase_catalog::backup::BackupReport, String> {
+    enqueue_backup(&state, PathBuf::from(dest)).await
+}
+
+async fn enqueue_backup(
+    state: &AppState,
+    dest: PathBuf,
+) -> Result<fotobase_catalog::backup::BackupReport, String> {
+    let token = fotobase_jobs::CancelToken::default();
+    *state.backup_cancel.lock().map_err(|e| format!("backup cancel mutex poisoned: {e}"))? =
+        Some(token.clone());
+    let queue = state.backups.clone();
+    let catalog_path = state.catalog_path();
+    let data_dir = state.data_dir.clone();
+    let battery = state.battery.clone();
+    let app = state.app_handle.clone();
+    let key = format!("backup:{}", dest.to_string_lossy());
+    let handle = queue
+        .try_enqueue(
+            key,
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |ctx| {
+                let (catalog_path, data_dir, dest, battery, app, token) = (
+                    catalog_path.clone(),
+                    data_dir.clone(),
+                    dest.clone(),
+                    battery.clone(),
+                    app.clone(),
+                    token.clone(),
+                );
+                async move {
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        backup::run(
+                            &catalog_path,
+                            &data_dir,
+                            &dest,
+                            &|| token.is_cancelled() || ctx.is_cancelled(),
+                            &|| battery.on_battery(),
+                            &|p| {
+                                let _ = app.emit(backup::BACKUP_EVENT, p);
+                            },
+                        )
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(report)) => fotobase_jobs::Outcome::Done(report),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("backup task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue backup: {e}"))?;
+    let outcome = handle.result().await;
+    if let Ok(mut guard) = state.backup_cancel.lock() {
+        *guard = None;
+    }
+    match outcome.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("backup cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// One scheduler tick (TASK-08-014): run the due backup, if any, and report
+/// the outcome on [`backup::BACKUP_FINISHED_EVENT`]. Skipped on battery.
+async fn run_scheduled_backup(app: &tauri::AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    if state.battery.on_battery() {
+        return;
+    }
+    let config = match state.backup_config.lock() {
+        Ok(guard) => guard.clone(),
+        Err(_) => return,
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let Some(dest) = config.due_destination(now) else {
+        return;
+    };
+    let payload = match enqueue_backup(&state, dest).await {
+        Ok(report) => serde_json::json!({ "ok": true, "report": report }),
+        Err(e) => {
+            tracing::warn!("scheduled backup failed: {e}");
+            serde_json::json!({ "ok": false, "error": e })
+        }
+    };
+    let _ = app.emit(backup::BACKUP_FINISHED_EVENT, payload);
+}
+
+/// Cancel the running backup (best-effort; a no-op without one). The run
+/// stops between files and records no set.
+#[tauri::command]
+fn cancel_backup(state: tauri::State<'_, AppState>) {
+    let token = state.backup_cancel.lock().ok().and_then(|g| g.clone());
+    if let Some(token) = token {
+        token.cancel();
+    }
+}
+
+#[tauri::command]
+fn get_backup_config(state: tauri::State<'_, AppState>) -> Result<backup::BackupConfig, String> {
+    Ok(state
+        .backup_config
+        .lock()
+        .map_err(|e| format!("backup config mutex poisoned: {e}"))?
+        .clone())
+}
+
+/// Persist the destination + schedule (file first, then memory).
+#[tauri::command]
+fn set_backup_config(
+    config: backup::BackupConfig,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    config.save(&state.data_dir).map_err(|e| format!("save backup config: {e}"))?;
+    *state.backup_config.lock().map_err(|e| format!("backup config mutex poisoned: {e}"))? = config;
+    Ok(())
+}
+
+/// Sets already stored at `dest`, oldest first. An unplugged destination
+/// simply lists none.
+#[tauri::command]
+fn list_backup_sets(dest: String) -> Result<Vec<fotobase_catalog::backup::SetSummary>, String> {
+    fotobase_catalog::backup::list_sets(Path::new(&dest)).map_err(|e| e.to_string())
 }
 
 /// Batch rename: real file renames, sidecars and catalog rows following.
@@ -3487,6 +3640,9 @@ pub fn run() {
             let photo_exports = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(PHOTO_EXPORT_QUEUE_CAPACITY)
             });
+            let backups = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(BACKUP_QUEUE_CAPACITY)
+            });
             let edits = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(EDIT_QUEUE_CAPACITY)
             });
@@ -3570,6 +3726,10 @@ pub fn run() {
                 datetime_jobs,
                 exports,
                 photo_exports,
+                backups,
+                backup_cancel: Mutex::new(None),
+                backup_config: Mutex::new(backup::BackupConfig::load(&data_dir)),
+                battery: face_battery.clone(),
                 edits,
                 batch_edits,
                 dupes,
@@ -3634,6 +3794,15 @@ pub fn run() {
                     if let Some(on_battery) = face_jobs::probe_on_battery() {
                         battery_hook.set_on_battery(on_battery);
                     }
+                }
+            });
+            // Backup scheduler (TASK-08-014): a due scheduled backup runs
+            // when its destination is plugged in and the machine is on AC.
+            let backup_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(backup::SCHEDULE_CHECK_INTERVAL).await;
+                    run_scheduled_backup(&backup_app).await;
                 }
             });
             // stream:// janitor (TASK-02-006): the idle-timeout backstop —
@@ -3766,6 +3935,11 @@ pub fn run() {
             preview_datetime_adjustment,
             adjust_datetime,
             export_user_data,
+            get_backup_config,
+            set_backup_config,
+            run_backup,
+            cancel_backup,
+            list_backup_sets,
             export_photos,
             preview_batch_rename,
             batch_rename,
