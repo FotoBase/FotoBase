@@ -19,6 +19,12 @@ import {
 } from "./effects";
 import { opsFromState as redEyeOps, type RedEyeState } from "./red-eye";
 import {
+  DEFAULT_RETOUCH,
+  opsFromRetouch,
+  retouchFromOps,
+  type RetouchState,
+} from "./retouch";
+import {
   DEFAULT_TUNING,
   opsFromState as tuningOps,
   type TuningState,
@@ -46,6 +52,7 @@ export const DEFAULT_EFFECTS: EffectsState = {};/// The untouched edit state: ev
 export const EMPTY_EDIT_STATE: EditState = {
   crop: DEFAULT_CROP,
   redEye: DEFAULT_RED_EYE,
+  retouch: DEFAULT_RETOUCH,
   autoFix: DEFAULT_AUTO_FIX,
   tuning: DEFAULT_TUNING,
   effects: DEFAULT_EFFECTS,
@@ -56,13 +63,15 @@ export const EMPTY_EDIT_STATE: EditState = {
 export interface EditState {
   crop: CropStraightenState;
   redEye: RedEyeState;
+  /// Heal-brush strokes (TASK-08-002).
+  retouch: RetouchState;
   autoFix: AutoFixState;
   tuning: TuningState;
   effects: EffectsState;
   /// AI-estimated leveling angle in degrees (TASK-07-007), `null` when no
   /// estimate was applied. Emitted as the v1 `auto_rotate` op.
   autoRotate: number | null;
-  /// Ops no tab owns (text, retouch, rotate, film grain — written by the
+  /// Ops no tab owns (text, rotate, film grain — written by the
   /// batch flow or future tooling). Passed through verbatim so saving an
   /// edit never destroys edits the tabs cannot represent (spec §5: a
   /// reader must not lose foreign data).
@@ -76,6 +85,9 @@ export type RecipeOp = { type: string; params: Record<string, unknown> };
 /// effects). A tab at its neutral position contributes nothing.
 export function opsFromEditState(state: EditState): RecipeOp[] {
   return [
+    // Strokes are placed on the uncropped preview: heal the source pixels
+    // first, then let geometry ops move them.
+    ...opsFromRetouch(state.retouch),
     ...cropOps(state.crop),
     ...(state.autoRotate !== null
       ? [{ type: "auto_rotate", params: { angle_deg: state.autoRotate } } satisfies RecipeOp]
@@ -100,7 +112,7 @@ export function recipeFromState(state: EditState): {
 }
 
 /// Rebuild the tab states from a stored recipe. Ops the tabs do not own
-/// (retouch, text — written by future tooling) are skipped, never fail the
+/// (text — written by future tooling) are skipped, never fail the
 /// load, matching the reader conformance rule (spec §5).
 export function stateFromRecipe(recipe: {
   spec?: string;
@@ -110,6 +122,7 @@ export function stateFromRecipe(recipe: {
   const state: EditState = {
     crop: { ...DEFAULT_CROP, crop: { ...DEFAULT_CROP.crop } },
     redEye: { ...DEFAULT_RED_EYE, regions: [] },
+    retouch: { strokes: [] },
     autoFix: { ...DEFAULT_AUTO_FIX },
     tuning: { ...DEFAULT_TUNING },
     effects: { ...DEFAULT_EFFECTS },
@@ -144,6 +157,11 @@ export function stateFromRecipe(recipe: {
         break;
       case "auto_rotate":
         state.autoRotate = num(params.angle_deg, 0);
+        break;
+      case "retouch":
+        state.retouch = {
+          strokes: [...state.retouch.strokes, ...retouchFromOps([params]).strokes],
+        };
         break;
       case "auto_color":
         state.autoFix = { ...state.autoFix, autoColor: true };
@@ -196,7 +214,7 @@ export function stateFromRecipe(recipe: {
         }
         break;
       default:
-        // An op no tab owns (text, retouch, rotate, film grain — the batch
+        // An op no tab owns (text, rotate, film grain — the batch
         // flow or future tooling): keep it so a later save re-emits it
         // verbatim instead of silently dropping the user's edits.
         state.extra = [...state.extra, { type: op.type, params }];

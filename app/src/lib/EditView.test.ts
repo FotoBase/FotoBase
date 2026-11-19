@@ -139,6 +139,32 @@ describe("EditView", () => {
     vi.useRealTimers();
   });
 
+  it("a heal-brush stroke persists as a retouch op and survives a reload (TASK-08-002)", async () => {
+    Element.prototype.getBoundingClientRect = function () {
+      return { left: 0, top: 0, width: 100, height: 50, right: 100, bottom: 50, x: 0, y: 0, toJSON() {} } as DOMRect;
+    };
+    vi.useFakeTimers();
+    render(EditView, props());
+    await settleMicro();
+    invokeMock.mockClear();
+    const stage = screen.getByTestId("retouch-stage");
+    fireEvent.pointerDown(stage, { clientX: 50, clientY: 25, pointerId: 1 });
+    fireEvent.pointerUp(stage, { clientX: 50, clientY: 25, pointerId: 1 });
+    await settleMicro();
+    vi.advanceTimersByTime(400);
+    await vi.runAllTimersAsync();
+
+    const saveCall = invokeMock.mock.calls.find((c) => c[0] === "set_recipe");
+    expect(saveCall).toBeTruthy();
+    expect(JSON.parse(saveCall![1].recipe).ops).toEqual([
+      {
+        type: "retouch",
+        params: { strokes: [{ points: [[0.5, 0.5]], radius: 0.03 }] },
+      },
+    ]);
+    vi.useRealTimers();
+  });
+
   it("a completed render swaps the preview to the edited URI", async () => {
     vi.useFakeTimers();
     invokeMock.mockImplementation((cmd: string) =>

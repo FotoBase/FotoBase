@@ -1,6 +1,6 @@
 # task: add heal brush retouch recipe op
 
-**Feature:** [FEAT-08-05-remaining-editor-tools](FEAT-08-05-remaining-editor-tools.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-05-remaining-editor-tools](FEAT-08-05-remaining-editor-tools.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-19)
 
 ## Description
 Retouch heal brush for blemishes/dust, recorded as strokes in a recipe op (PLAN §2 §E Retouch P4; §5 recipe op `retouch(strokes)`). Non-destructive and consistent between preview and export — strokes are stored, healing is re-executed at render time.
@@ -22,5 +22,5 @@ Retouch heal brush for blemishes/dust, recorded as strokes in a recipe op (PLAN 
 - Integration: deleting one stroke from the list re-renders without the other strokes changing.
 
 ## Acceptance criteria
-- [ ] 08-002: Heal brush records strokes as recipe ops — non-destructive, consistent between preview and export.
-- [ ] 08-002: Strokes are individually undoable/deletable and resolution-independent.
+- [x] 08-002: Heal brush records strokes as recipe ops — non-destructive, consistent between preview and export.
+- [x] 08-002: Strokes are individually undoable/deletable and resolution-independent.

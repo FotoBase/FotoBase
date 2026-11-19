@@ -21,6 +21,7 @@
   import CropStraightenPanel from "./CropStraightenPanel.svelte";
   import EffectsPanel from "./EffectsPanel.svelte";
   import RedEyePanel from "./RedEyePanel.svelte";
+  import RetouchPanel from "./RetouchPanel.svelte";
   import TuningPanel from "./TuningPanel.svelte";
   import {
     EDIT_TABS,
@@ -473,6 +474,11 @@
           previewSrc={baseUri ?? ""}
           initial={state.redEye}
           onchange={(redEye) => mergeTab({ redEye })}
+        />
+        <RetouchPanel
+          previewSrc={baseUri ?? ""}
+          initial={state.retouch}
+          onchange={(retouch) => mergeTab({ retouch })}
         />
         <AutoFixPanel
           previewSrc={baseUri ?? ""}
