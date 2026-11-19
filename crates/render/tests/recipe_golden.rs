@@ -296,6 +296,19 @@ fn cases() -> Vec<GoldenCase> {
             ),
             tol: by_op("retouch"),
         },
+        // TASK-08-002: a multi-point stroke across the patch edges and a
+        // second independent stroke, healed from their surroundings.
+        GoldenCase {
+            name: "retouch_strokes",
+            recipe: op(
+                "retouch",
+                json!({ "strokes": [
+                    { "points": [[0.10, 0.20], [0.30, 0.50], [0.45, 0.50]], "radius": 0.04 },
+                    { "points": [[0.75, 0.30]], "radius": 0.06 }
+                ] }),
+            ),
+            tol: by_op("retouch"),
+        },
         GoldenCase {
             name: "saturation",
             recipe: op("saturation", json!({ "amount": 0.5 })),

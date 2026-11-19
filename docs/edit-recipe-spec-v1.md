@@ -51,7 +51,7 @@ An open, versioned format. Any tool can read and apply a Fotobase recipe from th
 | `warm_colors`, `cool_colors` | `amount` [0..1] | Picasa Tuning-tab equivalents |
 | `red_eye` | `regions: [{x, y, r}]`, optional `auto: bool` | normalized circles; `auto: true` detects pupils (red-dominance blobs) instead of using explicit regions |
 | `text` | `text, x, y, size, color, font, rotation` | v1: rasterized at export; params normalized |
-| `retouch` | `strokes: [{points: [[x,y]...], radius}]` | classic diffusion heal |
+| `retouch` | `strokes: [{points: [[x,y]...], radius}]` | heal brush (TASK-08-002): classic diffusion heal — pixels under each stroke become the harmonic (Laplace) interpolation of the surrounding pixels. `points` are fractions of width/height (a polyline; one point = a dab); `radius` is a fraction of the **shorter side**, so the brush is round at any aspect ratio. Strokes apply in array order, each from the pixels around its own bounding box, so strokes that do not touch are independent of one another. Write it before geometry ops (`crop`, `straighten`) when the strokes were placed on the uncropped photo |
 | `grayscale` | `enabled: bool` | |
 | `bw` | `amount` [0..1] (1.0) | B&W blend strength; recipe op, distinct from the view-only B&W display mode |
 | `sharpen` | `amount` [0..1] | |

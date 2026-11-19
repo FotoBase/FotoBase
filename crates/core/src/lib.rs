@@ -2,6 +2,7 @@
 
 pub mod apply;
 pub mod buffer;
+pub mod heal;
 pub mod history;
 pub mod recipe;
 

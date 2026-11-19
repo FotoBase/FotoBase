@@ -901,100 +901,13 @@ fn box_blur(img: &LinearImage, radius: u32) -> LinearImage {
     out
 }
 
-/// Stamp a filled disc (normalized point, pixel radii) into the stroke mask.
-fn stamp_point(mask: &mut [bool], w: usize, h: usize, nx: f64, ny: f64, rx: f64, ry: f64) {
-    let cx = nx * w as f64;
-    let cy = ny * h as f64;
-    let x0 = ((cx - rx) as i64).max(0) as usize;
-    let x1 = ((cx + rx) as i64).min(w as i64 - 1) as usize;
-    let y0 = ((cy - ry) as i64).max(0) as usize;
-    let y1 = ((cy + ry) as i64).min(h as i64 - 1) as usize;
-    for y in y0..=y1 {
-        for x in x0..=x1 {
-            let nx = (x as f64 + 0.5 - cx) / rx;
-            let ny = (y as f64 + 0.5 - cy) / ry;
-            if nx * nx + ny * ny <= 1.0 {
-                mask[y * w + x] = true;
-            }
-        }
-    }
-}
-
-/// Classic diffusion heal: repeatedly replace pixels under the stroke with a
-/// weighted blend of their neighbourhood, so texture is smoothed out while
-/// the surrounding image anchors the result.
+/// Heal brush (TASK-08-002): strokes are normalized, so the same op heals
+/// the same area at preview and export resolution. See `heal`.
 fn retouch(img: &LinearImage, op: &Op) -> LinearImage {
-    let mut out = img.clone();
-    let Some(strokes) = param(op, "strokes").and_then(Value::as_array) else {
-        return out;
-    };
-    for stroke in strokes {
-        let points = stroke["points"].as_array().cloned().unwrap_or_default();
-        let radius = stroke["radius"].as_f64().unwrap_or(0.02);
-        if points.is_empty() {
-            continue;
-        }
-        // Mask of pixels covered by the stroke (line segments with radius).
-        let w = img.width as usize;
-        let h = img.height as usize;
-        let mut mask = vec![false; w * h];
-        let rx = (radius * img.width as f64).round().max(1.0);
-        let ry = (radius * img.height as f64).round().max(1.0);
-        if points.len() == 1 {
-            stamp_point(
-                &mut mask,
-                w,
-                h,
-                points[0][0].as_f64().unwrap_or(0.0),
-                points[0][1].as_f64().unwrap_or(0.0),
-                rx,
-                ry,
-            );
-        }
-        for pair in points.windows(2) {
-            let (ax, ay) = (pair[0][0].as_f64().unwrap(), pair[0][1].as_f64().unwrap());
-            let (bx, by) = (pair[1][0].as_f64().unwrap(), pair[1][1].as_f64().unwrap());
-            let steps =
-                ((ax - bx).abs().max((ay - by).abs()) * (img.width.max(img.height) as f64) * 2.0)
-                    .ceil() as usize;
-            for s in 0..=steps {
-                let t = if steps == 0 { 0.0 } else { s as f64 / steps as f64 };
-                let cx = (ax + (bx - ax) * t) * img.width as f64;
-                let cy = (ay + (by - ay) * t) * img.height as f64;
-                stamp_point(&mut mask, w, h, cx / img.width as f64, cy / img.height as f64, rx, ry);
-            }
-        }
-        // Diffuse: iteratively blend masked pixels toward the neighbourhood mean.
-        for _ in 0..6 {
-            let src = out.data.clone();
-            for y in 0..h {
-                for x in 0..w {
-                    if !mask[y * w + x] {
-                        continue;
-                    }
-                    let mut acc = [0.0f64; 3];
-                    let mut weight = 0.0f64;
-                    for dy in -1i64..=1 {
-                        for dx in -1i64..=1 {
-                            let sx = (x as i64 + dx).clamp(0, w as i64 - 1) as usize;
-                            let sy = (y as i64 + dy).clamp(0, h as i64 - 1) as usize;
-                            let wgt = if mask[sy * w + sx] { 0.25 } else { 1.0 };
-                            let i = (sy * w + sx) * 3;
-                            for (c, v) in src[i..i + 3].iter().enumerate() {
-                                acc[c] += *v as f64 * wgt;
-                            }
-                            weight += wgt;
-                        }
-                    }
-                    let i = (y * w + x) * 3;
-                    for (c, v) in out.data[i..i + 3].iter_mut().enumerate() {
-                        *v = (acc[c] / weight) as f32;
-                    }
-                }
-            }
-        }
+    match param(op, "strokes").and_then(Value::as_array) {
+        Some(strokes) => crate::heal::heal_strokes(img, strokes),
+        None => img.clone(),
     }
-    out
 }
 
 // ---------------------------------------------------------------------------

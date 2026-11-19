@@ -94,16 +94,52 @@ describe("stateFromRecipe", () => {
     ).toEqual(untouched);
   });
 
-  it("ignores ops the tabs do not own (retouch, text) instead of failing", () => {
+  it("ignores ops the tabs do not own (text) instead of failing", () => {
     const restored = stateFromRecipe({
       spec: "fotobase.recipe",
       version: 1,
       ops: [
-        { type: "retouch", params: {} },
+        { type: "text", params: {} },
         { type: "bw", params: { amount: 0.8 } },
       ],
     });
     expect(restored.effects).toEqual({ bw: 0.8 });
+  });
+
+  it("owns retouch: strokes are restored and re-emitted in a single op (TASK-08-002)", () => {
+    const strokes = [
+      { points: [[0.2, 0.3]], radius: 0.03 },
+      { points: [[0.5, 0.5], [0.6, 0.5]], radius: 0.05 },
+    ];
+    const restored = stateFromRecipe({
+      ops: [{ type: "retouch", params: { strokes } }],
+    });
+    expect(restored.retouch.strokes).toEqual(strokes);
+    expect(restored.extra).toEqual([]);
+    expect(isEmptyState(restored)).toBe(false);
+    expect(opsFromEditState(restored)).toEqual([
+      { type: "retouch", params: { strokes } },
+    ]);
+  });
+
+  it("retouch heals the source pixels: it comes before geometry ops", () => {
+    // Strokes are drawn on the uncropped preview, so they must apply
+    // before crop/straighten for the coordinates to mean the same pixels.
+    const state: EditState = {
+      ...untouched,
+      crop: {
+        crop: { x: 0.1, y: 0.1, w: 0.8, h: 0.8 },
+        angle: 0,
+        autoFill: true,
+      },
+      retouch: { strokes: [{ points: [[0.5, 0.5]], radius: 0.03 }] },
+      effects: { bw: 1 },
+    };
+    expect(opsFromEditState(state).map((op) => op.type)).toEqual([
+      "retouch",
+      "crop",
+      "bw",
+    ]);
   });
 
   it("keeps ops no tab owns so a save re-emits them (batch edits survive)", () => {
