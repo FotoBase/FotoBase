@@ -1,6 +1,6 @@
 # task: add remaining effects and frames recipe ops
 
-**Feature:** [FEAT-08-05-remaining-editor-tools](FEAT-08-05-remaining-editor-tools.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-19)
+**Feature:** [FEAT-08-05-remaining-editor-tools](FEAT-08-05-remaining-editor-tools.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-19)
 
 ## Description
 Implement the remaining Picasa effects as recipe ops on the EPIC-04 recipe engine: Warmify, Film Grain, Tint, Soft Focus, Vignette, plus frames Border and Drop Shadow (PLAN §2 §E effects tabs, §6 P4). Each is a versioned op with a strength parameter where applicable; golden-image tested.
