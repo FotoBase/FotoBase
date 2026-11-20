@@ -1,6 +1,6 @@
 # task: add local folder export plugin
 
-**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-20)
+**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-20)
 
 ## Description
 The first concrete plugin: export to a local folder, with album mapping as subfolders (PLAN §6 P4: "plugins: local folder"). Doubles as the reference implementation proving the 08-007 trait and contract suite.
