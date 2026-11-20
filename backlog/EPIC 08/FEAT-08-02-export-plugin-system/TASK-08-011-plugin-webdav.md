@@ -1,6 +1,6 @@
 # task: add webdav/nextcloud export plugin
 
-**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-20)
+**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-20)
 
 ## Description
 Export plugin for WebDAV endpoints (incl. Nextcloud/ownCloud shares) — PLAN §6 P4 plugin list.
