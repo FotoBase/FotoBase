@@ -14,7 +14,7 @@
 - [x] `08-009` (L) Plugin: Immich (API; design for future read-back/"cloud mirror" — §1 strategic note).
 - [x] `08-010` (M) Plugin: S3-compatible.
 - [x] `08-011` (M) Plugin: WebDAV/Nextcloud.
-- [ ] `08-012` (M) Plugin: Google Photos (upload-only, §10 API restriction).
+- [x] `08-012` (M) Plugin: Google Photos (upload-only, §10 API restriction).
 - [ ] `08-013` (M) Tools → Upload dialog (batch upload with size choice).
 
 ## Tasks
@@ -24,5 +24,5 @@
 - [x] [TASK-08-009-plugin-immich.md](TASK-08-009-plugin-immich.md) — Immich plugin
 - [x] [TASK-08-010-plugin-s3.md](TASK-08-010-plugin-s3.md) — S3-compatible plugin
 - [x] [TASK-08-011-plugin-webdav.md](TASK-08-011-plugin-webdav.md) — WebDAV/Nextcloud plugin
-- [ ] [TASK-08-012-plugin-google-photos.md](TASK-08-012-plugin-google-photos.md) — Google Photos plugin (upload-only)
+- [x] [TASK-08-012-plugin-google-photos.md](TASK-08-012-plugin-google-photos.md) — Google Photos plugin (upload-only)
 - [ ] [TASK-08-013-upload-dialog.md](TASK-08-013-upload-dialog.md) — Tools → Upload dialog

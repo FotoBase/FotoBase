@@ -1,6 +1,6 @@
 # task: add google photos export plugin
 
-**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-20)
 
 ## Description
 Google Photos upload plugin, upload-only per API restrictions (PLAN §10 risk: "since 2025, apps can only read back their own uploads"; §6 P4 "Google Photos (upload-only)").
@@ -22,5 +22,5 @@ Google Photos upload plugin, upload-only per API restrictions (PLAN §10 risk: "
 - Unit: content-key ledger prevents duplicate upload on retry.
 
 ## Acceptance criteria
-- [ ] 08-012: Google Photos plugin passes the contract suite, upload-only per §10 API restriction.
-- [ ] 08-012: Duplicate uploads are prevented via the local content-key ledger.
+- [x] 08-012: Google Photos plugin passes the contract suite, upload-only per §10 API restriction.
+- [x] 08-012: Duplicate uploads are prevented via the local content-key ledger.

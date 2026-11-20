@@ -26,7 +26,7 @@
 - [x] `08-009` (L) Plugin: Immich (API; design for future read-back/"cloud mirror" — §1 strategic note).
 - [x] `08-010` (M) Plugin: S3-compatible.
 - [x] `08-011` (M) Plugin: WebDAV/Nextcloud.
-- [ ] `08-012` (M) Plugin: Google Photos (upload-only, §10 API restriction).
+- [x] `08-012` (M) Plugin: Google Photos (upload-only, §10 API restriction).
 - [ ] `08-013` (M) Tools → Upload dialog (batch upload with size choice).
 
 ## feat: backup
