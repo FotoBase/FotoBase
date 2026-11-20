@@ -1,0 +1,20 @@
+[package]
+name = "fotobase-export"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Export plugin trait, registry and shared contract test suite (upload targets)"
+
+[dependencies]
+async-trait = "0.1"
+sha2 = "0.10"
+tempfile = "3"
+thiserror.workspace = true
+tokio = { version = "1", features = ["rt", "sync", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+
+[lints]
+workspace = true

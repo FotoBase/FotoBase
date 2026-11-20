@@ -9,7 +9,7 @@
 - Google Photos is upload-only per API limits; Immich plugin's design leaves room for future read-back.
 - Tools → Upload dialog batch-uploads with size choice and progress/cancellation.
 
-- [ ] `08-007` (M) Export plugin trait + registry; shared contract test suite (upload, resume, retry, idempotency, album mapping).
+- [x] `08-007` (M) Export plugin trait + registry; shared contract test suite (upload, resume, retry, idempotency, album mapping).
 - [ ] `08-008` (M) Plugin: local folder.
 - [ ] `08-009` (L) Plugin: Immich (API; design for future read-back/"cloud mirror" — §1 strategic note).
 - [ ] `08-010` (M) Plugin: S3-compatible.
@@ -19,7 +19,7 @@
 
 ## Tasks
 
-- [ ] [TASK-08-007-plugin-trait-registry.md](TASK-08-007-plugin-trait-registry.md) — export plugin trait, registry, contract tests
+- [x] [TASK-08-007-plugin-trait-registry.md](TASK-08-007-plugin-trait-registry.md) — export plugin trait, registry, contract tests
 - [ ] [TASK-08-008-plugin-local-folder.md](TASK-08-008-plugin-local-folder.md) — local folder plugin
 - [ ] [TASK-08-009-plugin-immich.md](TASK-08-009-plugin-immich.md) — Immich plugin
 - [ ] [TASK-08-010-plugin-s3.md](TASK-08-010-plugin-s3.md) — S3-compatible plugin
