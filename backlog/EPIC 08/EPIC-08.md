@@ -23,7 +23,7 @@
 
 - [x] `08-007` (M) Export plugin trait + registry; shared contract test suite (upload, resume, retry, idempotency, album mapping).
 - [x] `08-008` (M) Plugin: local folder.
-- [ ] `08-009` (L) Plugin: Immich (API; design for future read-back/"cloud mirror" — §1 strategic note).
+- [x] `08-009` (L) Plugin: Immich (API; design for future read-back/"cloud mirror" — §1 strategic note).
 - [ ] `08-010` (M) Plugin: S3-compatible.
 - [ ] `08-011` (M) Plugin: WebDAV/Nextcloud.
 - [ ] `08-012` (M) Plugin: Google Photos (upload-only, §10 API restriction).

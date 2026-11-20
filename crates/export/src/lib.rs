@@ -31,6 +31,7 @@
 
 pub mod contract;
 mod driver;
+pub mod immich;
 pub mod local_folder;
 pub mod mock;
 mod registry;
@@ -61,6 +62,29 @@ pub trait ExportPlugin: Send {
     /// the default, which refuses.
     async fn create_album(&mut self, _job_id: &str, _name: &str) -> Result<AlbumRef, ExportError> {
         Err(ExportError::AlbumsUnsupported)
+    }
+
+    /// Files the target holds, in `album` or (`None`) everywhere. Read-back
+    /// is optional and unused by upload jobs: plugins that cannot answer keep
+    /// the default, which refuses, so a "cloud mirror" view can be added per
+    /// plugin later without changing this trait.
+    async fn list_files(
+        &mut self,
+        _album: Option<&AlbumRef>,
+    ) -> Result<Vec<RemoteFile>, ExportError> {
+        Err(ExportError::ReadBackUnsupported)
+    }
+
+    /// Whether the target holds a file with `key` (in `album` when given).
+    /// Derived from [`ExportPlugin::list_files`]; plugins with a cheaper
+    /// lookup override it.
+    async fn exists(
+        &mut self,
+        key: &ContentKey,
+        album: Option<&AlbumRef>,
+    ) -> Result<bool, ExportError> {
+        let files = self.list_files(album).await?;
+        Ok(files.iter().any(|f| f.content_key.as_ref() == Some(key)))
     }
 
     /// Upload one file. **Idempotent per [`ContentKey`]:** a file the target
