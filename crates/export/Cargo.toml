@@ -8,8 +8,12 @@ description = "Export plugin trait, registry and shared contract test suite (upl
 
 [dependencies]
 async-trait = "0.1"
+instant-xml = "0.7"
+jiff = "1"
+md-5 = "0.11"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "multipart", "stream", "json"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rusty-s3 = "0.12"
 serde_json = "1"
 sha2 = "0.10"
 tempfile = "3"
@@ -19,6 +23,7 @@ tokio-util = { version = "0.7", features = ["io"] }
 url = "2"
 
 [dev-dependencies]
+testcontainers = "0.28"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 
 [lints]
