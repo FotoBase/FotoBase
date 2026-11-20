@@ -1565,6 +1565,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fotobase-export"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "fotobase-jobs"
 version = "0.1.0"
 dependencies = [

@@ -1,6 +1,6 @@
 # task: add export plugin trait, registry, and contract tests
 
-**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-20)
 
 ## Description
 The export plugin trait + registry in the `export` crate (PLAN §3 module layout) and the shared contract test suite every plugin must pass: upload, resume, retry, idempotency, album mapping (PLAN §6 P4 acceptance, §9 "Shared contract tests per plugin"). Foundation for all plugins in this feature and the F5 ecosystem.
@@ -23,5 +23,5 @@ The export plugin trait + registry in the `export` crate (PLAN §3 module layout
 - Integration: content-key retry detection dedupes a re-uploaded identical file.
 
 ## Acceptance criteria
-- [ ] 08-007: Export plugin trait + registry exist and every plugin passes the shared contract suite (upload, resume, retry, idempotency, album mapping).
-- [ ] 08-007: Interrupted uploads resume without duplicates; retried failures don't produce partial albums.
+- [x] 08-007: Export plugin trait + registry exist and every plugin passes the shared contract suite (upload, resume, retry, idempotency, album mapping).
+- [x] 08-007: Interrupted uploads resume without duplicates; retried failures don't produce partial albums.
