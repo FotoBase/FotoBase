@@ -142,6 +142,42 @@ describe("stateFromRecipe", () => {
     ]);
   });
 
+  it("owns glyph-renderer text: restored, re-emitted after effects, before frames (TASK-08-003)", () => {
+    const text = {
+      algo: 2,
+      text: "Hi",
+      x: 0.3,
+      y: 0.4,
+      size: 0.1,
+      color: "#ffffff",
+      font: "sans",
+      anchor: "center",
+      transparency: 1,
+    };
+    const restored = stateFromRecipe({
+      ops: [
+        { type: "text", params: text },
+        { type: "border", params: { amount: 0.5 } },
+        { type: "bw", params: { amount: 1 } },
+      ],
+    });
+    expect(restored.text.overlays).toHaveLength(1);
+    expect(restored.extra).toEqual([]);
+    // Text lands on the photo, so frames (which grow the canvas) go last.
+    expect(opsFromEditState(restored).map((op) => op.type)).toEqual([
+      "bw",
+      "text",
+      "border",
+    ]);
+  });
+
+  it("legacy text ops (no algo) stay untouched in extra", () => {
+    const legacy = { type: "text", params: { text: "Old", x: 0.1, y: 0.1 } };
+    const restored = stateFromRecipe({ ops: [legacy] });
+    expect(restored.text.overlays).toEqual([]);
+    expect(restored.extra).toEqual([legacy]);
+  });
+
   it("keeps ops no tab owns so a save re-emits them (batch edits survive)", () => {
     // A recipe the batch flow (TASK-04-011) wrote: rotate + a text overlay.
     const batched = {

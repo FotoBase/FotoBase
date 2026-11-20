@@ -165,6 +165,32 @@ describe("EditView", () => {
     vi.useRealTimers();
   });
 
+  it("a text overlay persists as an algo-2 text op and survives a reload (TASK-08-003)", async () => {
+    Element.prototype.getBoundingClientRect = function () {
+      return { left: 0, top: 0, width: 100, height: 50, right: 100, bottom: 50, x: 0, y: 0, toJSON() {} } as DOMRect;
+    };
+    vi.useFakeTimers();
+    render(EditView, props());
+    await settleMicro();
+    invokeMock.mockClear();
+    fireEvent.click(screen.getByTestId("text-add"));
+    await settleMicro();
+    fireEvent.input(screen.getByTestId("text-input"), { target: { value: "Hi" } });
+    await settleMicro();
+    vi.advanceTimersByTime(400);
+    await vi.runAllTimersAsync();
+
+    const saveCall = invokeMock.mock.calls.filter((c) => c[0] === "set_recipe").at(-1);
+    expect(saveCall).toBeTruthy();
+    const ops = JSON.parse(saveCall![1].recipe).ops;
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({
+      type: "text",
+      params: { algo: 2, text: "Hi", x: 0.5, y: 0.5, anchor: "center" },
+    });
+    vi.useRealTimers();
+  });
+
   it("a completed render swaps the preview to the edited URI", async () => {
     vi.useFakeTimers();
     invokeMock.mockImplementation((cmd: string) =>

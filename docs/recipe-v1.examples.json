@@ -10,6 +10,7 @@
   { "name": "sepia", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "sepia", "params": { "amount": 0.7 } } ] } },
   { "name": "warm_cool_colors", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "warm_colors", "params": { "amount": 0.3 } }, { "type": "cool_colors", "params": { "amount": 0.2 } } ] } },
   { "name": "red_eye", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "red_eye", "params": { "regions": [ { "x": 0.31, "y": 0.22, "r": 0.02 } ] } } ] } },
+  { "name": "text_styled", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "text", "params": { "algo": 2, "text": "Summer 2026", "x": 0.5, "y": 0.92, "anchor": "bottom", "size": 0.06, "color": "#ffffff", "font": "sans", "outline": { "width": 0.004, "color": "#000000" }, "transparency": 0.9 } } ] } },
   { "name": "text", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "text", "params": { "text": "Summer 2026", "x": 0.05, "y": 0.9, "size": 0.05, "color": "#ffffff", "font": "sans", "rotation": 0 } } ] } },
   { "name": "retouch", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "retouch", "params": { "strokes": [ { "points": [[0.4, 0.4], [0.42, 0.41]], "radius": 0.01 } ] } } ] } },
   { "name": "grayscale_sharpen", "recipe": { "spec": "fotobase.recipe", "version": 1, "ops": [ { "type": "grayscale", "params": { "enabled": true } }, { "type": "sharpen", "params": { "amount": 0.3 } } ] } },

@@ -22,6 +22,7 @@
   import EffectsPanel from "./EffectsPanel.svelte";
   import RedEyePanel from "./RedEyePanel.svelte";
   import RetouchPanel from "./RetouchPanel.svelte";
+  import TextPanel from "./TextPanel.svelte";
   import TuningPanel from "./TuningPanel.svelte";
   import {
     EDIT_TABS,
@@ -479,6 +480,11 @@
           previewSrc={baseUri ?? ""}
           initial={state.retouch}
           onchange={(retouch) => mergeTab({ retouch })}
+        />
+        <TextPanel
+          previewSrc={previewSrc ?? baseUri ?? ""}
+          initial={state.text}
+          onchange={(text) => mergeTab({ text })}
         />
         <AutoFixPanel
           previewSrc={baseUri ?? ""}

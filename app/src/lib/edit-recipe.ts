@@ -19,6 +19,13 @@ import {
 } from "./effects";
 import { opsFromState as redEyeOps, type RedEyeState } from "./red-eye";
 import {
+  DEFAULT_TEXT,
+  isTextOpOwned,
+  opsFromText,
+  textFromOps,
+  type TextState,
+} from "./text-overlay";
+import {
   DEFAULT_RETOUCH,
   opsFromRetouch,
   retouchFromOps,
@@ -53,6 +60,7 @@ export const EMPTY_EDIT_STATE: EditState = {
   crop: DEFAULT_CROP,
   redEye: DEFAULT_RED_EYE,
   retouch: DEFAULT_RETOUCH,
+  text: DEFAULT_TEXT,
   autoFix: DEFAULT_AUTO_FIX,
   tuning: DEFAULT_TUNING,
   effects: DEFAULT_EFFECTS,
@@ -65,13 +73,15 @@ export interface EditState {
   redEye: RedEyeState;
   /// Heal-brush strokes (TASK-08-002).
   retouch: RetouchState;
+  /// Text overlays (TASK-08-003).
+  text: TextState;
   autoFix: AutoFixState;
   tuning: TuningState;
   effects: EffectsState;
   /// AI-estimated leveling angle in degrees (TASK-07-007), `null` when no
   /// estimate was applied. Emitted as the v1 `auto_rotate` op.
   autoRotate: number | null;
-  /// Ops no tab owns (text, rotate, film grain — written by the
+  /// Ops no tab owns (legacy text, rotate, film grain — written by the
   /// batch flow or future tooling). Passed through verbatim so saving an
   /// edit never destroys edits the tabs cannot represent (spec §5: a
   /// reader must not lose foreign data).
@@ -84,6 +94,9 @@ export type RecipeOp = { type: string; params: Record<string, unknown> };
 /// spec §3: geometry first, then tone, then color, then local/one-click
 /// effects). A tab at its neutral position contributes nothing.
 export function opsFromEditState(state: EditState): RecipeOp[] {
+  const effects = effectOps(state.effects);
+  const photoEffects = effects.filter((op) => !FRAME_OPS.has(op.type));
+  const frameEffects = effects.filter((op) => FRAME_OPS.has(op.type));
   return [
     // Strokes are placed on the uncropped preview: heal the source pixels
     // first, then let geometry ops move them.
@@ -95,10 +108,16 @@ export function opsFromEditState(state: EditState): RecipeOp[] {
     ...autoFixOps(state.autoFix),
     ...tuningOps(state.tuning),
     ...redEyeOps(state.redEye),
-    ...effectOps(state.effects),
+    ...photoEffects,
+    // Text sits on the finished photo; frames grow the canvas, so they
+    // wrap the text too (spec §3: frames after every photo-content op).
+    ...opsFromText(state.text ?? DEFAULT_TEXT),
+    ...frameEffects,
     ...(state.extra ?? []),
   ];
 }
+
+const FRAME_OPS: ReadonlySet<string> = new Set(["border", "drop_shadow"]);
 
 /// The v1 recipe packet the view persists to `fb:Recipe` (edit-recipe
 /// spec §1). An empty `ops` array means "no edits" and is stored as no
@@ -112,7 +131,7 @@ export function recipeFromState(state: EditState): {
 }
 
 /// Rebuild the tab states from a stored recipe. Ops the tabs do not own
-/// (text — written by future tooling) are skipped, never fail the
+/// (legacy text — written by older versions) are skipped, never fail the
 /// load, matching the reader conformance rule (spec §5).
 export function stateFromRecipe(recipe: {
   spec?: string;
@@ -123,14 +142,20 @@ export function stateFromRecipe(recipe: {
     crop: { ...DEFAULT_CROP, crop: { ...DEFAULT_CROP.crop } },
     redEye: { ...DEFAULT_RED_EYE, regions: [] },
     retouch: { strokes: [] },
+    text: { overlays: [] },
     autoFix: { ...DEFAULT_AUTO_FIX },
     tuning: { ...DEFAULT_TUNING },
     effects: { ...DEFAULT_EFFECTS },
     autoRotate: null,
     extra: [],
   };
+  const textParams: Array<Record<string, unknown>> = [];
   for (const op of recipe.ops ?? []) {
     const params = op.params ?? {};
+    if (isTextOpOwned(op.type, params)) {
+      textParams.push(params);
+      continue;
+    }
     const owned = effectFromOp(op.type, params);
     if (owned !== null) {
       state.effects = { ...state.effects, [owned[0]]: owned[1] };
@@ -221,6 +246,7 @@ export function stateFromRecipe(recipe: {
         break;
     }
   }
+  state.text = textFromOps(textParams);
   return state;
 }
 

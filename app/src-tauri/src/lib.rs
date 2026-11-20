@@ -3618,6 +3618,8 @@ pub fn run() {
             basemap_response(reply)
         })
         .setup(|app| {
+            // Recipe `text` ops may name installed fonts (TASK-08-003).
+            fotobase_render::fonts::install_system_fonts();
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             // Queue::new spawns its worker; block_on supplies the runtime

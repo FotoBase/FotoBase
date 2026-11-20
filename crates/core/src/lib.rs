@@ -5,6 +5,7 @@ pub mod buffer;
 pub mod heal;
 pub mod history;
 pub mod recipe;
+pub mod text;
 
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase-core";

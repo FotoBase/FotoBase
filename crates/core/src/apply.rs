@@ -83,6 +83,9 @@ fn apply_op(img: &LinearImage, op: &Op) -> LinearImage {
         "warm_colors" => per_pixel(img, |px| temperature(px, 0.6 * fnum(op, "amount", 0.0))),
         "cool_colors" => per_pixel(img, |px| temperature(px, -0.6 * fnum(op, "amount", 0.0))),
         "red_eye" => red_eye(img, op),
+        // `algo: 2` is the glyph-outline renderer (TASK-08-003); recipes
+        // without it keep the legacy bitmap look (spec §4).
+        "text" if crate::text::is_modern_text(op) => crate::text::render_text(img, op),
         "text" => text(img, op),
         "retouch" => retouch(img, op),
         "grayscale" => {
