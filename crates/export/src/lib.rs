@@ -31,6 +31,7 @@
 
 pub mod contract;
 mod driver;
+pub mod google_photos;
 pub mod immich;
 pub mod local_folder;
 pub mod mock;

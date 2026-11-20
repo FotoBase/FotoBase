@@ -25,6 +25,12 @@ Steps in order. A release is not published if any step fails.
 - [ ] Installer size < 20 MB per artifact.
 - [ ] Install smoke test on each OS: app launches, scans the 1k fixture, first thumbnails render.
 - [ ] Updater test: signed update accepted; tampered artifact rejected.
+- [ ] Google Photos live check (CI only runs the recorded-API mock; TASK-08-012), with a throwaway Google account on the release build:
+  - Sign in through the system browser; consent lists only "add photos" and "see photos added by this app". Denying or cancelling shows an error, not a half-connected state.
+  - Upload 3 photos (one > 16 MB) into a new album, then repeat the same upload: nothing is uploaded again and the album holds each photo once.
+  - Kill the network mid-upload, restore it, re-run: the upload resumes and no duplicate appears in the album or library.
+  - Revoke the app at https://myaccount.google.com/permissions: the next upload asks to sign in again.
+  - The upload dialog says the target is upload-only (no sync, no read-back).
 
 ## 4. Publish
 

@@ -1063,7 +1063,7 @@ pub(crate) async fn blocking<T: Send + 'static>(
         .map_err(|e| ExportError::Fatal(format!("export worker failed: {e}")))?
 }
 
-async fn read_range(path: &Path, offset: u64, len: u64) -> Result<Vec<u8>, ExportError> {
+pub(crate) async fn read_range(path: &Path, offset: u64, len: u64) -> Result<Vec<u8>, ExportError> {
     let path: PathBuf = path.to_path_buf();
     blocking(move || {
         let mut file = File::open(&path)?;
