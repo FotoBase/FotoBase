@@ -1,6 +1,6 @@
 # task: add immich export plugin
 
-**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-20)
+**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-20)
 
 ## Description
 Immich plugin via the Immich API, designed so a future read-back/"cloud mirror" view is possible (PLAN §1 strategic note: a lightweight Immich desktop client is potentially a bigger market than standalone Fotobase).
