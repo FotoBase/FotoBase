@@ -1,6 +1,6 @@
 # task: add google photos export plugin
 
-**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-20)
+**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-20)
 
 ## Description
 Google Photos upload plugin, upload-only per API restrictions (PLAN §10 risk: "since 2025, apps can only read back their own uploads"; §6 P4 "Google Photos (upload-only)").
