@@ -35,6 +35,7 @@ pub mod immich;
 pub mod local_folder;
 pub mod mock;
 mod registry;
+pub mod s3;
 mod types;
 
 pub use driver::run_upload;

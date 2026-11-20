@@ -1,6 +1,6 @@
 # task: add s3-compatible export plugin
 
-**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-20)
 
 ## Description
 Export plugin for S3-compatible object storage (AWS S3, Cloudflare R2, MinIO — PLAN §7 F1 layer 1 lists these as web-album targets; P4 plugin list includes S3-compatible).
@@ -14,12 +14,12 @@ Export plugin for S3-compatible object storage (AWS S3, Cloudflare R2, MinIO —
 - Use the official-ish Rust S3 SDK or `object_store` crate (already general-purpose — prefer it over hand-rolled signing).
 - Multipart upload with parts tracked so interruption resumes; abort leaves no partial objects visible.
 - Object key: `<prefix>/<album>/<content-key>_<filename>`; retries overwrite the same key (idempotent).
-- Contract suite against a MinIO testcontainer.
+- Contract suite against a RustFS testcontainer (MinIO's upstream images are archived).
 
 ## Testing criteria (TDD)
-- Integration: contract suite vs MinIO — upload/resume/retry/album-prefix mapping.
+- Integration: contract suite vs RustFS — upload/resume/retry/album-prefix mapping.
 - Integration: kill mid-multipart → resume → single complete object, no visible partial.
 
 ## Acceptance criteria
-- [ ] 08-010: S3-compatible plugin passes the contract suite against MinIO with prefix-based album mapping.
-- [ ] 08-010: Multipart uploads resume without partial objects.
+- [x] 08-010: S3-compatible plugin passes the contract suite against RustFS with prefix-based album mapping.
+- [x] 08-010: Multipart uploads resume without partial objects.
