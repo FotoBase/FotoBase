@@ -37,6 +37,7 @@ pub mod mock;
 mod registry;
 pub mod s3;
 mod types;
+pub mod webdav;
 
 pub use driver::run_upload;
 pub use registry::Registry;

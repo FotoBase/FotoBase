@@ -993,14 +993,14 @@ fn clean_component(part: &str, max: usize) -> String {
 }
 
 /// Splits `<64 hex>_<name>` back into its parts.
-fn parse_object_name(file: &str) -> Option<(ContentKey, &str)> {
+pub(crate) fn parse_object_name(file: &str) -> Option<(ContentKey, &str)> {
     let (key, name) = file.split_once('_')?;
     let is_key =
         key.len() == 64 && key.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
     is_key.then(|| (ContentKey::raw(key.to_owned()), name))
 }
 
-fn content_type_of(name: &str) -> &'static str {
+pub(crate) fn content_type_of(name: &str) -> &'static str {
     match name.rsplit('.').next().map(str::to_ascii_lowercase).as_deref() {
         Some("jpg" | "jpeg") => "image/jpeg",
         Some("png") => "image/png",
@@ -1055,7 +1055,7 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, ExportError> + Send + 'static,
 ) -> Result<T, ExportError> {
     tokio::task::spawn_blocking(work)
@@ -1075,7 +1075,7 @@ async fn read_range(path: &Path, offset: u64, len: u64) -> Result<Vec<u8>, Expor
     .await
 }
 
-fn verify_source(path: &Path, expected: &ContentKey) -> Result<(), ExportError> {
+pub(crate) fn verify_source(path: &Path, expected: &ContentKey) -> Result<(), ExportError> {
     if &ContentKey::from_reader(File::open(path)?)? != expected {
         return Err(ExportError::Fatal(format!(
             "`{}` changed after it was hashed",

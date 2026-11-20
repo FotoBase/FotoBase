@@ -1,6 +1,6 @@
 # task: add webdav/nextcloud export plugin
 
-**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-20)
 
 ## Description
 Export plugin for WebDAV endpoints (incl. Nextcloud/ownCloud shares) — PLAN §6 P4 plugin list.
@@ -20,5 +20,5 @@ Export plugin for WebDAV endpoints (incl. Nextcloud/ownCloud shares) — PLAN §
 - Unit: album name sanitization for remote directory creation.
 
 ## Acceptance criteria
-- [ ] 08-011: WebDAV/Nextcloud plugin passes the contract suite with directory-based album mapping.
-- [ ] 08-011: Interrupted uploads never leave half-written remote files.
+- [x] 08-011: WebDAV/Nextcloud plugin passes the contract suite with directory-based album mapping.
+- [x] 08-011: Interrupted uploads never leave half-written remote files.
