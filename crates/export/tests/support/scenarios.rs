@@ -1,5 +1,5 @@
 //! Scenarios that only make sense against a real S3 protocol implementation;
-//! the mock and the MinIO container both run them.
+//! the mock and the RustFS container both run them.
 #![allow(dead_code)]
 
 use std::fs;

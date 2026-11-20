@@ -111,7 +111,7 @@ jobs:
         run: python3 tools/verify_model_licenses.py
 
       - name: cargo test
-        # TASK-08-010: the S3 plugin's MinIO contract run needs Docker; only
+        # TASK-08-010: the S3 plugin's RustFS contract run needs Docker; only
         # the Linux runner has it, so only there a missing daemon is a failure.
         env:
           FOTOBASE_REQUIRE_DOCKER: ${{ runner.os == 'Linux' && '1' || '' }}

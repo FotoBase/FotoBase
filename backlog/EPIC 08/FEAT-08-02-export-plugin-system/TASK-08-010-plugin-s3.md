@@ -14,12 +14,12 @@ Export plugin for S3-compatible object storage (AWS S3, Cloudflare R2, MinIO —
 - Use the official-ish Rust S3 SDK or `object_store` crate (already general-purpose — prefer it over hand-rolled signing).
 - Multipart upload with parts tracked so interruption resumes; abort leaves no partial objects visible.
 - Object key: `<prefix>/<album>/<content-key>_<filename>`; retries overwrite the same key (idempotent).
-- Contract suite against a MinIO testcontainer.
+- Contract suite against a RustFS testcontainer (MinIO's upstream images are archived).
 
 ## Testing criteria (TDD)
-- Integration: contract suite vs MinIO — upload/resume/retry/album-prefix mapping.
+- Integration: contract suite vs RustFS — upload/resume/retry/album-prefix mapping.
 - Integration: kill mid-multipart → resume → single complete object, no visible partial.
 
 ## Acceptance criteria
-- [x] 08-010: S3-compatible plugin passes the contract suite against MinIO with prefix-based album mapping.
+- [x] 08-010: S3-compatible plugin passes the contract suite against RustFS with prefix-based album mapping.
 - [x] 08-010: Multipart uploads resume without partial objects.

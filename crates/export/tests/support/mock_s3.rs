@@ -2,7 +2,7 @@
 //! the plugin uses (bucket create, object put/head/get/list, multipart
 //! create/part/list-parts/list-uploads/complete/abort), path-style. It checks
 //! that requests are presigned for the configured access key but does not
-//! verify signatures — real signing is covered by the MinIO run.
+//! verify signatures — real signing is covered by the RustFS run.
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;

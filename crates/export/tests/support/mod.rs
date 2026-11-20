@@ -1,5 +1,5 @@
 //! Shared by the S3 plugin test binaries: a [`ContractFixture`] that runs
-//! the plugin against any S3 endpoint (the in-process mock, or MinIO in a
+//! the plugin against any S3 endpoint (the in-process mock, or RustFS in a
 //! container) with failures injected through the plugin's [`FaultPoints`].
 #![allow(dead_code)]
 

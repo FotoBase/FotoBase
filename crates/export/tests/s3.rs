@@ -2,7 +2,7 @@
 //! (single-request and multipart paths) against an in-process S3 server,
 //! resumes multipart uploads without exposing partial objects, maps albums to
 //! key prefixes and rejects bad settings with clear errors (PLAN §6 P4).
-//! `s3_minio.rs` runs the same checks against a real MinIO.
+//! `s3_rustfs.rs` runs the same checks against a real RustFS.
 
 #[path = "support/mock_s3.rs"]
 mod mock_s3;

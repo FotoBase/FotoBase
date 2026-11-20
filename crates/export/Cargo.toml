@@ -23,7 +23,7 @@ tokio-util = { version = "0.7", features = ["io"] }
 url = "2"
 
 [dev-dependencies]
-testcontainers = "0.28"
+testcontainers = { version = "0.28", features = ["http_wait_plain"] }
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 
 [lints]

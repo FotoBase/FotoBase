@@ -1,43 +1,48 @@
-//! TASK-08-010 contract run against a real MinIO in a container: proves the
-//! plugin's SigV4 signing, multipart handling and listings against an actual
-//! S3 implementation. Needs a Docker daemon; without one the test is skipped
-//! unless `FOTOBASE_REQUIRE_DOCKER` is set (CI sets it on Linux).
-//!
-//! The image is a pinned community build of MinIO: the upstream
-//! `minio/minio` images are no longer published.
+//! TASK-08-010 contract run against a real RustFS (S3-compatible, Apache-2.0)
+//! in a container: proves the plugin's SigV4 signing, multipart handling and
+//! listings against an actual S3 implementation. Needs a Docker daemon;
+//! without one the test is skipped unless `FOTOBASE_REQUIRE_DOCKER` is set to
+//! a non-empty value (CI sets it on Linux).
 
 mod support;
 
 use fotobase_export::contract::run_contract_suite;
 use support::scenarios;
 use support::{Endpoint, S3Fixture};
+use testcontainers::core::wait::HttpWaitStrategy;
 use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{GenericImage, ImageExt};
 
-const IMAGE: &str = "pgsty/minio";
-const TAG: &str = "RELEASE.2026-08-04T00-00-00Z";
+const IMAGE: &str = "rustfs/rustfs";
+const TAG: &str = "1.0.6";
 const ACCESS_KEY: &str = "fotobase-test";
 const SECRET_KEY: &str = "fotobase-test-secret";
 
 #[tokio::test]
-async fn minio_passes_the_contract_suite_and_resumes_multipart_uploads() {
+async fn rustfs_passes_the_contract_suite_and_resumes_multipart_uploads() {
+    // The container readiness probe builds a reqwest client.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let started = GenericImage::new(IMAGE, TAG)
         .with_exposed_port(9000.tcp())
-        .with_wait_for(WaitFor::message_on_either_std("API:"))
-        .with_env_var("MINIO_ROOT_USER", ACCESS_KEY)
-        .with_env_var("MINIO_ROOT_PASSWORD", SECRET_KEY)
-        .with_cmd(["server", "/data"])
+        .with_wait_for(WaitFor::http(
+            HttpWaitStrategy::new("/health")
+                .with_port(9000.tcp())
+                .with_expected_status_code(200u16),
+        ))
+        .with_env_var("RUSTFS_ACCESS_KEY", ACCESS_KEY)
+        .with_env_var("RUSTFS_SECRET_KEY", SECRET_KEY)
+        .with_cmd(["/data"])
         .start()
         .await;
     let container = match started {
         Ok(container) => container,
         // CI passes an empty value on runners without Docker.
         Err(e) if std::env::var("FOTOBASE_REQUIRE_DOCKER").unwrap_or_default().is_empty() => {
-            eprintln!("skipping the MinIO contract run (no usable Docker): {e}");
+            eprintln!("skipping the RustFS contract run (no usable Docker): {e}");
             return;
         }
-        Err(e) => panic!("cannot start the MinIO container: {e}"),
+        Err(e) => panic!("cannot start the RustFS container: {e}"),
     };
     let host = container.get_host().await.unwrap();
     let port = container.get_host_port_ipv4(9000.tcp()).await.unwrap();
