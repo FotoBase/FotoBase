@@ -81,11 +81,13 @@ fn op_json(op: BatchOp, text: Option<&str>) -> Value {
         BatchOp::ShowText => json!({
             "type": "text",
             "params": {
+                "algo": 2,
                 "text": text.unwrap_or_default(),
                 "x": 0.05,
                 "y": 0.05,
                 "size": 0.05,
                 "color": "#ffffff",
+                "outline": { "width": 0.003, "color": "#000000" },
             }
         }),
         BatchOp::HideText => json!({ "type": "hide_text" }),
@@ -372,6 +374,7 @@ mod tests {
         assert_eq!(ops.len(), 1);
         assert_eq!(ops[0]["type"], "text");
         assert_eq!(ops[0]["params"]["text"], "Beach day");
+        assert_eq!(ops[0]["params"]["algo"], 2, "batch text uses the glyph renderer");
 
         // Show again: idempotent, no duplicate text op.
         run(

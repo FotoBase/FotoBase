@@ -313,6 +313,37 @@ fn validate_params(op_type: &str, params: &Value, idx: usize) -> Result<(), Reci
             unit("y", 0.0, 1.0)?;
             unit("size", 0.0, 1.0)?;
             unit("rotation", -180.0, 180.0)?;
+            // TASK-08-003 (`algo: 2`): font family, anchor, outline,
+            // transparency.
+            if let Some(a) = p.get("algo") {
+                if !matches!(a.as_f64(), Some(v) if v == 1.0 || v == 2.0) {
+                    return err(format!("ops[{idx}] text.algo must be 1 or 2"));
+                }
+            }
+            if p.get("font").is_some_and(|f| !f.is_string()) {
+                return err(format!("ops[{idx}] text.font must be a string"));
+            }
+            if let Some(a) = p.get("anchor") {
+                if !a.as_str().is_some_and(|a| crate::text::anchor_fractions(a).is_some()) {
+                    return err(format!(
+                        "ops[{idx}] text.anchor must be one of top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right"
+                    ));
+                }
+            }
+            unit("transparency", 0.0, 1.0)?;
+            if let Some(o) = p.get("outline") {
+                let o = o.as_object().ok_or_else(|| {
+                    RecipeError(format!("ops[{idx}] text.outline must be an object"))
+                })?;
+                require_range("text.outline", o, "width", 0.0, 0.05, idx)?;
+                if !matches!(o.get("color"), None | Some(Value::String(_)))
+                    || o.get("color")
+                        .and_then(Value::as_str)
+                        .is_some_and(|c| parse_hex_color(c).is_none())
+                {
+                    return err(format!("ops[{idx}] text.outline.color must be \"#rrggbb\""));
+                }
+            }
             if let Some(c) = p.get("color") {
                 match c {
                     Value::String(hex) => {
@@ -436,7 +467,18 @@ fn validate_extra_params(
         "film_grain" => &["amount", "seed"],
         "grayscale" => &["enabled"],
         "red_eye" => &["regions", "auto"],
-        "text" => &["text", "x", "y", "size", "color", "font", "rotation"],
+        "text" => &[
+            "text",
+            "x",
+            "y",
+            "size",
+            "color",
+            "font",
+            "rotation",
+            "anchor",
+            "outline",
+            "transparency",
+        ],
         "retouch" => &["strokes"],
         _ => &[],
     };

@@ -1,6 +1,6 @@
 # task: add text overlay recipe op
 
-**Feature:** [FEAT-08-05-remaining-editor-tools](FEAT-08-05-remaining-editor-tools.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-05-remaining-editor-tools](FEAT-08-05-remaining-editor-tools.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-20)
 
 ## Description
 Text tool overlaying text with font, size, color, outline, transparency, recorded as a recipe op (PLAN §2 §E Text P4; §5 op `text`). Rendering identical at screen and export resolution (feature acceptance).
@@ -22,5 +22,5 @@ Text tool overlaying text with font, size, color, outline, transparency, recorde
 - Integration: re-editing op params re-renders without other ops changing.
 
 ## Acceptance criteria
-- [ ] 08-003: Text tool supports font, size, color, outline, transparency; rendering identical at screen and export resolution.
-- [ ] 08-003: Text ops are re-editable and resolution-independent (normalized coordinates).
+- [x] 08-003: Text tool supports font, size, color, outline, transparency; rendering identical at screen and export resolution.
+- [x] 08-003: Text ops are re-editable and resolution-independent (normalized coordinates).

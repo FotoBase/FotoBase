@@ -54,6 +54,7 @@ const TOLERANCES: &[(&str, f64)] = &[
     ("straighten", 2.0),
     ("temperature", 1.0),
     ("text", 1.0),
+    ("text_styled", 2.0),
     ("tint", 1.0),
     ("tint_color", 1.0),
     // PNG goldens are quantized to 8 bit, so even a bit-exact op shows
@@ -362,6 +363,21 @@ fn cases() -> Vec<GoldenCase> {
             ),
             tol: by_op("text"),
         },
+        // TASK-08-003: glyph-outline text (`algo: 2`) with outline and
+        // transparency, anchored at the center of the dark patch.
+        GoldenCase {
+            name: "text_styled",
+            recipe: op(
+                "text",
+                json!({
+                    "algo": 2, "text": "FB", "x": 0.5, "y": 0.5, "size": 0.3,
+                    "color": "#ffe066", "font": "serif", "anchor": "center",
+                    "outline": { "width": 0.02, "color": "#202020" },
+                    "transparency": 0.8
+                }),
+            ),
+            tol: by_op("text_styled"),
+        },
         GoldenCase {
             name: "tint",
             recipe: op("tint", json!({ "green_magenta": -0.3 })),
@@ -497,9 +513,23 @@ fn new_effects_match_between_preview_and_export_resolution() {
         op("vignette", json!({ "amount": 0.7 })),
         op("border", json!({ "amount": 0.5 })),
         op("drop_shadow", json!({ "amount": 0.8 })),
+        // TASK-08-003: same glyphs at both resolutions, only the scale
+        // differs. Glyph edges cannot agree below one preview pixel of
+        // anti-aliasing; a thin outline is only resolved to ~0.3 preview pixel, so
+        // outlined text gets a looser RMS bound (see `rms_limit`).
+        op(
+            "text",
+            json!({ "algo": 2, "text": "Fb", "x": 0.5, "y": 0.5, "size": 0.3, "anchor": "center" }),
+        ),
+        op(
+            "text",
+            json!({ "algo": 2, "text": "Fb", "x": 0.5, "y": 0.5, "size": 0.3, "anchor": "center",
+                    "outline": { "width": 0.02, "color": "#000000" }, "transparency": 0.9 }),
+        ),
     ];
     for doc in recipes {
         let (recipe, _) = Recipe::parse(&doc.to_string()).unwrap();
+        let rms_limit = if doc.to_string().contains("outline") { 8.0 } else { 3.0 };
         let small = apply_recipe(&preview, &recipe);
         let big = apply_recipe(&full, &recipe);
         // Frames round their thickness to whole pixels per resolution, so
@@ -529,7 +559,7 @@ fn new_effects_match_between_preview_and_export_resolution() {
         });
         let report = compare(&down, &small);
         assert!(
-            report.rms < 3.0,
+            report.rms < rms_limit,
             "{doc}: preview vs export RMS {:.3} (max {:.0})",
             report.rms,
             report.max_delta

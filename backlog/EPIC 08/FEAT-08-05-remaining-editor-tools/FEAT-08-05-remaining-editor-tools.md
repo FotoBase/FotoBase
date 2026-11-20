@@ -10,10 +10,10 @@
 
 - [x] `08-001` (M) Remaining effects: Warmify, Film Grain, Tint, Soft Focus, Vignette + frames (Border, Drop Shadow).
 - [x] `08-002` (L) Retouch heal brush (strokes as recipe op).
-- [ ] `08-003` (M) Text tool: font, size, color, outline, transparency (recipe op).
+- [x] `08-003` (M) Text tool: font, size, color, outline, transparency (recipe op).
 
 ## Tasks
 
 - [x] [TASK-08-001-effects-frames.md](TASK-08-001-effects-frames.md) — remaining effects + frames recipe ops
 - [x] [TASK-08-002-heal-brush.md](TASK-08-002-heal-brush.md) — heal brush retouch recipe op
-- [ ] [TASK-08-003-text-tool.md](TASK-08-003-text-tool.md) — text overlay recipe op
+- [x] [TASK-08-003-text-tool.md](TASK-08-003-text-tool.md) — text overlay recipe op

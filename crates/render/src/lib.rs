@@ -59,6 +59,8 @@ use thiserror::Error;
 pub mod color;
 /// Full-resolution color-managed export (TASK-04-018).
 pub mod export;
+/// System-font lookup for the recipe `text` op (TASK-08-003).
+pub mod fonts;
 pub mod icc;
 /// Near-duplicate perceptual hashing (TASK-04-019).
 pub mod phash;

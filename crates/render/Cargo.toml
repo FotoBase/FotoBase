@@ -42,6 +42,7 @@ miniz_oxide = "0.9"
 jxl-oxide = { version = "0.12", optional = true }
 # TASK-04-019: perceptual hashing for the near-duplicate finder.
 image_hasher = "3.1"
+fontdb = "0.24.0"
 
 # libheif-rs builds an embedded libheif (static) on non-Windows targets, so
 # decode needs no system libheif — only the codec plugins it links against
