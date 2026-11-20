@@ -47,6 +47,8 @@ fontdb = "0.24.0"
 # band is built as a recipe `text` op.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# TASK-08-005: PDF sink of the print layout engine (one page raster per sheet).
+pdf-writer = "0.15.0"
 
 # libheif-rs builds an embedded libheif (static) on non-Windows targets, so
 # decode needs no system libheif — only the codec plugins it links against
@@ -64,6 +66,8 @@ fotobase-core = { path = "../core" }
 tokio = { version = "1", features = ["rt", "macros"] }
 tempfile = "3"
 miniz_oxide = "0.9"
+# TASK-08-005: reads the written PDFs back with an independent parser.
+lopdf = "0.47.0"
 
 [lints]
 workspace = true

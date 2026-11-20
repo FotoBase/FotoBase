@@ -16,7 +16,7 @@
 ## feat: print
 
 - [x] `08-004` (L) Print dialog: layouts (wallet, 3.5×5, 4×6, 5×7, 8×10, full page, contact sheet with images-per-page), shrink-to-fit vs crop-to-fit, border & text options (source caption/filename/EXIF, position, wrap), copies per photo.
-- [ ] `08-005` (M) Printer selection + export-to-PDF path.
+- [x] `08-005` (M) Printer selection + export-to-PDF path.
 - [ ] `08-006` (S) Email via OS share sheet + `mailto` (auto-resized attachments).
 
 ## feat: export plugin system

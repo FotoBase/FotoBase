@@ -4,8 +4,11 @@
   vs crop-to-fit, border and text options, copies per photo, and a live
   paper preview. The preview is drawn from the backend page plan (the same
   plan the final page raster uses) with the edit-view renders as images, so
-  it shows the edits and cannot disagree with the paper. "Create pages"
-  writes one PNG per sheet; sending them to a printer or PDF is TASK-08-005.
+  it shows the edits and cannot disagree with the paper. TASK-08-005: the
+  destination is an installed printer, a PDF, or (TASK-08-004) PNG pages —
+  all fed by that same plan; a printer that does not take the chosen paper
+  warns before printing, and a running job shows its sheet progress and can
+  be cancelled.
 -->
 <script lang="ts">
   import { t } from "./i18n.svelte.js";
@@ -14,15 +17,22 @@
     LAYOUTS,
     MAX_COPIES,
     MAX_IMAGES_PER_PAGE,
+    cancelPrint,
     clampInt,
+    exportPrintPdf,
     fontStack,
+    listPrinters,
+    onPrintProgress,
     pageRectStyle,
     photoPreviewUri,
     photoStyle,
     printPages,
     printPlan,
+    printToPrinter,
+    type PrintBatch,
     type PrintOptions,
     type PrintPlan,
+    type Printer,
   } from "./print";
 
   let {
@@ -39,8 +49,13 @@
   let plan = $state<PrintPlan | null>(null);
   let uris = $state<Record<number, string>>({});
   let folder = $state("");
+  let pdfPath = $state("");
+  // "printer:<name>", "pdf" or "pages".
+  let destination = $state("pages");
+  let printers = $state<Printer[]>([]);
   let busy = $state(false);
-  let written = $state<number | null>(null);
+  let sheetsDone = $state(0);
+  let doneText = $state<string | null>(null);
   let failed = $state(0);
   let error = $state<string | null>(null);
 
@@ -48,7 +63,32 @@
   const requested = new Set<string>();
 
   let pageCount = $derived(plan?.pages.length ?? 0);
-  let canRun = $derived(!busy && plan !== null && folder.trim() !== "" && ids.length > 0);
+  let printer = $derived(
+    destination.startsWith("printer:")
+      ? printers.find((p) => p.name === destination.slice("printer:".length))
+      : undefined,
+  );
+  let paperMismatch = $derived(printer?.mismatch.includes(options.paper) ?? false);
+  let target = $derived(
+    destination === "pdf" ? pdfPath : destination === "pages" ? folder : (printer?.name ?? ""),
+  );
+  let canRun = $derived(!busy && plan !== null && target.trim() !== "" && ids.length > 0);
+
+  // The installed printers are read on every opening; the default printer is
+  // the initial destination, the PNG pages when there is none.
+  $effect(() => {
+    if (!open) return;
+    let stale = false;
+    listPrinters().then((list) => {
+      if (stale) return;
+      printers = list;
+      const initial = list.find((p) => p.is_default) ?? list[0];
+      destination = initial ? `printer:${initial.name}` : "pages";
+    });
+    return () => {
+      stale = true;
+    };
+  });
 
   // Re-plan whenever an option, the copies or the selection changes; a
   // slow answer for an older state is dropped.
@@ -89,30 +129,57 @@
     plan = null;
     uris = {};
     requested.clear();
-    written = null;
+    doneText = null;
+    sheetsDone = 0;
     failed = 0;
     error = null;
   });
+
+  function sentence(batch: PrintBatch): string {
+    if (destination === "pdf") {
+      return t("print.pdfDone", { n: batch.pages, file: batch.files[0] ?? pdfPath.trim() });
+    }
+    if (printer) {
+      return batch.job_id
+        ? t("print.sentJob", { n: batch.pages, printer: printer.name, job: batch.job_id })
+        : t("print.sent", { n: batch.pages, printer: printer.name });
+    }
+    return t("print.done", { n: batch.files.length });
+  }
 
   async function run(): Promise<void> {
     if (!canRun) return;
     busy = true;
     error = null;
-    written = null;
+    doneText = null;
+    sheetsDone = 0;
+    const count = clampInt(copies, 1, MAX_COPIES);
+    const snapshot = $state.snapshot(options) as PrintOptions;
+    const unlisten = await onPrintProgress((done) => (sheetsDone = done)).catch(() => () => {});
     try {
-      const batch = await printPages(
-        ids,
-        folder.trim(),
-        clampInt(copies, 1, MAX_COPIES),
-        $state.snapshot(options) as PrintOptions,
-      );
-      written = batch.files.length;
+      const batch =
+        destination === "pdf"
+          ? await exportPrintPdf(ids, pdfPath.trim(), count, snapshot)
+          : printer
+            ? await printToPrinter(ids, printer.name, count, snapshot)
+            : await printPages(ids, folder.trim(), count, snapshot);
+      doneText = sentence(batch);
       failed = batch.failed.length;
     } catch (e) {
-      error = t("print.error", { error: e instanceof Error ? e.message : String(e) });
+      const message = e instanceof Error ? e.message : String(e);
+      error = /cancelled/i.test(message) ? t("print.cancelled") : t("print.error", { error: message });
     } finally {
+      unlisten();
       busy = false;
     }
+  }
+
+  function runLabel(): string {
+    if (destination === "pdf") return busy ? t("print.runningPdf") : t("print.runPdf");
+    if (printer) {
+      return busy ? t("print.runningPrint") : paperMismatch ? t("print.runAnyway") : t("print.runPrint");
+    }
+    return busy ? t("print.running") : t("print.run");
   }
 </script>
 
@@ -325,18 +392,59 @@
       </div>
 
       <label class="pr-folder">
-        {t("print.folder")}
-        <input
-          type="text"
-          data-testid="print-folder"
-          placeholder={t("print.folder.placeholder")}
-          bind:value={folder}
-          disabled={busy}
-        />
+        {t("print.destination")}
+        <select data-testid="print-destination" bind:value={destination} disabled={busy}>
+          {#each printers as p (p.name)}
+            <option value={`printer:${p.name}`}>
+              {p.is_default ? t("print.destination.default", { name: p.name }) : p.name}
+            </option>
+          {/each}
+          <option value="pdf">{t("print.destination.pdf")}</option>
+          <option value="pages">{t("print.destination.pages")}</option>
+        </select>
       </label>
 
-      {#if written !== null}
-        <p data-testid="print-done">{t("print.done", { n: written })}</p>
+      {#if destination === "pdf"}
+        <label class="pr-folder">
+          {t("print.pdfPath")}
+          <input
+            type="text"
+            data-testid="print-pdf-path"
+            placeholder={t("print.pdfPath.placeholder")}
+            bind:value={pdfPath}
+            disabled={busy}
+          />
+        </label>
+      {:else if destination === "pages"}
+        <label class="pr-folder">
+          {t("print.folder")}
+          <input
+            type="text"
+            data-testid="print-folder"
+            placeholder={t("print.folder.placeholder")}
+            bind:value={folder}
+            disabled={busy}
+          />
+        </label>
+      {/if}
+
+      {#if printer && paperMismatch}
+        <p class="pr-error" role="alert" data-testid="print-paper-warning">
+          {t("print.paperWarning", {
+            printer: printer.name,
+            paper: t(`print.paper.${options.paper}`),
+          })}
+        </p>
+      {/if}
+
+      {#if busy}
+        <p data-testid="print-progress">
+          {t("print.progress", { done: sheetsDone, total: pageCount })}
+        </p>
+      {/if}
+
+      {#if doneText !== null}
+        <p data-testid="print-done">{doneText}</p>
         {#if failed > 0}
           <p class="pr-error" role="alert">{t("print.partial", { n: failed })}</p>
         {/if}
@@ -347,8 +455,13 @@
 
       <div class="pr-actions">
         <button type="button" data-testid="print-run" disabled={!canRun} onclick={run}>
-          {busy ? t("print.running") : t("print.run")}
+          {runLabel()}
         </button>
+        {#if busy}
+          <button type="button" data-testid="print-cancel" onclick={() => void cancelPrint()}>
+            {t("print.cancel")}
+          </button>
+        {/if}
         <button type="button" data-testid="print-close" onclick={() => (open = false)}>
           {t("print.close")}
         </button>

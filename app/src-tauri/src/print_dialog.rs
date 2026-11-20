@@ -7,8 +7,11 @@
 //!   rectangles, fit rectangles, text bands — which the dialog's live paper
 //!   preview positions its `preview://` images from. No pixels cross IPC.
 //! - [`print_pages`] rasterizes the same plan at print resolution through
-//!   the shared recipe engine and writes one PNG per sheet; handing those
-//!   sheets to a printer or a PDF writer is TASK-08-005.
+//!   the shared recipe engine and writes one PNG per sheet.
+//! - [`export_pdf`] and [`print_to_printer`] (TASK-08-005) are the other two
+//!   sinks of that same rendering path: a PDF with one page per sheet, and a
+//!   job handed to the OS spooler ([`crate::printers`]). Same plan, same
+//!   rasters — the PDF cannot differ from the physical print.
 //!
 //! Like every heavy job, [`print_pages`] runs in the bounded job queue (the
 //! command wraps it); originals are only ever read.
@@ -17,12 +20,17 @@ use std::path::{Path, PathBuf};
 
 use fotobase_catalog::{Catalog, PhotoInfo};
 use fotobase_render::print::{
-    edited_dimensions, plan_pages, write_pages, PagePlan, PrintFailure, PrintItem, PrintOptions,
-    PrintPhotoSource, TextSource,
+    edited_dimensions, plan_pages, write_pages, write_pdf, PagePlan, PrintFailure, PrintItem,
+    PrintOptions, PrintPhotoSource, TextSource,
 };
+
+use crate::printers::{Document, DocumentKind, SpoolError, Spooler};
 
 /// Print resolution of the written page rasters.
 pub const PRINT_DPI: u32 = 300;
+
+/// Job title shown in the OS print queue.
+const PRINT_TITLE: &str = "Fotobase";
 
 /// Highest copies-per-photo the dialog accepts.
 pub const MAX_COPIES: u32 = 99;
@@ -50,10 +58,14 @@ pub struct PrintPlanReply {
     pub photos: Vec<PlanPhoto>,
 }
 
-/// Page files that landed plus the photos that could not be placed.
+/// What a print job produced: the files that landed (page PNGs, or the one
+/// PDF), the sheet count, the spooler's job id for a physical print, and the
+/// photos that could not be placed.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct PrintBatch {
     pub files: Vec<PathBuf>,
+    pub pages: usize,
+    pub job_id: Option<String>,
     pub failed: Vec<PrintFailure>,
 }
 
@@ -65,6 +77,14 @@ pub enum PrintDialogError {
     UnknownPhoto(i64),
     #[error("destination is not a directory: {0}")]
     Destination(String),
+    #[error("the PDF's folder does not exist: {0}")]
+    PdfFolder(String),
+    #[error("print cancelled")]
+    Cancelled,
+    #[error("print temp files: {0}")]
+    Temp(#[from] std::io::Error),
+    #[error(transparent)]
+    Spool(#[from] SpoolError),
     #[error(transparent)]
     Sql(#[from] rusqlite::Error),
     #[error(transparent)]
@@ -194,7 +214,91 @@ pub fn print_pages(
     }
     let (files, failed) =
         write_pages(&job.options, &job.items, &job.sources, PRINT_DPI, dest, progress)?;
-    Ok(PrintBatch { files, failed })
+    Ok(PrintBatch { pages: files.len(), files, job_id: None, failed })
+}
+
+/// Write the job as one PDF at `dest`, replaced atomically; a cancelled job
+/// leaves an existing file alone. The folder must exist; the file gets a
+/// `.pdf` extension when it has none.
+pub fn export_pdf(
+    job: &PreparedPrint,
+    dest: &Path,
+    progress: &mut dyn FnMut(usize),
+    cancelled: &dyn Fn() -> bool,
+) -> Result<PrintBatch, PrintDialogError> {
+    let dest =
+        if dest.extension().is_some() { dest.to_path_buf() } else { dest.with_extension("pdf") };
+    if dest.parent().is_some_and(|p| !p.as_os_str().is_empty() && !p.is_dir()) {
+        return Err(PrintDialogError::PdfFolder(dest.to_string_lossy().into_owned()));
+    }
+    let scratch = tempfile::tempdir()?;
+    let rendered = scratch.path().join("fotobase-print.pdf");
+    let mut pages = 0;
+    let failed =
+        write_pdf(&job.options, &job.items, &job.sources, PRINT_DPI, &rendered, &mut |n| {
+            pages = n;
+            progress(n);
+        })?;
+    if cancelled() {
+        return Err(PrintDialogError::Cancelled);
+    }
+    let tmp = dest.with_extension("pdf.tmp");
+    std::fs::copy(&rendered, &tmp)?;
+    if let Err(e) = std::fs::rename(&tmp, &dest) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e.into());
+    }
+    Ok(PrintBatch { files: vec![dest], pages, job_id: None, failed })
+}
+
+/// Render the job into a scratch folder in the form the spooler takes and
+/// submit it to `printer`. `cancelled` is checked once the sheets are
+/// rendered, so a cancelled job never reaches the printer. The scratch
+/// folder is removed afterwards; the spooler holds its own copy.
+pub fn print_to_printer(
+    job: &PreparedPrint,
+    spooler: &dyn Spooler,
+    printer: &str,
+    progress: &mut dyn FnMut(usize),
+    cancelled: &dyn Fn() -> bool,
+) -> Result<PrintBatch, PrintDialogError> {
+    let scratch = tempfile::tempdir()?;
+    let (document, pages, failed) = match spooler.kind() {
+        DocumentKind::Pdf => {
+            let file = scratch.path().join("fotobase-print.pdf");
+            let mut pages = 0;
+            let failed =
+                write_pdf(&job.options, &job.items, &job.sources, PRINT_DPI, &file, &mut |n| {
+                    pages = n;
+                    progress(n);
+                })?;
+            (vec![file], pages, failed)
+        }
+        DocumentKind::Pages => {
+            let (files, failed) = write_pages(
+                &job.options,
+                &job.items,
+                &job.sources,
+                PRINT_DPI,
+                scratch.path(),
+                progress,
+            )?;
+            let pages = files.len();
+            (files, pages, failed)
+        }
+    };
+    if cancelled() {
+        return Err(PrintDialogError::Cancelled);
+    }
+    let submission = match spooler.kind() {
+        DocumentKind::Pdf => {
+            spooler.submit(printer, job.options.paper, PRINT_TITLE, Document::Pdf(&document[0]))?
+        }
+        DocumentKind::Pages => {
+            spooler.submit(printer, job.options.paper, PRINT_TITLE, Document::Pages(&document))?
+        }
+    };
+    Ok(PrintBatch { files: Vec::new(), pages, job_id: submission.job_id, failed })
 }
 
 #[cfg(test)]
