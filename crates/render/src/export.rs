@@ -99,7 +99,7 @@ impl From<crate::color::ColorError> for ExportError {
 /// still amortizing the recipe's per-op fixed costs over useful chunks.
 const TILE_ROWS: u32 = 128;
 
-fn encode_png(rgb: &[u8], w: u32, h: u32, profile: &[u8]) -> Vec<u8> {
+pub(crate) fn encode_png(rgb: &[u8], w: u32, h: u32, profile: &[u8]) -> Vec<u8> {
     use image::ImageEncoder;
     let mut out = Vec::new();
     let mut enc = image::codecs::png::PngEncoder::new(&mut out);
@@ -222,7 +222,7 @@ fn recipe_is_pixel_local(recipe: &fotobase_core::recipe::Recipe) -> bool {
     recipe.ops.iter().all(|op| PIXEL_LOCAL_OPS.contains(&op.op_type.as_str()))
 }
 
-fn to_srgb8(linear: &[f32]) -> Vec<u8> {
+pub(crate) fn to_srgb8(linear: &[f32]) -> Vec<u8> {
     linear.iter().map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8).collect()
 }
 
