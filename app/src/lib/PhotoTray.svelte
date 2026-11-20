@@ -26,6 +26,8 @@
     /// "Rename…" / "Move…" / "Edit…" was pressed: the shell opens the
     /// matching batch dialog for the tray's photos.
     onbatch?: (e: { mode: "rename" | "move" | "edit"; ids: number[] }) => void;
+    /// "Email…" was pressed: the shell opens the Email dialog (TASK-08-006).
+    onemail?: (e: { ids: number[] }) => void;
   }
 
   let {
@@ -34,6 +36,7 @@
     onjump = () => {},
     onaddtoalbum = () => {},
     onbatch = () => {},
+    onemail = () => {},
   }: Props = $props();
 
   function addSelection(): void {
@@ -82,6 +85,12 @@
       data-testid="tray-edit"
       disabled={tray.count === 0}
       onclick={() => onbatch({ mode: "edit", ids: tray.ids })}>{t("tray.edit")}</button
+    >
+    <button
+      type="button"
+      data-testid="tray-email"
+      disabled={tray.count === 0}
+      onclick={() => onemail({ ids: tray.ids })}>{t("tray.email")}</button
     >
     <button
       type="button"

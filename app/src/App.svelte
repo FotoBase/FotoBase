@@ -9,6 +9,7 @@
   import BatchDialog from "./lib/BatchDialog.svelte";
   import ExportDialog from "./lib/ExportDialog.svelte";
   import PrintDialog from "./lib/PrintDialog.svelte";
+  import EmailDialog from "./lib/EmailDialog.svelte";
   import BatchEditDialog from "./lib/BatchEditDialog.svelte";
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -156,6 +157,9 @@
   let exportDialog = $state<{ open: boolean; ids: number[] }>({ open: false, ids: [] });
   // Print dialog (TASK-08-004): opened from the photo menu like export.
   let printDialog = $state<{ open: boolean; ids: number[] }>({ open: false, ids: [] });
+  // Email dialog (TASK-08-006): photo menu or Photo Tray; resized copies go
+  // to the OS mail flow.
+  let emailDialog = $state<{ open: boolean; ids: number[] }>({ open: false, ids: [] });
   // Date/time adjustment (TASK-03-019): opened from the photo menu, acts on
   // the right-clicked photo or the whole selection it belongs to.
   let dateTimeDialog = $state<{ open: boolean; ids: number[] }>({ open: false, ids: [] });
@@ -616,6 +620,7 @@
     { id: "batch-edit", label: t("menu.batchEdit") },
     { id: "export", label: t("menu.export") },
     { id: "print", label: t("menu.print") },
+    { id: "email", label: t("menu.email") },
     {
       id: "stack-photos",
       label: t("menu.stackPhotos"),
@@ -713,6 +718,12 @@
       const order = new Map(photos.map((p, i) => [p.id, i]));
       const ids = picked.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
       printDialog = { open: true, ids };
+    } else if (id === "email") {
+      // TASK-08-006: attachments follow the current grid sort order.
+      const picked = targetIds(item.id, gridState.selection);
+      const order = new Map(photos.map((p, i) => [p.id, i]));
+      const ids = picked.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+      emailDialog = { open: true, ids };
     } else if (id === "stack-photos") {
       // Bursts and anything else the detector did not offer: the selection
       // (or the clicked photo) becomes one stack; the first becomes the top.
@@ -1122,6 +1133,7 @@
     resolve={photosById}
     onjump={jumpToPhoto}
     onaddtoalbum={openTrayAlbumPicker}
+    onemail={(e) => (emailDialog = { open: true, ids: e.ids })}
     onbatch={(e) => {
       if (e.mode === "edit") {
         batchEditDialog = { open: true, ids: e.ids };
@@ -1216,4 +1228,5 @@
   />
   <ExportDialog bind:open={exportDialog.open} ids={exportDialog.ids} />
   <PrintDialog bind:open={printDialog.open} ids={printDialog.ids} />
+  <EmailDialog bind:open={emailDialog.open} ids={emailDialog.ids} />
 </main>
