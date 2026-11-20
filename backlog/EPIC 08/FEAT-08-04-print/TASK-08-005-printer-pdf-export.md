@@ -1,6 +1,6 @@
 # task: add printer selection and pdf export
 
-**Feature:** [FEAT-08-04-print](FEAT-08-04-print.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-20)
+**Feature:** [FEAT-08-04-print](FEAT-08-04-print.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-20)
 
 ## Description
 OS printer selection inside the print dialog plus an export-to-PDF path producing the same layout as physical print (PLAN §2 §J: "printer selection or export to PDF"; §6 P4). Depends on the layout engine from 08-004.
