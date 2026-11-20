@@ -190,6 +190,16 @@ impl UploadReport {
     }
 }
 
+/// A file already stored on the target, as seen by the read-back queries
+/// ([`crate::ExportPlugin::list_files`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteFile {
+    pub remote_id: String,
+    pub name: String,
+    /// Known only when the target kept the key Fotobase uploaded it with.
+    pub content_key: Option<ContentKey>,
+}
+
 /// Per-file progress for the UI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProgressEvent {
@@ -262,6 +272,11 @@ pub enum ExportError {
     Cancelled,
     #[error("this upload target does not support albums")]
     AlbumsUnsupported,
+    #[error("this upload target does not support reading back what it holds")]
+    ReadBackUnsupported,
+    /// Rejected before any network call.
+    #[error("invalid upload target settings: {0}")]
+    InvalidConfig(String),
     #[error("export plugin `{0}` is already registered")]
     DuplicatePlugin(String),
     #[error("no export plugin `{0}`")]

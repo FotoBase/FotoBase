@@ -1,6 +1,6 @@
 # task: add immich export plugin
 
-**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-20)
 
 ## Description
 Immich plugin via the Immich API, designed so a future read-back/"cloud mirror" view is possible (PLAN §1 strategic note: a lightweight Immich desktop client is potentially a bigger market than standalone Fotobase).
@@ -23,5 +23,5 @@ Immich plugin via the Immich API, designed so a future read-back/"cloud mirror" 
 - Unit: URL/key validation rejects malformed config before any network call.
 
 ## Acceptance criteria
-- [ ] 08-009: Immich plugin passes the contract suite and leaves room in its design for future read-back/"cloud mirror" (§1 strategic note).
-- [ ] 08-009: Connection errors are surfaced clearly; duplicate uploads are prevented.
+- [x] 08-009: Immich plugin passes the contract suite and leaves room in its design for future read-back/"cloud mirror" (§1 strategic note).
+- [x] 08-009: Connection errors are surfaced clearly; duplicate uploads are prevented.
