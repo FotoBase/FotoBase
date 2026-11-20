@@ -10,6 +10,16 @@ Fotobase is a local-first, cross-platform (Win 10 22H2+ / macOS 12+ / Ubuntu 24.
 
 Always use the caveman skill (`/caveman`, default intensity) for every response in this repo. Mandatory, no exceptions: ultra-compressed output, full technical accuracy.
 
+## Git operations — always use the CLI
+
+Never push with plain `git push`: the agent's askpass prompt is unavailable and it fails with "could not read Username". Always use the `gh` CLI as the credential helper:
+
+```
+git -c credential.helper='!gh auth git-credential' push -u origin <branch>
+```
+
+Same for any other authenticated git operation (fetch of private remotes, etc.); for GitHub API work, use `gh` directly.
+
 ## Architecture invariants (PLAN §3 — never violate)
 
 1. Originals are read-only to the app except on explicit "Save".

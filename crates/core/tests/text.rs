@@ -304,3 +304,24 @@ fn documented_params_do_not_warn() {
     let (_, warnings) = Recipe::parse(&doc.to_string()).unwrap();
     assert!(warnings.is_empty(), "{warnings:?}");
 }
+
+// TASK-08-004: word wrap for the print text band.
+#[test]
+fn wrap_text_breaks_at_spaces_within_the_limit() {
+    use fotobase_core::text::{text_width_px, wrap_text};
+    let text = "one two three four five six seven eight";
+    let limit = text_width_px("sans", "one two three", 20.0) + 1.0;
+    let wrapped = wrap_text("sans", text, 20.0, limit);
+    assert!(wrapped.contains('\n'));
+    for line in wrapped.split('\n') {
+        assert!(text_width_px("sans", line, 20.0) <= limit, "{line:?} too wide");
+    }
+    assert_eq!(wrapped.split_whitespace().collect::<Vec<_>>().join(" "), text);
+}
+
+#[test]
+fn wrap_text_keeps_newlines_and_overlong_words() {
+    use fotobase_core::text::wrap_text;
+    assert_eq!(wrap_text("sans", "a\nb", 20.0, 1000.0), "a\nb");
+    assert_eq!(wrap_text("sans", "supercalifragilistic", 20.0, 5.0), "supercalifragilistic");
+}

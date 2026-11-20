@@ -79,6 +79,63 @@ pub fn font_substitutions(recipe: &Recipe) -> Vec<FontSubstitution> {
         .collect()
 }
 
+/// Advance width of one line of `text` at `px`, kerning included.
+fn line_width(font: &Font, text: &str, px: f32) -> f32 {
+    let mut pen = 0.0f32;
+    let mut prev: Option<char> = None;
+    for ch in text.chars().filter(|c| !c.is_control()) {
+        if let Some(p) = prev {
+            pen += font.horizontal_kern(p, ch, px).unwrap_or(0.0);
+        }
+        pen += font.metrics(ch, px).advance_width;
+        prev = Some(ch);
+    }
+    pen
+}
+
+/// Width in pixels of the widest line of `text` (lines split at `\n`) set
+/// in `font_name` at `size_px`. Unknown fonts measure as the bundled sans,
+/// exactly like [`render_text`].
+pub fn text_width_px(font_name: &str, text: &str, size_px: f32) -> f32 {
+    let font = resolve_font(font_name).font.clone();
+    text.split('\n').map(|l| line_width(&font, l, size_px)).fold(0.0, f32::max)
+}
+
+/// Height in pixels of `lines` lines of `font_name` at `size_px`, as laid
+/// out by [`render_text`].
+pub fn text_height_px(font_name: &str, lines: usize, size_px: f32) -> f32 {
+    let font = resolve_font(font_name).font.clone();
+    let (ascent, descent, line_h) = match font.horizontal_line_metrics(size_px) {
+        Some(m) => (m.ascent, m.descent, m.new_line_size),
+        None => (size_px * 0.8, -size_px * 0.2, size_px * 1.2),
+    };
+    (ascent - descent) + lines.saturating_sub(1) as f32 * line_h
+}
+
+/// Greedy word wrap: break `text` at spaces so no line is wider than
+/// `max_width_px` when set in `font_name` at `size_px`. Existing `\n` are
+/// kept; a single word wider than the limit stays on its own line. The
+/// result feeds the `text` op (which breaks lines at `\n`).
+pub fn wrap_text(font_name: &str, text: &str, size_px: f32, max_width_px: f32) -> String {
+    let font = resolve_font(font_name).font.clone();
+    let mut lines: Vec<String> = Vec::new();
+    for paragraph in text.split('\n') {
+        let mut current = String::new();
+        for word in paragraph.split_whitespace() {
+            let candidate =
+                if current.is_empty() { word.to_string() } else { format!("{current} {word}") };
+            if current.is_empty() || line_width(&font, &candidate, size_px) <= max_width_px {
+                current = candidate;
+            } else {
+                lines.push(std::mem::take(&mut current));
+                current = word.to_string();
+            }
+        }
+        lines.push(current);
+    }
+    lines.join("\n")
+}
+
 /// True for `text` ops that use the glyph-outline renderer.
 pub fn is_modern_text(op: &Op) -> bool {
     op.op_type == "text"

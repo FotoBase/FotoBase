@@ -1514,6 +1514,7 @@ dependencies = [
  "lcms2",
  "libheif-rs",
  "miniz_oxide 0.9.1",
+ "serde",
  "serde_json",
  "sha2 0.11.1",
  "tempfile",

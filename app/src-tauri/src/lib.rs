@@ -38,6 +38,7 @@ pub mod level_jobs;
 pub mod people;
 pub mod perf_probe;
 pub mod preview;
+pub mod print_dialog;
 pub mod rating;
 pub mod rebuild;
 pub mod rebuild_harness;
@@ -89,6 +90,9 @@ const BACKUP_QUEUE_CAPACITY: usize = 2;
 /// Capacity of the photo-export queue (TASK-04-015): one batch at a time,
 /// the single worker serializes them (PLAN §3 rule 4).
 const PHOTO_EXPORT_QUEUE_CAPACITY: usize = 1;
+/// Capacity of the print-pages queue (TASK-08-004): one print job at a
+/// time (PLAN §3 rule 4).
+const PRINT_QUEUE_CAPACITY: usize = 1;
 
 /// Capacity of the edit-preview render queue (TASK-04-010): bounded, per
 /// PLAN §3 rule 4; renders coalesce on (content hash, recipe id), so a
@@ -178,6 +182,9 @@ struct AppState {
     /// Bounded queue for export-dialog batches (TASK-04-015); one batch at
     /// a time, per-photo progress emitted as `photo-export-progress`.
     photo_exports: fotobase_jobs::Queue<export_dialog::ExportBatch>,
+    /// Bounded queue for print-dialog page rasterization (TASK-08-004);
+    /// progress emitted as `print-progress`.
+    prints: fotobase_jobs::Queue<print_dialog::PrintBatch>,
     /// Bounded queue for edit-view preview renders (TASK-04-010).
     edits:
         fotobase_jobs::Queue<Result<fotobase_render::RecipePreview, fotobase_render::RenderError>>,
@@ -1763,6 +1770,70 @@ async fn export_photos(
     match handle.result().await.as_ref() {
         fotobase_jobs::Outcome::Done(batch) => Ok(batch.clone()),
         fotobase_jobs::Outcome::Cancelled => Err("export cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Print dialog preview (TASK-08-004, PLAN §2J Print): the page plan for the
+/// selection — cells, fit rectangles, text bands — as JSON. The dialog draws
+/// its paper preview from it with `preview://` images, so no pixels cross
+/// IPC. Ids arrive in the current grid sort order.
+#[tauri::command]
+fn print_plan(
+    ids: Vec<i64>,
+    request: print_dialog::PrintRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<print_dialog::PrintPlanReply, String> {
+    with_catalog(&state, |cat| {
+        print_dialog::print_plan(cat, &ids, &request)
+            .map_err(|e| fotobase_catalog::CatalogError::Corrupted(e.to_string()))
+    })
+}
+
+/// Print dialog (TASK-08-004): rasterize the plan at print resolution
+/// through the shared recipe engine and write one PNG per sheet into
+/// `dest`, emitting `print-progress` {done,total} per finished sheet.
+#[tauri::command]
+async fn print_pages(
+    ids: Vec<i64>,
+    dest: String,
+    request: print_dialog::PrintRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<print_dialog::PrintBatch, String> {
+    let prepared = with_catalog(&state, |cat| {
+        print_dialog::prepare_print(cat, &ids, &request)
+            .map_err(|e| fotobase_catalog::CatalogError::Corrupted(e.to_string()))
+    })?;
+    let queue = state.prints.clone();
+    let app = state.app_handle.clone();
+    let seq = EXPORT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let prepared = std::sync::Arc::new(prepared);
+    let handle = queue
+        .try_enqueue(
+            format!("print-{seq}"),
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |_ctx| {
+                let (prepared, dest, app) = (prepared.clone(), dest.clone(), app.clone());
+                async move {
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        print_dialog::print_pages(&prepared, Path::new(&dest), &mut |done| {
+                            let _ = app.emit("print-progress", serde_json::json!({ "done": done }));
+                        })
+                        .map_err(|e| e.to_string())
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(batch)) => fotobase_jobs::Outcome::Done(batch),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("print task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue print: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(batch) => Ok(batch.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("print cancelled".into()),
         fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
     }
 }
@@ -3642,6 +3713,9 @@ pub fn run() {
             let photo_exports = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(PHOTO_EXPORT_QUEUE_CAPACITY)
             });
+            let prints = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(PRINT_QUEUE_CAPACITY)
+            });
             let backups = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(BACKUP_QUEUE_CAPACITY)
             });
@@ -3728,6 +3802,7 @@ pub fn run() {
                 datetime_jobs,
                 exports,
                 photo_exports,
+                prints,
                 backups,
                 backup_cancel: Mutex::new(None),
                 backup_config: Mutex::new(backup::BackupConfig::load(&data_dir)),
@@ -3943,6 +4018,8 @@ pub fn run() {
             cancel_backup,
             list_backup_sets,
             export_photos,
+            print_plan,
+            print_pages,
             preview_batch_rename,
             batch_rename,
             preview_batch_move,

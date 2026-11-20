@@ -64,6 +64,8 @@ pub mod fonts;
 pub mod icc;
 /// Near-duplicate perceptual hashing (TASK-04-019).
 pub mod phash;
+/// Print layouts, fit modes and page rasterization (TASK-08-004).
+pub mod print;
 /// LibRaw FFI (TASK-04-013) — isolated crate boundary for the LGPL/CDDL
 /// library, per the task spec ("own bindings", "isolated crate boundary").
 #[cfg(all(feature = "raw", not(target_os = "windows")))]
