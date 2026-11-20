@@ -32,7 +32,8 @@ async fn minio_passes_the_contract_suite_and_resumes_multipart_uploads() {
         .await;
     let container = match started {
         Ok(container) => container,
-        Err(e) if std::env::var_os("FOTOBASE_REQUIRE_DOCKER").is_none() => {
+        // CI passes an empty value on runners without Docker.
+        Err(e) if std::env::var("FOTOBASE_REQUIRE_DOCKER").unwrap_or_default().is_empty() => {
             eprintln!("skipping the MinIO contract run (no usable Docker): {e}");
             return;
         }
