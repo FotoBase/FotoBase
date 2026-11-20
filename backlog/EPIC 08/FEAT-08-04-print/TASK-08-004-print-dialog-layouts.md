@@ -1,6 +1,6 @@
 # task: build print dialog with layouts and fit options
 
-**Feature:** [FEAT-08-04-print](FEAT-08-04-print.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-20)
+**Feature:** [FEAT-08-04-print](FEAT-08-04-print.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-20)
 
 ## Description
 The print dialog with Picasa's full layout set — wallet, 3.5×5, 4×6, 5×7, 8×10, full page, contact sheet with images-per-page — plus shrink-to-fit vs crop-to-fit, border & text options, and copies per photo (PLAN §2 §J Print, §6 P4). Edits are baked in via the EPIC-04 render engine.
