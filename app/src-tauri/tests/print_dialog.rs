@@ -5,7 +5,9 @@
 use std::path::{Path, PathBuf};
 
 use fotobase_catalog::Catalog;
-use fotobase_lib::print_dialog::{prepare_print, print_pages, print_plan, PrintRequest};
+use fotobase_lib::print_dialog::{
+    export_pdf, prepare_print, print_pages, print_plan, PrintRequest,
+};
 use fotobase_render::print::{FitMode, PrintLayout, PrintOptions, TextOptions, TextSource};
 
 fn gen_jpeg(dir: &Path, name: &str, w: u32, h: u32, rgb: [u8; 3]) -> PathBuf {
@@ -121,4 +123,39 @@ fn pages_are_written_at_print_resolution_and_never_overwritten() {
     assert!(again.files.iter().all(|f| !batch.files.contains(f)), "second print keeps the first");
 
     assert!(print_pages(&job, &out.path().join("missing"), &mut |_| {}).is_err());
+}
+
+#[test]
+fn pdf_export_writes_one_page_per_sheet_with_the_paper_size() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = gen_jpeg(dir.path(), "a.jpg", 300, 200, [200, 40, 40]);
+    let b = gen_jpeg(dir.path(), "b.jpg", 200, 300, [40, 80, 200]);
+    let (cat, ids) = catalog_with_photos(dir.path(), &[(a, 300, 200), (b, 200, 300)]);
+    let out = tempfile::tempdir().unwrap();
+
+    // 2 photos on 4×6: both fit one letter sheet.
+    let job = prepare_print(&cat, &ids, &request(1)).unwrap();
+    let mut done = Vec::new();
+    let batch =
+        export_pdf(&job, &out.path().join("album"), &mut |n| done.push(n), &|| false).unwrap();
+    assert_eq!(batch.files, [out.path().join("album.pdf")], "extension added");
+    assert_eq!((batch.pages, batch.job_id.is_some()), (1, false));
+    assert_eq!(done, [1]);
+    let doc = lopdf::Document::load(&batch.files[0]).unwrap();
+    assert_eq!(doc.get_pages().len(), 1);
+
+    // Same job, copies doubled: the PDF page count follows the plan.
+    let job = prepare_print(&cat, &ids, &request(2)).unwrap();
+    let plan = print_plan(&cat, &ids, &request(2)).unwrap();
+    let batch = export_pdf(&job, &out.path().join("two.pdf"), &mut |_| {}, &|| false).unwrap();
+    let doc = lopdf::Document::load(&batch.files[0]).unwrap();
+    assert_eq!(doc.get_pages().len(), plan.pages.len());
+
+    assert!(export_pdf(&job, &out.path().join("nope/x.pdf"), &mut |_| {}, &|| false).is_err());
+
+    // Cancelled: the existing file stays untouched.
+    let before = std::fs::read(out.path().join("two.pdf")).unwrap();
+    let err = export_pdf(&job, &out.path().join("two.pdf"), &mut |_| {}, &|| true).unwrap_err();
+    assert!(matches!(err, fotobase_lib::print_dialog::PrintDialogError::Cancelled));
+    assert_eq!(std::fs::read(out.path().join("two.pdf")).unwrap(), before);
 }

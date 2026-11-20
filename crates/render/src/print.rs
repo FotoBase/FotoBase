@@ -730,3 +730,75 @@ pub fn write_pages(
     })?;
     Ok((files, failures))
 }
+
+/// JPEG quality of the page rasters inside a PDF (visually lossless).
+const PDF_JPEG_QUALITY: u8 = 95;
+
+/// Render the job and write it as one PDF (TASK-08-005): one page per sheet
+/// at the paper's size, each carrying the page raster of [`render_pages`] —
+/// the same rendering path as the PNG sheets, so the PDF and the physical
+/// print cannot differ in layout, fit, text or border. Pages are sRGB-tagged
+/// JPEGs; the file is replaced atomically (`.tmp` + rename). Returns the
+/// photos that failed.
+pub fn write_pdf(
+    opts: &PrintOptions,
+    items: &[PrintItem],
+    sources: &[PrintPhotoSource],
+    dpi: u32,
+    dest: &Path,
+    progress: &mut dyn FnMut(usize),
+) -> Result<Vec<PrintFailure>, PrintError> {
+    use pdf_writer::{Content, Filter, Finish, Name, Pdf, Rect as PdfRect, Ref};
+
+    let srgb = crate::color::srgb_profile_bytes().map_err(ExportError::from)?;
+    let plans = plan_pages(opts, items);
+    let catalog_id = Ref::new(1);
+    let tree_id = Ref::new(2);
+    let icc_id = Ref::new(3);
+    // Per sheet: page, content stream, image — consecutive ids after the profile.
+    let sheet_ref = |i: usize, k: i32| Ref::new(4 + 3 * i as i32 + k);
+
+    let mut pdf = Pdf::new();
+    pdf.catalog(catalog_id).pages(tree_id);
+    pdf.icc_profile(icc_id, &srgb).n(3);
+
+    let failures = render_pages(opts, items, sources, dpi, &mut |i, page| {
+        let (page_id, content_id, image_id) = (sheet_ref(i, 0), sheet_ref(i, 1), sheet_ref(i, 2));
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, PDF_JPEG_QUALITY)
+            .encode(&page.rgb, page.width, page.height, image::ExtendedColorType::Rgb8)
+            .map_err(std::io::Error::other)?;
+
+        let (w_pt, h_pt) = (plans[i].width * 72.0, plans[i].height * 72.0);
+        let mut p = pdf.page(page_id);
+        p.media_box(PdfRect::new(0.0, 0.0, w_pt as f32, h_pt as f32));
+        p.parent(tree_id).contents(content_id);
+        p.resources().x_objects().pair(Name(b"Im0"), image_id);
+        p.finish();
+
+        let mut content = Content::new();
+        content.save_state();
+        content.transform([w_pt as f32, 0.0, 0.0, h_pt as f32, 0.0, 0.0]);
+        content.x_object(Name(b"Im0"));
+        content.restore_state();
+        pdf.stream(content_id, &content.finish());
+
+        let mut image = pdf.image_xobject(image_id, &jpeg);
+        image.filter(Filter::DctDecode);
+        image.width(page.width as i32).height(page.height as i32);
+        image.color_space().icc_based(icc_id);
+        image.bits_per_component(8);
+        image.finish();
+        progress(i + 1);
+        Ok(())
+    })?;
+    pdf.pages(tree_id).kids((0..plans.len()).map(|i| sheet_ref(i, 0))).count(plans.len() as i32);
+
+    let tmp = dest.with_extension("pdf.tmp");
+    std::fs::write(&tmp, pdf.finish())?;
+    if let Err(e) = std::fs::rename(&tmp, dest) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e.into());
+    }
+    Ok(failures)
+}

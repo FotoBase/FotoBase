@@ -8,8 +8,12 @@ import {
   fontStack,
   pageRectStyle,
   photoStyle,
+  cancelPrint,
+  exportPrintPdf,
+  listPrinters,
   printPages,
   printPlan,
+  printToPrinter,
   type CellPlan,
 } from "./print";
 
@@ -92,5 +96,37 @@ describe("print IPC", () => {
       dest: "/out",
       request: { copies: 1, options: DEFAULT_OPTIONS },
     });
+  });
+});
+
+describe("printer and PDF IPC (TASK-08-005)", () => {
+  it("lists printers, tolerating an unavailable spooler", async () => {
+    invoke.mockResolvedValueOnce([
+      { name: "Lab", is_default: true, papers: ["letter"], default_paper: "letter", mismatch: ["a4"] },
+    ]);
+    expect((await listPrinters())[0].name).toBe("Lab");
+    expect(invoke).toHaveBeenCalledWith("list_printers", {});
+
+    invoke.mockRejectedValueOnce(new Error("no spooler"));
+    expect(await listPrinters()).toEqual([]);
+  });
+
+  it("sends the same request shape to the printer and the PDF sink", async () => {
+    invoke.mockResolvedValue({ files: [], pages: 1, job_id: null, failed: [] });
+    await printToPrinter([1, 2], "Lab", 3, DEFAULT_OPTIONS);
+    await exportPrintPdf([1, 2], "/out/a.pdf", 3, DEFAULT_OPTIONS);
+    const request = { copies: 3, options: DEFAULT_OPTIONS };
+    expect(invoke).toHaveBeenCalledWith("print_to_printer", { ids: [1, 2], printer: "Lab", request });
+    expect(invoke).toHaveBeenCalledWith("export_print_pdf", {
+      ids: [1, 2],
+      dest: "/out/a.pdf",
+      request,
+    });
+  });
+
+  it("cancels the running job", async () => {
+    invoke.mockResolvedValue(undefined);
+    await cancelPrint();
+    expect(invoke).toHaveBeenCalledWith("cancel_print", {});
   });
 });

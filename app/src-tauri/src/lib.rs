@@ -39,6 +39,7 @@ pub mod people;
 pub mod perf_probe;
 pub mod preview;
 pub mod print_dialog;
+pub mod printers;
 pub mod rating;
 pub mod rebuild;
 pub mod rebuild_harness;
@@ -185,6 +186,8 @@ struct AppState {
     /// Bounded queue for print-dialog page rasterization (TASK-08-004);
     /// progress emitted as `print-progress`.
     prints: fotobase_jobs::Queue<print_dialog::PrintBatch>,
+    /// Trips the print / PDF job in flight (TASK-08-005): `cancel_print`.
+    print_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
     /// Bounded queue for edit-view preview renders (TASK-04-010).
     edits:
         fotobase_jobs::Queue<Result<fotobase_render::RecipePreview, fotobase_render::RenderError>>,
@@ -1790,35 +1793,60 @@ fn print_plan(
     })
 }
 
-/// Print dialog (TASK-08-004): rasterize the plan at print resolution
-/// through the shared recipe engine and write one PNG per sheet into
-/// `dest`, emitting `print-progress` {done,total} per finished sheet.
-#[tauri::command]
-async fn print_pages(
+/// Run one print-dialog job (page PNGs, PDF, or a physical print) in the
+/// bounded print queue on a blocking thread, emitting `print-progress`
+/// {done} per finished sheet. The catalog is only read to resolve the
+/// selection; the (long) rasterization runs without it. `cancel_print`
+/// trips the job's token, which `task` observes.
+async fn run_print_job<F>(
+    state: &AppState,
     ids: Vec<i64>,
-    dest: String,
     request: print_dialog::PrintRequest,
-    state: tauri::State<'_, AppState>,
-) -> Result<print_dialog::PrintBatch, String> {
-    let prepared = with_catalog(&state, |cat| {
+    task: F,
+) -> Result<print_dialog::PrintBatch, String>
+where
+    F: Fn(
+            &print_dialog::PreparedPrint,
+            &mut dyn FnMut(usize),
+            &fotobase_jobs::CancelToken,
+        ) -> Result<print_dialog::PrintBatch, print_dialog::PrintDialogError>
+        + Send
+        + Sync
+        + 'static,
+{
+    let prepared = with_catalog(state, |cat| {
         print_dialog::prepare_print(cat, &ids, &request)
             .map_err(|e| fotobase_catalog::CatalogError::Corrupted(e.to_string()))
     })?;
+    let token = fotobase_jobs::CancelToken::default();
+    {
+        let mut guard =
+            state.print_cancel.lock().map_err(|e| format!("print cancel mutex poisoned: {e}"))?;
+        *guard = Some(token.clone());
+    }
     let queue = state.prints.clone();
     let app = state.app_handle.clone();
     let seq = EXPORT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let prepared = std::sync::Arc::new(prepared);
+    let task = std::sync::Arc::new(task);
+    let job_token = token.clone();
     let handle = queue
         .try_enqueue(
             format!("print-{seq}"),
             fotobase_jobs::Priority::Background,
             fotobase_jobs::job(move |_ctx| {
-                let (prepared, dest, app) = (prepared.clone(), dest.clone(), app.clone());
+                let (prepared, app, task) = (prepared.clone(), app.clone(), task.clone());
+                let token = job_token.clone();
                 async move {
                     let joined = tauri::async_runtime::spawn_blocking(move || {
-                        print_dialog::print_pages(&prepared, Path::new(&dest), &mut |done| {
-                            let _ = app.emit("print-progress", serde_json::json!({ "done": done }));
-                        })
+                        task(
+                            &prepared,
+                            &mut |done| {
+                                let _ =
+                                    app.emit("print-progress", serde_json::json!({ "done": done }));
+                            },
+                            &token,
+                        )
                         .map_err(|e| e.to_string())
                     })
                     .await;
@@ -1830,11 +1858,96 @@ async fn print_pages(
                 }
             }),
         )
-        .map_err(|e| format!("enqueue print: {e}"))?;
-    match handle.result().await.as_ref() {
+        .map_err(|e| {
+            if let Ok(mut guard) = state.print_cancel.lock() {
+                *guard = None;
+            }
+            format!("enqueue print: {e}")
+        });
+    let handle = handle?;
+    let outcome = handle.result().await;
+    if let Ok(mut guard) = state.print_cancel.lock() {
+        *guard = None;
+    }
+    match outcome.as_ref() {
         fotobase_jobs::Outcome::Done(batch) => Ok(batch.clone()),
         fotobase_jobs::Outcome::Cancelled => Err("print cancelled".into()),
         fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Print dialog (TASK-08-004): rasterize the plan at print resolution
+/// through the shared recipe engine and write one PNG per sheet into
+/// `dest`, emitting `print-progress` {done} per finished sheet.
+#[tauri::command]
+async fn print_pages(
+    ids: Vec<i64>,
+    dest: String,
+    request: print_dialog::PrintRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<print_dialog::PrintBatch, String> {
+    run_print_job(&state, ids, request, move |job, progress, _token| {
+        print_dialog::print_pages(job, Path::new(&dest), progress)
+    })
+    .await
+}
+
+/// Print dialog (TASK-08-005): export the plan as a PDF with the same
+/// layout, fit, text and border as the physical print.
+#[tauri::command]
+async fn export_print_pdf(
+    ids: Vec<i64>,
+    dest: String,
+    request: print_dialog::PrintRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<print_dialog::PrintBatch, String> {
+    run_print_job(&state, ids, request, move |job, progress, token| {
+        print_dialog::export_pdf(job, Path::new(&dest), progress, &|| token.is_cancelled())
+    })
+    .await
+}
+
+/// Print dialog (TASK-08-005): the installed printers with their default
+/// state and the paper sizes the dialog's would mismatch. Asks the OS
+/// spooler, so it runs off the async runtime.
+#[tauri::command]
+async fn list_printers() -> Result<Vec<printers::Printer>, String> {
+    tauri::async_runtime::spawn_blocking(|| printers::system_spooler().printers())
+        .await
+        .map_err(|e| format!("list printers: {e}"))?
+        .map_err(|e| e.to_string())
+}
+
+/// Print dialog (TASK-08-005): print the plan on `printer`, a name from
+/// `list_printers`. The job's id and sheet count come back once the spooler
+/// accepted it.
+#[tauri::command]
+async fn print_to_printer(
+    ids: Vec<i64>,
+    printer: String,
+    request: print_dialog::PrintRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<print_dialog::PrintBatch, String> {
+    run_print_job(&state, ids, request, move |job, progress, token| {
+        print_dialog::print_to_printer(
+            job,
+            printers::system_spooler().as_ref(),
+            &printer,
+            progress,
+            &|| token.is_cancelled(),
+        )
+    })
+    .await
+}
+
+/// Cancel the print or PDF job in flight (TASK-08-005): observed once the
+/// sheets are rendered, before anything reaches the printer or the PDF
+/// file. Best-effort: with no job in flight it is a no-op.
+#[tauri::command]
+fn cancel_print(state: tauri::State<'_, AppState>) {
+    let token = state.print_cancel.lock().ok().and_then(|guard| guard.clone());
+    if let Some(token) = token {
+        token.cancel();
     }
 }
 
@@ -3819,6 +3932,7 @@ pub fn run() {
                 geotag_undo: geotag_undo_queue,
                 geocode: geocode_queue,
                 geotag_cancel: Mutex::new(None),
+                print_cancel: Mutex::new(None),
                 import_cancel: Mutex::new(None),
                 settings: Mutex::new(persisted),
                 pending_update: Mutex::new(None),
@@ -4020,6 +4134,10 @@ pub fn run() {
             export_photos,
             print_plan,
             print_pages,
+            list_printers,
+            print_to_printer,
+            export_print_pdf,
+            cancel_print,
             preview_batch_rename,
             batch_rename,
             preview_batch_move,

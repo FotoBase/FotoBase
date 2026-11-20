@@ -2,7 +2,8 @@
 // the preview geometry. The page plan comes from the backend layout engine
 // (cells, fit rectangles, text bands, all in inches); this module only turns
 // it into CSS, so the preview cannot disagree with the printed page. Edits
-// show because the preview images are the edit-view renders.
+// show because the preview images are the edit-view renders. TASK-08-005
+// adds the sinks: an installed printer or a PDF, both fed by the same plan.
 
 export type Paper = "letter" | "a4";
 export type PrintLayout =
@@ -96,8 +97,21 @@ export interface PrintPlan {
 }
 
 export interface PrintBatch {
+  /** Page PNGs, or the one PDF; empty for a physical print. */
   files: string[];
+  pages: number;
+  /** The OS spooler's job id for a physical print, when it reports one. */
+  job_id: string | null;
   failed: { file_id: number; error: string }[];
+}
+
+export interface Printer {
+  name: string;
+  is_default: boolean;
+  papers: Paper[];
+  default_paper: Paper | null;
+  /** Dialog paper sizes this printer does not match; printing warns first. */
+  mismatch: Paper[];
 }
 
 export const MAX_IMAGES_PER_PAGE = 100;
@@ -132,6 +146,59 @@ export async function printPages(
     dest,
     request: { copies, options },
   });
+}
+
+/// Installed printers. An unavailable spooler is an empty list: the dialog
+/// still offers the PDF and PNG sinks.
+export async function listPrinters(): Promise<Printer[]> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return (await invoke<Printer[]>("list_printers", {})) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/// Print on `printer` (a name from [`listPrinters`]).
+export async function printToPrinter(
+  ids: number[],
+  printer: string,
+  copies: number,
+  options: PrintOptions,
+): Promise<PrintBatch> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return await invoke<PrintBatch>("print_to_printer", {
+    ids,
+    printer,
+    request: { copies, options },
+  });
+}
+
+/// Export the same layout as a PDF at `dest`.
+export async function exportPrintPdf(
+  ids: number[],
+  dest: string,
+  copies: number,
+  options: PrintOptions,
+): Promise<PrintBatch> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return await invoke<PrintBatch>("export_print_pdf", {
+    ids,
+    dest,
+    request: { copies, options },
+  });
+}
+
+/// Stop the print or PDF job in flight (before it reaches the printer/file).
+export async function cancelPrint(): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("cancel_print", {});
+}
+
+/// Subscribe to per-sheet progress while a job is in flight.
+export async function onPrintProgress(cb: (done: number) => void): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return await listen<{ done: number }>("print-progress", (e) => cb(e.payload.done));
 }
 
 /// The `preview://` URI of the photo's edited render (the edit view's

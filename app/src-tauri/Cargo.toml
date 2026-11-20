@@ -47,6 +47,9 @@ sha2 = "0.11"
 rusqlite = { version = "0.43", features = ["bundled"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
+# Print jobs (TASK-08-005): scratch folder for the rendered sheets handed to
+# the OS spooler.
+tempfile = "3"
 # Rating command errors (TASK-03-005).
 thiserror.workspace = true
 # Display-profile watcher (TASK-02-001): the poll loop sleeps on tokio time
@@ -83,7 +86,8 @@ fotobase-jobs = { path = "../../crates/jobs" }
 rusqlite = { version = "0.43", features = ["bundled"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 sha2 = "0.11"
-tempfile = "3"
+# Print tests (TASK-08-005): read the submitted PDF back with an independent parser.
+lopdf = "0.47"
 tokio = { version = "1", features = ["rt", "macros"] }
 # Resource-cap tests (TASK-05-012): peak RSS via getrusage.
 [target.'cfg(unix)'.dev-dependencies]
