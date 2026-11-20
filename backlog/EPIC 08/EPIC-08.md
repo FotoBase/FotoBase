@@ -22,7 +22,7 @@
 ## feat: export plugin system
 
 - [x] `08-007` (M) Export plugin trait + registry; shared contract test suite (upload, resume, retry, idempotency, album mapping).
-- [ ] `08-008` (M) Plugin: local folder.
+- [x] `08-008` (M) Plugin: local folder.
 - [ ] `08-009` (L) Plugin: Immich (API; design for future read-back/"cloud mirror" — §1 strategic note).
 - [ ] `08-010` (M) Plugin: S3-compatible.
 - [ ] `08-011` (M) Plugin: WebDAV/Nextcloud.

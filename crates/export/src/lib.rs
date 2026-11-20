@@ -31,6 +31,7 @@
 
 pub mod contract;
 mod driver;
+pub mod local_folder;
 pub mod mock;
 mod registry;
 mod types;
