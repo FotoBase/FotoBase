@@ -26,6 +26,7 @@ pub mod datetime_commands;
 pub mod display_profile;
 pub mod duplicates;
 pub mod edit;
+pub mod email_share;
 pub mod emit_pacer;
 pub mod export_dialog;
 pub mod face_jobs;
@@ -1775,6 +1776,86 @@ async fn export_photos(
         fotobase_jobs::Outcome::Cancelled => Err("export cancelled".into()),
         fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
     }
+}
+
+/// Email dialog result: how the photos reached the mail flow, and how many
+/// could not be resized.
+#[derive(Debug, Clone, serde::Serialize)]
+struct EmailReply {
+    delivery: email_share::Delivery,
+    attached: usize,
+    failed: usize,
+}
+
+/// Email dialog (TASK-08-006, PLAN §2J Email): resize the photos into a
+/// scratch folder on the bounded export queue (edits baked in, originals
+/// untouched, `photo-export-progress` {done,total} per photo), then open the
+/// OS mail flow — native composer with attachments, else `mailto:` plus the
+/// revealed folder.
+#[tauri::command]
+async fn email_photos(
+    ids: Vec<i64>,
+    request: email_share::EmailRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<EmailReply, String> {
+    if ids.is_empty() {
+        return Err("no photos to email".into());
+    }
+    let queue = state.photo_exports.clone();
+    let catalog_path = state.catalog_path();
+    let app = state.app_handle.clone();
+    let seq = EXPORT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let handle = queue
+        .try_enqueue(
+            format!("photo-email-{seq}"),
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |_ctx| {
+                let (catalog_path, app, ids) = (catalog_path.clone(), app.clone(), ids.clone());
+                async move {
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        let cat = Catalog::open(&catalog_path).map_err(|e| e.to_string())?;
+                        let root = std::env::temp_dir().join("fotobase-email");
+                        let prepared = email_share::prepare_email(
+                            &cat,
+                            &ids,
+                            &request,
+                            &root,
+                            &mut |done, total| {
+                                let _ = app.emit(
+                                    "photo-export-progress",
+                                    serde_json::json!({ "done": done, "total": total }),
+                                );
+                            },
+                        )
+                        .map_err(|e| e.to_string())?;
+                        Ok::<_, String>(export_dialog::ExportBatch {
+                            exported: prepared.exported,
+                            failed: prepared.failed,
+                        })
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(batch)) => fotobase_jobs::Outcome::Done(batch),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("email task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue email: {e}"))?;
+    let batch = match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(batch) => batch.clone(),
+        fotobase_jobs::Outcome::Cancelled => return Err("email cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => return Err(e.clone()),
+    };
+    let files: Vec<std::path::PathBuf> = batch.exported.iter().map(|f| f.path.clone()).collect();
+    let delivery = tauri::async_runtime::spawn_blocking(move || {
+        email_share::deliver(&files, &email_share::SystemMailer)
+    })
+    .await
+    .map_err(|e| format!("email task: {e}"))?
+    .map_err(|e| e.to_string())?;
+    Ok(EmailReply { delivery, attached: batch.exported.len(), failed: batch.failed.len() })
 }
 
 /// Print dialog preview (TASK-08-004, PLAN §2J Print): the page plan for the
@@ -4132,6 +4213,7 @@ pub fn run() {
             cancel_backup,
             list_backup_sets,
             export_photos,
+            email_photos,
             print_plan,
             print_pages,
             list_printers,

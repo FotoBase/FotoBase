@@ -1,6 +1,6 @@
 # task: add email via os share sheet and mailto
 
-**Feature:** [FEAT-08-04-print](FEAT-08-04-print.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-04-print](FEAT-08-04-print.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-20)
 
 ## Description
 Email selected photos with auto-resized attachments via the OS share sheet and a `mailto` fallback (PLAN §2 §J Email P4: "OS share sheet + `mailto`"). Reuses the EPIC-04 export pipeline for resizing.
@@ -20,5 +20,5 @@ Email selected photos with auto-resized attachments via the OS share sheet and a
 - E2E (per OS): invoking Email opens a share sheet or mail client without error; temp files exist and are the resized size.
 
 ## Acceptance criteria
-- [ ] 08-006: Email via OS share sheet / `mailto:` attaches auto-resized images, originals untouched.
-- [ ] 08-006: Works for multi-selection with a graceful fallback on all three OSes.
+- [x] 08-006: Email via OS share sheet / `mailto:` attaches auto-resized images, originals untouched.
+- [x] 08-006: Works for multi-selection with a graceful fallback on all three OSes.
