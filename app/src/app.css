@@ -403,6 +403,7 @@ main {
 }
 
 .viewer-stage {
+  position: relative;
   flex: 1;
   display: flex;
   align-items: center;
@@ -414,6 +415,55 @@ main {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+/* Live/Motion photo (TASK-08-017): the clip overlays the still only while
+   the hold button is pressed. */
+.live-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #111;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.live-video.active {
+  opacity: 1;
+}
+
+.live-hold {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+/* Live/Motion badge (TASK-08-017): top-left corner of a thumbnail, same
+   geometry as the canvas renderer's (LIVE_BADGE in live.ts). */
+.live-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 44px;
+  height: 16px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
 }
 
 /* Video player (TASK-02-007): the stage carries the rotation transform so

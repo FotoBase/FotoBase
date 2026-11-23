@@ -23,6 +23,7 @@
   import { gridState, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
   import { badgeText, hasStackBadge } from "./stacks";
+  import { hasLiveBadge, liveBadgeKey } from "./live";
   import { setPhotoDrag } from "./geotag-drag";
 
   interface Props {
@@ -229,6 +230,15 @@
                 />
               {:else}
                 <div class="grid-cell-placeholder" data-testid="grid-placeholder"></div>
+              {/if}
+              {#if hasLiveBadge(item) && item.live_kind}
+                <span
+                  class="live-badge"
+                  data-testid="live-badge"
+                  title={t(liveBadgeKey(item.live_kind))}
+                >
+                  ◉ {t(liveBadgeKey(item.live_kind))}
+                </span>
               {/if}
               {#if hasStackBadge(item) && item.stack_id}
                 <button

@@ -13,6 +13,8 @@
 //! itself (`-version` config flags + `-encoders` list) and CI runs it against
 //! the pinned downloads from `tools/ffmpeg-sidecar/`.
 
+pub mod live;
+
 use std::path::Path;
 use std::process::Command;
 

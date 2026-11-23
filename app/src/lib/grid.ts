@@ -26,6 +26,9 @@ export interface GridItem {
   /// = unstacked. Absent in older payloads.
   stack_id?: string | null;
   stack_count?: number;
+  /// Live/Motion photo kind detected at scan time (TASK-08-017); absent or
+  /// null for ordinary media.
+  live_kind?: "motion" | "live" | null;
 }
 
 /// Grid gap in px, both between cells and between rows.

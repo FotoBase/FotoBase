@@ -340,6 +340,9 @@ const messages: Record<string, Dict> = {
     "trash.skipped":
       "{n} could not be restored any more (album or photo is gone).",
     "trash.failed": "Undo failed: {error}",
+    "live.badge.live": "Live",
+    "live.badge.motion": "Motion",
+    "live.hold": "Press and hold to play",
     "stack.badge": "Stack of {n} photos",
     "stack.picker.title": "Stack ({n} photos)",
     "stack.picker.top": "Top",
@@ -1189,6 +1192,9 @@ const messages: Record<string, Dict> = {
     "trash.skipped":
       "{n} konnten nicht mehr wiederhergestellt werden (Album oder Foto existiert nicht mehr).",
     "trash.failed": "Rückgängig fehlgeschlagen: {error}",
+    "live.badge.live": "Live",
+    "live.badge.motion": "Motion",
+    "live.hold": "Gedrückt halten zum Abspielen",
     "stack.badge": "Stapel mit {n} Fotos",
     "stack.picker.title": "Stapel ({n} Fotos)",
     "stack.picker.top": "Oben",

@@ -409,3 +409,17 @@ describe("ThumbnailGrid row layout", () => {
     expect(row!.style.getPropertyValue("--thumb-size")).toBe(`${gridState.thumbSize}px`);
   });
 });
+
+describe("ThumbnailGrid live badge (TASK-08-017)", () => {
+  it("badges Live and Motion photos only", () => {
+    const items: GridItem[] = [
+      { id: 1, filename: "a.heic", hash: HASH(1), live_kind: "live" },
+      { id: 2, filename: "b.jpg", hash: HASH(2), live_kind: "motion" },
+      { id: 3, filename: "c.jpg", hash: HASH(3), live_kind: null },
+      { id: 4, filename: "d.jpg", hash: HASH(4) },
+    ];
+    render(ThumbnailGrid, { items });
+    const badges = screen.getAllByTestId("live-badge");
+    expect(badges.map((b) => b.textContent?.trim())).toEqual(["◉ Live", "◉ Motion"]);
+  });
+});

@@ -55,7 +55,7 @@ impl Catalog {
         let mut rows = stmt.query(refs.as_slice())?;
         let mut years: Vec<MemoryYear> = Vec::new();
         while let Some(row) = rows.next()? {
-            let year: i32 = row.get::<_, String>(12)?.parse().unwrap_or(0);
+            let year: i32 = row.get::<_, String>(13)?.parse().unwrap_or(0);
             let file = file_info_row(row)?;
             match years.last_mut() {
                 Some(last) if last.year == year => last.files.push(file),
