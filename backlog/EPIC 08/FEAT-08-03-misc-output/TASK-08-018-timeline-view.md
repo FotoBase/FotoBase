@@ -1,6 +1,6 @@
 # task: add full-screen timeline view
 
-**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-23)
+**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-23)
 
 ## Description
 Full-screen chronological browsing of folders/photos by date (PLAN §2 §B Timeline P4, View menu "Timeline: full-screen chronological browsing").
