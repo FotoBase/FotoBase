@@ -1,6 +1,6 @@
 # task: add os context menu integration
 
-**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-23)
+**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-23)
 
 ## Description
 OS file-manager context menu entries "View with Fotobase" and "Upload with Fotobase" in Explorer/Finder (PLAN §2 §M Context menu P4; Nautilus included for Linux parity).
