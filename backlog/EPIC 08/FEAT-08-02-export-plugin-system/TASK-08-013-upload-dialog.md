@@ -1,6 +1,6 @@
 # task: add tools upload dialog
 
-**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-23)
+**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-23)
 
 ## Description
 Tools → Upload dialog for batch upload with size choice and progress/cancellation (PLAN §2 Tools menu "Upload: upload to web services via export plugins"; feature acceptance). Drives any registered plugin from 08-007.
