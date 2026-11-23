@@ -16,6 +16,8 @@
   import { hasStackBadge } from "./stacks";
   import InfoPane from "./InfoPane.svelte";
   import VideoPlayer from "./VideoPlayer.svelte";
+  import LivePhotoPlayer from "./LivePhotoPlayer.svelte";
+  import { hasLiveBadge, liveBadgeKey } from "./live";
   import { isEditableTarget, nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
   import { probeAndCache } from "./codec-probe";
   import { ratingForKey, setRating, toggleStar } from "./rating";
@@ -263,12 +265,20 @@
     {:else}
       <div class="viewer-placeholder" data-testid="viewer-placeholder"></div>
     {/if}
+    {#if current && !isVideo && hasLiveBadge(current) && current.live_kind}
+      <LivePhotoPlayer fileId={current.id} kind={current.live_kind} />
+    {/if}
   </div>
   <div class="viewer-status">
     <span data-testid="viewer-count">{index + 1}/{items.length}</span>
     {#if current && hasStackBadge(current)}
       <span class="viewer-stack" data-testid="viewer-stack-badge">
         {t("stack.badge", { n: current.stack_count ?? 0 })}
+      </span>
+    {/if}
+    {#if current && !isVideo && hasLiveBadge(current) && current.live_kind}
+      <span class="viewer-live" data-testid="viewer-live-badge">
+        {t(liveBadgeKey(current.live_kind))}
       </span>
     {/if}
     {#if slideshowRunning}

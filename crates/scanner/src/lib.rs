@@ -3,8 +3,9 @@
 //! Incremental scanning per PLAN §5: a scan walks a watched folder, upserts
 //! files whose (mtime, size) changed, and removes catalog rows for files that
 //! vanished. Content hashes are computed lazily elsewhere (§10: cache by
-//! mtime+size, hash lazily) — the scanner never reads file contents, so an
-//! unchanged-library rescan performs zero file re-reads.
+//! mtime+size, hash lazily) — the scan walk never reads file contents, and
+//! the probe passes (ffprobe, Live/Motion photo detection) only open files
+//! that changed, so an unchanged-library rescan performs zero file re-reads.
 //!
 //! Heavy scan work must stay bounded and cancellable (§3 rule 4): the caller
 //! passes an [`AtomicBool`] cancel flag and the walk checks it throughout.
@@ -14,7 +15,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use fotobase_catalog::{Catalog, Result};
+use fotobase_catalog::{Catalog, LiveMedia, Result};
+use fotobase_video::live;
 use fotobase_video::VideoMeta as ProbeMeta;
 
 pub mod batch;
@@ -214,7 +216,8 @@ pub fn scan_folder_with_probes(
     catalog.begin_uncommitted_batch()?;
     let mut touched: Vec<String> = Vec::new();
     let result = scan_inner(catalog, root, &dirs, &files, options.full, &mut touched)
-        .and_then(|report| probe_videos(catalog, root, cancel, video_probe).map(|_| report));
+        .and_then(|report| probe_videos(catalog, root, cancel, video_probe).map(|_| report))
+        .and_then(|report| detect_live_media(catalog, root, cancel).map(|_| report));
     match result {
         Ok(report) => {
             catalog.commit_batch()?;
@@ -474,6 +477,82 @@ fn probe_videos(
         }
     }
     Ok(())
+}
+
+/// Live/Motion photo detection (TASK-08-017). Runs inside the scan
+/// transaction after the video probes: every image whose (mtime) changed since
+/// its last check is inspected once — Android Motion Photos by their XMP +
+/// MP4 trailer, Apple Live Photos by a same-stem sibling MOV with a matching
+/// ContentIdentifier — and the verdict is recorded so the grid badge needs no
+/// per-view probing. Unreadable files are logged and retried next scan;
+/// malformed ones are simply "not live" (PLAN §9).
+fn detect_live_media(catalog: &mut Catalog, root: &Path, cancel: &AtomicBool) -> Result<()> {
+    let root_str = root.to_string_lossy().into_owned();
+    let candidates = catalog.live_candidates_under(&root_str)?;
+    let mut movs: HashMap<(PathBuf, String), String> = HashMap::new();
+    for (path, _) in catalog.video_files_under(&root_str)? {
+        let p = Path::new(&path);
+        if has_ext(p, &["mov"]) {
+            movs.insert(sibling_key(p), path);
+        }
+    }
+    for c in candidates {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let path = Path::new(&c.path);
+        let motion_capable = has_ext(path, &["jpg", "jpeg"]);
+        if !motion_capable && !has_ext(path, &["heic", "heif"]) {
+            continue;
+        }
+        let sibling = movs.get(&sibling_key(path));
+        // A still without a verdict-bearing pair is re-checked while a
+        // sibling MOV exists: the MOV may have arrived after the still.
+        if !c.needs_check() && (c.has_live || sibling.is_none()) {
+            continue;
+        }
+        let mut found = None;
+        if motion_capable {
+            match live::detect_motion_photo(path) {
+                Ok(Some(clip)) => {
+                    found = Some(LiveMedia::Motion { offset: clip.offset, len: clip.len });
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!(file = %c.path, error = %e, "motion photo check failed");
+                    continue;
+                }
+            }
+        }
+        if found.is_none() {
+            if let Some(video) = sibling {
+                match live::live_pair_matches(path, Path::new(video)) {
+                    Ok(true) => found = Some(LiveMedia::Live { video_path: video.clone() }),
+                    Ok(false) => {}
+                    Err(e) => {
+                        tracing::warn!(file = %c.path, error = %e, "live photo pairing failed");
+                        continue;
+                    }
+                }
+            }
+        }
+        catalog.set_live_media(c.id, c.mtime, found.as_ref())?;
+    }
+    Ok(())
+}
+
+fn has_ext(path: &Path, exts: &[&str]) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| exts.iter().any(|x| e.eq_ignore_ascii_case(x)))
+}
+
+/// Folder + lowercased stem: how Apple names a Live Photo's two files.
+fn sibling_key(path: &Path) -> (PathBuf, String) {
+    (
+        path.parent().map(Path::to_path_buf).unwrap_or_default(),
+        path.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_lowercase(),
+    )
 }
 
 /// Per-scan probe batch: a scan never grows unboundedly (§3 rule 4). A

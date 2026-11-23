@@ -36,6 +36,7 @@ pub mod geocode;
 pub mod geotag_tool;
 pub mod import;
 pub mod level_jobs;
+pub mod live_clip;
 pub mod people;
 pub mod perf_probe;
 pub mod preview;
@@ -2695,6 +2696,20 @@ fn video_info(
     with_catalog(&state, |cat| cat.video_info(file_id))
 }
 
+/// Playable clip behind a Live/Motion photo (TASK-08-017): the paired MOV for
+/// an Apple Live Photo, or the Motion Photo's embedded MP4 extracted into the
+/// cache's `live/` folder. `None` for plain photos — the viewer shows the
+/// still. Only a path crosses IPC; the `<video>` loads it through the asset
+/// protocol like any other video.
+#[tauri::command]
+fn live_clip(
+    file_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<live_clip::LiveClip>, String> {
+    let cache_dir = state.cache_dir();
+    with_catalog_str(&state, |cat| live_clip::resolve_live_clip(cat, &cache_dir, file_id))
+}
+
 /// The Folders-view tree data (TASK-01-015, PLAN §2B): every catalog folder
 /// with the year its newest file falls in. Ids + paths only — no image
 /// bytes, and the UI derives display names from the paths.
@@ -4646,6 +4661,7 @@ pub fn run() {
             cancel_batch_edit,
             photo_info,
             video_info,
+            live_clip,
             list_folders,
             prioritize_visible,
             get_settings,

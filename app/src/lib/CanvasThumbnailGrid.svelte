@@ -36,6 +36,7 @@
   import { gridState, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
   import { badgeText, hasStackBadge, inStackBadge, STACK_BADGE } from "./stacks";
+  import { hasLiveBadge, LIVE_BADGE } from "./live";
 
   /// What `drawImage` accepts; tests inject stand-ins with the same shape.
   type ImageLike = { src: string; width: number; height: number };
@@ -240,6 +241,25 @@
                   imgCache.set(uri, "failed");
                   currentDraw?.();
                 });
+            }
+          }
+
+          if (hasLiveBadge(item)) {
+            const { width, height, margin } = LIVE_BADGE;
+            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+            ctx.fillRect(x + margin, y + margin, width, height);
+            ctx.fillStyle = "#fff";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = "9px sans-serif";
+            ctx.fillText(
+              item.live_kind === "live" ? "LIVE" : "MOTION",
+              x + margin + width / 2,
+              y + margin + height / 2,
+            );
+            ctx.textAlign = "start";
+            if (strip > 0) {
+              ctx.font = `${Math.round(strip * 0.65)}px sans-serif`;
             }
           }
 

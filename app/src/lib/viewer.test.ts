@@ -365,3 +365,20 @@ describe("Viewer", () => {
     }
   });
 });
+
+describe("Viewer live badge (TASK-08-017)", () => {
+  it("shows the kind and the hold button for a Live photo, nothing for a plain one", async () => {
+    const items = makeItems(2);
+    items[0] = { ...items[0], live_kind: "live" };
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === "live_clip" ? { path: "/lib/a.mov", kind: "live" } : null),
+    );
+    renderViewer(items, { startIndex: 0 });
+    expect(screen.getByTestId("viewer-live-badge").textContent).toContain("Live");
+    await vi.waitFor(() => screen.getByTestId("live-hold"));
+
+    pressKey("ArrowRight");
+    expect(screen.queryByTestId("viewer-live-badge")).toBeNull();
+    expect(screen.queryByTestId("live-hold")).toBeNull();
+  });
+});

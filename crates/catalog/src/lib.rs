@@ -18,6 +18,7 @@ pub mod folder_ini;
 pub mod geonames;
 pub mod geotag_tool;
 pub mod hidden;
+pub mod live_media;
 pub mod memories;
 pub mod metadata_edit;
 pub mod migrations;
@@ -40,6 +41,7 @@ pub use face_clusters::ClusterRow;
 pub use faces::{FaceRecord, FaceRow};
 pub use folder_ini::{FolderIniReport, FolderIniStatus};
 pub use geotag_tool::{GeotagRequest, GeotagTarget, GeotagToolReport};
+pub use live_media::{LiveCandidate, LiveMedia};
 pub use memories::MemoryYear;
 pub use metadata_edit::{FieldError, GpsEdit, MetadataEdit, MetadataField};
 pub use migrations::MIGRATIONS;
@@ -128,6 +130,10 @@ pub struct FileInfo {
     /// Members in the photo's stack, 0 when unstacked. The grid draws a
     /// badge for 2 or more.
     pub stack_count: i64,
+    /// `motion` (Android Motion Photo) or `live` (Apple Live Photo) when
+    /// scan-time detection found a clip for the photo (TASK-08-017); the
+    /// grid and viewer draw the badge from this.
+    pub live_kind: Option<String>,
 }
 
 /// One geotagged photo for the map (TASK-06-002): the content hash keys
@@ -160,7 +166,8 @@ pub(crate) const FILE_INFO_COLS: &str = "f.id, f.filename, f.hash, f.media_type,
           WHERE ft.file_id = f.id AND ft.origin = 'confirmed' ORDER BY t.name)),
      f.width, f.height, f.stack_id,
      CASE WHEN f.stack_id IS NULL THEN 0
-          ELSE (SELECT COUNT(*) FROM files s WHERE s.stack_id = f.stack_id) END";
+          ELSE (SELECT COUNT(*) FROM files s WHERE s.stack_id = f.stack_id) END,
+     (SELECT lm.kind FROM live_media lm WHERE lm.file_id = f.id)";
 
 /// Appended to a `WHERE` on `files f`: a stack shows as its top only
 /// (TASK-03-021). A stack with no top left (the top's file left the
@@ -192,6 +199,7 @@ fn file_info_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FileInfo> {
         height: r.get(9)?,
         stack_id: r.get(10)?,
         stack_count: r.get(11)?,
+        live_kind: r.get(12)?,
     })
 }
 

@@ -31,6 +31,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_V22,
     MIGRATION_V23,
     MIGRATION_V24,
+    MIGRATION_V25,
 ];
 
 const MIGRATION_V1: &str = "
@@ -999,6 +1000,23 @@ ALTER TABLE files ADD COLUMN quality_scanned INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE photo_quality (
     file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
     score   REAL NOT NULL
+);
+";
+
+/// TASK-08-017: Live/Motion photo index. `files.live_checked_mtime` is the
+/// sentinel the incremental detection pass keys on (a photo is re-checked
+/// only when its mtime moved); `live_media` holds the detection result — an
+/// embedded clip's byte range (Android Motion Photo) or the paired MOV path
+/// (Apple Live Photo). Derived data: a rebuild re-detects it at scan time
+/// and nothing is ever written to sidecars or originals.
+const MIGRATION_V25: &str = "
+ALTER TABLE files ADD COLUMN live_checked_mtime REAL;
+CREATE TABLE live_media (
+    file_id      INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+    kind         TEXT NOT NULL CHECK (kind IN ('motion', 'live')),
+    video_path   TEXT,
+    clip_offset  INTEGER,
+    clip_len     INTEGER
 );
 ";
 
