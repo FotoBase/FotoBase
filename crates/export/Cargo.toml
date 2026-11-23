@@ -9,6 +9,7 @@ description = "Export plugin trait, registry and shared contract test suite (upl
 [dependencies]
 async-trait = "0.1"
 base64 = "0.22"
+fotobase-render = { path = "../render" }
 getrandom = "0.3"
 instant-xml = "0.7"
 jiff = "1"
@@ -26,6 +27,8 @@ tokio-util = { version = "0.7", features = ["io"] }
 url = "2"
 
 [dev-dependencies]
+# TASK-08-016: builds and reads back the fixture album images.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 testcontainers = { version = "0.28", features = ["http_wait_plain"] }
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 
