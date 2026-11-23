@@ -31,6 +31,7 @@ pub mod restore;
 pub mod search_syntax;
 pub mod stacks;
 pub mod sync;
+pub mod timeline;
 pub mod trash;
 
 pub use albums::AlbumInfo;
@@ -53,6 +54,7 @@ pub use relocate::BatchFile;
 pub use search_syntax::{parse_field_filters, ParsedQuery};
 pub use stacks::{StackKind, StackSuggestion, DEFAULT_PAIR_WINDOW_SECS};
 pub use sync::{sidecar_path, SyncError, SyncStats, ORIGINALS_DIR};
+pub use timeline::TimelineGroup;
 pub use trash::{TrashAction, TrashEntry, UndoReport, DEFAULT_TRASH_WINDOW_DAYS};
 
 use std::path::{Path, PathBuf};

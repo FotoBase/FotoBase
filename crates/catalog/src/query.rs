@@ -13,7 +13,7 @@ use crate::{
 /// Date of a file as `YYYY-MM-DD`: `taken_at` when it is date-shaped (EXIF
 /// `2023:05:01 …` or ISO `2023-05-01T…`), else the `mtime` — the same
 /// fallback the Folders view uses for its year groups.
-const FILE_DATE: &str = "COALESCE(CASE WHEN f.taken_at GLOB \
+pub(crate) const FILE_DATE: &str = "COALESCE(CASE WHEN f.taken_at GLOB \
     '[0-9][0-9][0-9][0-9][-:][0-9][0-9][-:][0-9][0-9]*' \
     THEN replace(substr(f.taken_at, 1, 10), ':', '-') END, date(f.mtime, 'unixepoch'))";
 
