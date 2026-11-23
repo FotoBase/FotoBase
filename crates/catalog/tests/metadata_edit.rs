@@ -312,6 +312,8 @@ fn migrating_an_older_catalog_makes_the_next_rebuild_reread_sidecars() {
          ALTER TABLE files DROP COLUMN embed_scanned;
          ALTER TABLE files DROP COLUMN quality_scanned;
          DROP TABLE photo_quality;
+         DROP TABLE live_media;
+         ALTER TABLE files DROP COLUMN live_checked_mtime;
          ALTER TABLE folders DROP COLUMN face_detect;
          ALTER TABLE metadata DROP COLUMN artist;
          ALTER TABLE metadata DROP COLUMN copyright;
