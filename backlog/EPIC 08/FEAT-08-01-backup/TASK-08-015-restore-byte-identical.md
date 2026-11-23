@@ -1,6 +1,6 @@
 # task: add restore from backup sets
 
-**Feature:** [FEAT-08-01-backup](FEAT-08-01-backup.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-23)
+**Feature:** [FEAT-08-01-backup](FEAT-08-01-backup.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-23)
 
 ## Description
 Restore from backup sets with integrity validation before writing anything, and the byte-identical restore acceptance test (PLAN §6 P4 acceptance: "Backup → wipe → restore reproduces library and sidecars byte-identical"; §9).
