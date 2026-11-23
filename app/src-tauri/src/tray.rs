@@ -283,7 +283,7 @@ pub fn quit(app: &AppHandle) {
     app.exit(0);
 }
 
-fn show_main_window(app: &AppHandle) {
+pub(crate) fn show_main_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.unminimize();
         let _ = win.show();

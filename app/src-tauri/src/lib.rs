@@ -22,6 +22,7 @@ pub mod catalog_registry;
 pub mod clip_jobs;
 pub mod codec;
 pub mod contacts;
+pub mod context_menu;
 pub mod datetime_commands;
 pub mod display_profile;
 pub mod duplicates;
@@ -254,6 +255,9 @@ struct AppState {
     /// Files the OS opened with Fotobase at launch (TASK-01-025), drained
     /// once by the frontend's `take_open_files` and routed into the viewer.
     pending_open: Mutex<Vec<String>>,
+    /// Files the OS context menu's "Upload with Fotobase" passed at launch
+    /// (TASK-08-020), drained once by `take_upload_files`.
+    pending_upload: Mutex<Vec<String>>,
     /// Current display ICC profile the render pipeline transforms into
     /// (TASK-02-001): the OS profile on macOS/Windows, the bundled sRGB
     /// profile on Linux. Swapped in place by the profile watcher; the render
@@ -3684,6 +3688,34 @@ fn unregister_associations(
     associations::unregister(&exts, &exe, &state.data_dir)
 }
 
+/// Files the OS context menu asked to upload (TASK-08-020): drained once by
+/// the frontend, which opens the upload dialog on them.
+#[tauri::command]
+fn take_upload_files(state: tauri::State<'_, AppState>) -> Vec<String> {
+    state.pending_upload.lock().map(|mut guard| std::mem::take(&mut *guard)).unwrap_or_default()
+}
+
+/// Route a launch request that reached an already-running instance: park
+/// the files (a frontend that is still starting drains them), tell a live
+/// frontend, and bring the window forward.
+fn route_launch(app: &tauri::AppHandle, request: context_menu::LaunchRequest) {
+    tray::show_main_window(app);
+    if request.paths.is_empty() {
+        return;
+    }
+    let (queue, event) = match request.action {
+        context_menu::LaunchAction::View => ("open", "open-file"),
+        context_menu::LaunchAction::Upload => ("upload", "upload-files"),
+    };
+    if let Some(state) = app.try_state::<AppState>() {
+        let pending = if queue == "open" { &state.pending_open } else { &state.pending_upload };
+        if let Ok(mut guard) = pending.lock() {
+            guard.extend(request.paths.iter().cloned());
+        }
+    }
+    let _ = app.emit(event, &request.paths);
+}
+
 /// Files the OS passed at launch (TASK-01-025): drained exactly once by the
 /// frontend, which resolves each path against the catalog and opens the
 /// viewer. Unknown/uncataloged paths are silently dropped.
@@ -3738,6 +3770,17 @@ fn set_settings(
     if hotkey.is_err() {
         new.screen_capture_enabled = false;
     }
+    // Context menu entries (TASK-08-020) follow the setting, touching the OS
+    // only on a real change. A refused enable is stored off, like the hotkey.
+    let menu_was_on = state.settings.lock().map(|s| s.context_menu_enabled).unwrap_or(true);
+    let context_menu = if new.context_menu_enabled == menu_was_on {
+        Ok(())
+    } else {
+        context_menu::apply(new.context_menu_enabled)
+    };
+    if context_menu.is_err() && new.context_menu_enabled {
+        new.context_menu_enabled = false;
+    }
     new.save(&state.data_dir).map_err(|e| format!("save settings: {e}"))?;
     {
         let mut guard =
@@ -3750,7 +3793,7 @@ fn set_settings(
     if let Some(cat) = guard.as_mut() {
         trash_commands::apply_settings(cat, &new)?;
     }
-    hotkey
+    hotkey.and(context_menu)
 }
 
 /// "Clear cache files": drain the render queue, then empty the thumbnail
@@ -4215,7 +4258,16 @@ pub fn run() {
         )
         .init();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Context menu / file association launches (TASK-08-020): a second
+    // process hands its argv to the running instance and exits; the running
+    // window is focused and the files are routed into the viewer or the
+    // upload dialog. Registered first, as the plugin requires.
+    #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+        route_launch(app, context_menu::parse_launch_args(&argv[1.min(argv.len())..]));
+    }));
+    builder
         // TASK-01-003: signed updater (PLAN §4). Signature verification of
         // downloaded artifacts is done by the plugin itself (minisign against
         // the pubkey pinned in tauri.conf.json) and cannot be disabled.
@@ -4463,8 +4515,13 @@ pub fn run() {
             // OS-opened files (TASK-01-025): whatever the OS passed on the
             // command line that is an existing supported image is parked
             // for the frontend to pick up and route into the viewer.
-            let pending_open: Vec<String> =
-                associations::collect_open_paths(&std::env::args().skip(1).collect::<Vec<_>>());
+            // The context menu (TASK-08-020) adds `--view` / `--upload`.
+            let launch =
+                context_menu::parse_launch_args(&std::env::args().skip(1).collect::<Vec<_>>());
+            let (pending_open, pending_upload) = match launch.action {
+                context_menu::LaunchAction::View => (launch.paths, Vec::new()),
+                context_menu::LaunchAction::Upload => (Vec::new(), launch.paths),
+            };
             app.manage(AppState {
                 app_handle: app.handle().clone(),
                 data_dir: data_dir.clone(),
@@ -4504,6 +4561,7 @@ pub fn run() {
                 pending_update: Mutex::new(None),
                 folders: Mutex::new(None),
                 pending_open: Mutex::new(pending_open),
+                pending_upload: Mutex::new(pending_upload),
                 display_profile: Mutex::new(initial_display_profile()),
                 video_extractor: std::sync::Arc::new(fotobase_video::Ffmpeg::default()),
                 codec_support: Mutex::new(None),
@@ -4603,6 +4661,22 @@ pub fn run() {
                 tracing::warn!("tray icon unavailable: {e}");
             }
             tray::spawn_status_updater(app.handle().clone());
+            // Context menu (TASK-08-020): re-register on every release start so
+            // a moved or updated app never leaves stale entries. Dev builds
+            // skip it — their exe path must not leak into the user's menus.
+            let menu_on = app
+                .state::<AppState>()
+                .settings
+                .lock()
+                .map(|s| s.context_menu_enabled)
+                .unwrap_or(false);
+            if menu_on && !cfg!(debug_assertions) {
+                std::thread::spawn(|| {
+                    if let Err(e) = context_menu::apply(true) {
+                        tracing::warn!("context menu registration failed: {e}");
+                    }
+                });
+            }
             // Screen capture hotkey (TASK-08-019): only when opted in.
             let capture_on = app
                 .state::<AppState>()
@@ -4769,6 +4843,7 @@ pub fn run() {
             create_catalog,
             switch_catalog,
             take_open_files,
+            take_upload_files,
             find_file_by_path,
             perf_probe,
             basemap_status

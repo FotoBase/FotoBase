@@ -351,6 +351,35 @@ describe("OptionsDialog screen capture (TASK-08-019)", () => {
   });
 });
 
+describe("OptionsDialog context menu (TASK-08-020)", () => {
+  it("is on by default and unticking saves the opt-out", async () => {
+    expect(DEFAULT_SETTINGS.context_menu_enabled).toBe(true);
+    const base: Settings = { ...DEFAULT_SETTINGS };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+    expect((screen.getByTestId("context-menu") as HTMLInputElement).checked).toBe(true);
+
+    await fireEvent.click(screen.getByTestId("context-menu"));
+    await settle();
+
+    expect(saveSettings).toHaveBeenCalledWith({ ...base, context_menu_enabled: false });
+    expect(onchange).toHaveBeenCalledWith({ ...base, context_menu_enabled: false });
+  });
+
+  it("reverts and explains when the OS refuses to register", async () => {
+    vi.mocked(saveSettings).mockRejectedValue("write ~/Library/Services: denied");
+    const base: Settings = { ...DEFAULT_SETTINGS, context_menu_enabled: false };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+
+    await fireEvent.click(screen.getByTestId("context-menu"));
+    await settle();
+
+    expect(onchange).toHaveBeenLastCalledWith({ ...base, context_menu_enabled: false });
+    expect(screen.getByTestId("context-menu-error").textContent).toContain("denied");
+  });
+});
+
 describe("OptionsDialog portable export (TASK-03-023)", () => {
   it("opens the export dialog", async () => {
     render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });

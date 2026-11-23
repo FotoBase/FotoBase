@@ -171,6 +171,15 @@ pub struct Settings {
     /// Which displays a capture grabs (TASK-08-019).
     #[serde(default)]
     pub screen_capture_display: CaptureDisplay,
+    /// "View with Fotobase" / "Upload with Fotobase" entries in the OS file
+    /// manager (TASK-08-020). On by default: installing the app registers
+    /// them; off removes them.
+    #[serde(default = "default_context_menu_enabled")]
+    pub context_menu_enabled: bool,
+}
+
+fn default_context_menu_enabled() -> bool {
+    true
 }
 
 fn default_close_to_tray() -> bool {
@@ -207,6 +216,7 @@ impl Default for Settings {
             close_to_tray: default_close_to_tray(),
             screen_capture_enabled: false,
             screen_capture_display: CaptureDisplay::default(),
+            context_menu_enabled: default_context_menu_enabled(),
         }
     }
 }
@@ -270,6 +280,22 @@ mod tests {
                 .unwrap();
         assert_eq!(old.language, "de");
         assert!(!old.screen_capture_enabled);
+    }
+
+    #[test]
+    fn context_menu_defaults_on_and_survives_old_files() {
+        // TASK-08-020: the entries ship registered; older settings.json
+        // files (no key) get them too.
+        assert!(Settings::default().context_menu_enabled);
+        let old: Settings =
+            serde_json::from_str(r#"{"language":"de","update_mode":"off","show_tooltips":false}"#)
+                .unwrap();
+        assert!(old.context_menu_enabled);
+        let off: Settings = serde_json::from_str(
+            r#"{"language":"de","update_mode":"off","show_tooltips":false,"context_menu_enabled":false}"#,
+        )
+        .unwrap();
+        assert!(!off.context_menu_enabled);
     }
 
     #[test]

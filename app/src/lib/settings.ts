@@ -49,6 +49,9 @@ export interface Settings {
   screen_capture_enabled: boolean;
   /// Which displays a capture grabs (TASK-08-019).
   screen_capture_display: "all" | "active";
+  /// "View with Fotobase" / "Upload with Fotobase" entries in the OS file
+  /// manager (TASK-08-020). Registered by default; off removes them.
+  context_menu_enabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -71,6 +74,7 @@ export const DEFAULT_SETTINGS: Settings = {
   close_to_tray: true,
   screen_capture_enabled: false,
   screen_capture_display: "all",
+  context_menu_enabled: true,
 };
 
 // Image types the file-association option (TASK-01-025, PLAN §2M) can
@@ -191,6 +195,13 @@ export async function unregisterAssociations(exts: string[]): Promise<void> {
 export async function takeOpenFiles(): Promise<string[]> {
   const { invoke } = await import("@tauri-apps/api/core");
   return await invoke<string[]>("take_open_files");
+}
+
+// Files the OS context menu's "Upload with Fotobase" passed (TASK-08-020):
+// parked by the backend, drained once by the shell.
+export async function takeUploadFiles(): Promise<string[]> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return await invoke<string[]>("take_upload_files");
 }
 
 export interface FilePathMatch {

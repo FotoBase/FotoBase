@@ -25,6 +25,12 @@ Steps in order. A release is not published if any step fails.
 - [ ] Installer size < 20 MB per artifact.
 - [ ] Install smoke test on each OS: app launches, scans the 1k fixture, first thumbnails render.
 - [ ] Updater test: signed update accepted; tampered artifact rejected.
+- [ ] OS context menu check on each OS (TASK-08-020; Finder/Explorer/Nautilus UI is not automatable):
+  - After install and one app start, right-click a JPEG: "View with Fotobase" and "Upload with Fotobase" are listed (Windows: Explorer verbs; macOS: Finder → Quick Actions / Services; Linux: Nautilus → Scripts).
+  - With the app closed, "View with Fotobase" launches it on that photo in the viewer; with the app running (also minimized or in the tray), the same window is focused and shows the photo.
+  - "Upload with Fotobase" opens the Upload dialog with that photo preselected (the photo must be in a watched folder), closed or running.
+  - Options → untick the context menu option: entries disappear. Tick it again: they return.
+  - Uninstall: Windows — no `FotobaseView`/`FotobaseUpload` keys remain under `HKCU\Software\Classes\SystemFileAssociations`. macOS/Linux — the entries remove themselves on first use after the app is deleted.
 - [ ] Google Photos live check (CI only runs the recorded-API mock; TASK-08-012), with a throwaway Google account on the release build:
   - Sign in through the system browser; consent lists only "add photos" and "see photos added by this app". Denying or cancelling shows an error, not a half-connected state.
   - Upload 3 photos (one > 16 MB) into a new album, then repeat the same upload: nothing is uploaded again and the album holds each photo once.

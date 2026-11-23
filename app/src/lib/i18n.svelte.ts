@@ -147,6 +147,9 @@ const messages: Record<string, Dict> = {
       "Single click opens the edit view (Ctrl/Cmd-click selects)",
     "options.closeToTray":
       "Closing the window keeps watching from the tray (quit from the tray icon)",
+    "options.contextMenu":
+      "Add “View with Fotobase” and “Upload with Fotobase” to the Explorer / Finder / Nautilus right-click menu",
+    "options.contextMenuFailed": "Could not change the file manager menu: {error}",
     "options.screenCapture":
       "Save PrtScn screenshots into the “Screen Captures” folder (Fotobase takes over the PrtScn key; macOS needs screen-recording permission and uses F13)",
     "options.screenCaptureFailed": "Could not enable screen capture: {error}",
@@ -1002,6 +1005,10 @@ const messages: Record<string, Dict> = {
       "Einzelklick öffnet die Bearbeitungsansicht (Strg/Cmd-Klick wählt aus)",
     "options.closeToTray":
       "Beim Schließen des Fensters läuft das Beobachten über das Tray-Symbol weiter (Beenden über das Tray-Symbol)",
+    "options.contextMenu":
+      "„Mit Fotobase ansehen“ und „Mit Fotobase hochladen“ ins Kontextmenü von Explorer / Finder / Nautilus aufnehmen",
+    "options.contextMenuFailed":
+      "Das Menü des Dateimanagers konnte nicht geändert werden: {error}",
     "options.screenCapture":
       "Druck-Screenshots im Ordner „Screen Captures“ speichern (Fotobase belegt die Taste Druck; macOS braucht die Berechtigung zur Bildschirmaufnahme und nutzt F13)",
     "options.screenCaptureFailed":
