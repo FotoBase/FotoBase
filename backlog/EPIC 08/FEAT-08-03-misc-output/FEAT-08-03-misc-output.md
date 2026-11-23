@@ -11,7 +11,7 @@
 - [x] `08-016` (M) HTML gallery export (static templates; reused by F1.1/F4).
 - [x] `08-017` (M) Live/Motion photo playback (Apple Live Photos, Android Motion Photos).
 - [x] `08-018` (M) Timeline view (full-screen chronological browsing).
-- [ ] `08-019` (S) Screen capture folder (PrtScn → "Screen Captures" library folder).
+- [x] `08-019` (S) Screen capture folder (PrtScn → "Screen Captures" library folder).
 - [ ] `08-020` (M) OS context menu integration ("View with…", "Upload") — Explorer/Finder.
 
 ## Tasks
