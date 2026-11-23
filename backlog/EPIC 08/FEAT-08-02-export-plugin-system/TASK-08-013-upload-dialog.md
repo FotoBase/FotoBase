@@ -1,6 +1,6 @@
 # task: add tools upload dialog
 
-**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-02-export-plugin-system](FEAT-08-02-export-plugin-system.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-23)
 
 ## Description
 Tools → Upload dialog for batch upload with size choice and progress/cancellation (PLAN §2 Tools menu "Upload: upload to web services via export plugins"; feature acceptance). Drives any registered plugin from 08-007.
@@ -25,5 +25,5 @@ Tools → Upload dialog for batch upload with size choice and progress/cancellat
 - Integration: cancel mid-batch → succeeded files remain, partial file cleaned up, dialog state consistent.
 
 ## Acceptance criteria
-- [ ] 08-013: Tools → Upload dialog batch-uploads with size choice, progress, and cancellation across all registered plugins.
-- [ ] 08-013: Per-file errors are retryable without redoing succeeded files.
+- [x] 08-013: Tools → Upload dialog batch-uploads with size choice, progress, and cancellation across all registered plugins.
+- [x] 08-013: Per-file errors are retryable without redoing succeeded files.

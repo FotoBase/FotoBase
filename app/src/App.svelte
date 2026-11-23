@@ -10,6 +10,7 @@
   import ExportDialog from "./lib/ExportDialog.svelte";
   import PrintDialog from "./lib/PrintDialog.svelte";
   import EmailDialog from "./lib/EmailDialog.svelte";
+  import UploadDialog from "./lib/UploadDialog.svelte";
   import BatchEditDialog from "./lib/BatchEditDialog.svelte";
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -80,6 +81,8 @@
   let trashOpen = $state(false);
   // Backup Manager (TASK-08-014, PLAN §2L Tools menu).
   let backupOpen = $state(false);
+  // Upload dialog (TASK-08-013): uses the tray when populated, else selection.
+  let uploadDialog = $state<{ open: boolean; ids: number[] }>({ open: false, ids: [] });
   // Folder ini migration offer (TASK-03-022): folders a scan found an ini
   // in; the dialog opens whenever one is waiting for an answer.
   let folderIniOpen = $state(false);
@@ -801,6 +804,15 @@
     return photos.filter((p) => wanted.has(p.id));
   }
 
+  function openUploadDialog(): void {
+    const ids = actionIds(gridState.selection, tray.ids);
+    if (tray.ids.length === 0) {
+      const order = new Map(photos.map((photo, index) => [photo.id, index]));
+      ids.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+    }
+    uploadDialog = { open: true, ids };
+  }
+
   // Tray click (TASK-03-010): show the photo in the grid. When the current
   // folder/album/search view hides it, widen the view to the whole library
   // first (search and filters included); the grid scrolls to it as soon as
@@ -984,6 +996,9 @@
   </button>
   <button type="button" onclick={() => (backupOpen = true)} data-testid="open-backup">
     {t("app.backup")}
+  </button>
+  <button type="button" onclick={openUploadDialog} data-testid="open-upload">
+    {t("app.upload")}
   </button>
   <!-- "On this day" (TASK-07-008): read-only resurfacing of this date's
        photos from past years. -->
@@ -1227,6 +1242,7 @@
     onpick={handlePhotoPick}
   />
   <ExportDialog bind:open={exportDialog.open} ids={exportDialog.ids} />
+  <UploadDialog bind:open={uploadDialog.open} ids={uploadDialog.ids} />
   <PrintDialog bind:open={printDialog.open} ids={printDialog.ids} />
   <EmailDialog bind:open={emailDialog.open} ids={emailDialog.ids} />
 </main>

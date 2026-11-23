@@ -51,6 +51,7 @@ pub mod tag_commands;
 pub mod thumb;
 pub mod trash_commands;
 pub mod tray;
+pub mod upload_dialog;
 
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase";
@@ -92,6 +93,8 @@ const BACKUP_QUEUE_CAPACITY: usize = 2;
 /// Capacity of the photo-export queue (TASK-04-015): one batch at a time,
 /// the single worker serializes them (PLAN §3 rule 4).
 const PHOTO_EXPORT_QUEUE_CAPACITY: usize = 1;
+/// Capacity of upload batches (TASK-08-013): one network batch at a time.
+const UPLOAD_QUEUE_CAPACITY: usize = 1;
 /// Capacity of the print-pages queue (TASK-08-004): one print job at a
 /// time (PLAN §3 rule 4).
 const PRINT_QUEUE_CAPACITY: usize = 1;
@@ -134,6 +137,9 @@ static IMPORT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::
 
 /// Sequence number for unique batch-edit job keys.
 static BATCH_EDIT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Sequence number for upload job keys and new upload ids.
+static UPLOAD_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Dedup guard for the lazy hash backfill: at most one backfill thread at a
 /// time. A scan that lands while one is running is covered — the running
@@ -184,6 +190,11 @@ struct AppState {
     /// Bounded queue for export-dialog batches (TASK-04-015); one batch at
     /// a time, per-photo progress emitted as `photo-export-progress`.
     photo_exports: fotobase_jobs::Queue<export_dialog::ExportBatch>,
+    /// Bounded queue for upload batches (TASK-08-013); background priority
+    /// so visible work stays ahead of network transfers and resize renders.
+    uploads: fotobase_jobs::Queue<upload_dialog::UploadBatchResult>,
+    /// Cooperative cancellation tokens for active uploads, keyed by job id.
+    upload_cancel: Mutex<std::collections::HashMap<String, fotobase_export::CancelToken>>,
     /// Bounded queue for print-dialog page rasterization (TASK-08-004);
     /// progress emitted as `print-progress`.
     prints: fotobase_jobs::Queue<print_dialog::PrintBatch>,
@@ -1776,6 +1787,249 @@ async fn export_photos(
         fotobase_jobs::Outcome::Cancelled => Err("export cancelled".into()),
         fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
     }
+}
+
+#[tauri::command]
+fn list_upload_targets() -> Result<Vec<upload_dialog::UploadTargetInfo>, String> {
+    upload_dialog::target_infos()
+}
+
+#[tauri::command]
+async fn list_upload_albums(
+    config: upload_dialog::UploadTargetConfig,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<upload_dialog::UploadAlbum>, String> {
+    upload_dialog::list_albums(&config, &state.data_dir).await
+}
+
+#[tauri::command]
+fn google_photos_signed_in(client_id: String) -> Result<bool, String> {
+    upload_dialog::google_signed_in(&client_id)
+}
+
+#[tauri::command]
+async fn google_photos_sign_in(
+    client_id: String,
+    client_secret: Option<String>,
+) -> Result<(), String> {
+    upload_dialog::google_sign_in(&client_id, client_secret.as_deref()).await
+}
+
+#[tauri::command]
+fn google_photos_sign_out(client_id: String) -> Result<(), String> {
+    upload_dialog::google_sign_out(&client_id)
+}
+
+#[tauri::command]
+async fn upload_photos(
+    mut ids: Vec<i64>,
+    request: upload_dialog::UploadRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<upload_dialog::UploadBatchResult, String> {
+    let mut seen = std::collections::HashSet::new();
+    ids.retain(|id| seen.insert(*id));
+    if ids.is_empty() {
+        return Err("no photos to upload".into());
+    }
+    if request.quality == 0 || request.quality > 100 {
+        return Err("upload quality must be between 1 and 100".into());
+    }
+    if matches!(request.size, upload_dialog::UploadSize::Resized { max_edge: 0 }) {
+        return Err("resized uploads need a positive maximum edge".into());
+    }
+
+    let sequence = UPLOAD_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let job_id = request
+        .job_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("upload-{sequence}"));
+    let cancel = fotobase_export::CancelToken::new();
+    {
+        let mut active = state
+            .upload_cancel
+            .lock()
+            .map_err(|error| format!("upload cancellation mutex poisoned: {error}"))?;
+        if active.contains_key(&job_id) {
+            return Err("an upload with this job id is already running".into());
+        }
+        active.insert(job_id.clone(), cancel.clone());
+    }
+
+    let queue = state.uploads.clone();
+    let app = state.app_handle.clone();
+    let catalog_path = state.catalog_path();
+    let data_dir = state.data_dir.clone();
+    let request_for_job = request.clone();
+    let job_id_for_job = job_id.clone();
+    let cancel_for_job = cancel.clone();
+    let ids_for_job = ids.clone();
+    let handle = queue.try_enqueue(
+        format!("upload-batch-{sequence}"),
+        fotobase_jobs::Priority::Background,
+        fotobase_jobs::job(move |ctx| {
+            let (app, catalog_path, data_dir, request, job_id, cancel, ids) = (
+                app.clone(),
+                catalog_path.clone(),
+                data_dir.clone(),
+                request_for_job.clone(),
+                job_id_for_job.clone(),
+                cancel_for_job.clone(),
+                ids_for_job.clone(),
+            );
+            async move {
+                if ctx.is_cancelled() {
+                    return fotobase_jobs::Outcome::Cancelled;
+                }
+                let mut registry = match upload_dialog::build_registry(&request.config, &data_dir) {
+                    Ok(registry) => registry,
+                    Err(error) => return fotobase_jobs::Outcome::Failed(error),
+                };
+                let temp = match tempfile::tempdir() {
+                    Ok(temp) => temp,
+                    Err(error) => {
+                        return fotobase_jobs::Outcome::Failed(format!(
+                            "create upload temp directory: {error}"
+                        ))
+                    }
+                };
+                let total = ids.len();
+                let plugin_id = request.config.plugin_id().to_owned();
+                let options = fotobase_export::UploadOptions {
+                    size: request.size.choice(),
+                    quality: request.quality,
+                };
+                let album = request.album.map(Into::into);
+                let mut batch = upload_dialog::UploadBatchResult {
+                    job_id: job_id.clone(),
+                    files: Vec::with_capacity(total),
+                    cancelled: false,
+                    paused: false,
+                };
+                for (index, file_id) in ids.iter().enumerate() {
+                    if cancel.is_cancelled() {
+                        batch.cancelled = true;
+                        batch.files.extend(ids[index..].iter().map(|pending_id| {
+                            upload_dialog::UploadFileResult {
+                                file_id: *pending_id,
+                                name: format!("Photo {pending_id}"),
+                                state: upload_dialog::UploadFileState::Pending,
+                                error: None,
+                            }
+                        }));
+                        break;
+                    }
+                    let progress = upload_dialog::UploadProgress {
+                        job_id: job_id.clone(),
+                        file_id: *file_id,
+                        name: format!("Photo {file_id}"),
+                        index,
+                        total: ids.len(),
+                        state: upload_dialog::UploadFileState::Preparing,
+                        message: None,
+                    };
+                    let _ = app.emit("upload-progress", &progress);
+                    let catalog_for_prepare = catalog_path.clone();
+                    let size = request.size.clone();
+                    let quality = request.quality;
+                    let output_dir = temp.path().to_path_buf();
+                    let current_id = *file_id;
+                    let prepared = tauri::async_runtime::spawn_blocking(move || {
+                        upload_dialog::prepare_upload_input(
+                            &catalog_for_prepare,
+                            current_id,
+                            &size,
+                            quality,
+                            &output_dir,
+                        )
+                    })
+                    .await;
+                    let input = match prepared {
+                        Ok(Ok(input)) => input,
+                        Ok(Err(error)) => return fotobase_jobs::Outcome::Failed(error),
+                        Err(error) => {
+                            return fotobase_jobs::Outcome::Failed(format!(
+                                "prepare upload file {file_id}: {error}"
+                            ))
+                        }
+                    };
+                    let progress_app = app.clone();
+                    let on_progress = move |mut progress: upload_dialog::UploadProgress| {
+                        progress.index = index;
+                        progress.total = total;
+                        let _ = progress_app.emit("upload-progress", &progress);
+                    };
+                    let result = upload_dialog::run_upload_batch(
+                        &mut registry,
+                        vec![input],
+                        upload_dialog::UploadBatchOptions {
+                            plugin_id: plugin_id.clone(),
+                            job_id: job_id.clone(),
+                            album: album.clone(),
+                            upload_options: options,
+                        },
+                        &cancel,
+                        &on_progress,
+                    )
+                    .await;
+                    batch.files.extend(result.files);
+                    if result.cancelled {
+                        batch.cancelled = true;
+                    }
+                    if result.paused {
+                        batch.paused = true;
+                    }
+                    if batch.cancelled || batch.paused {
+                        batch.files.extend(ids[index + 1..].iter().map(|pending_id| {
+                            upload_dialog::UploadFileResult {
+                                file_id: *pending_id,
+                                name: format!("Photo {pending_id}"),
+                                state: upload_dialog::UploadFileState::Pending,
+                                error: None,
+                            }
+                        }));
+                        break;
+                    }
+                }
+                fotobase_jobs::Outcome::Done(batch)
+            }
+        }),
+    );
+    let handle = match handle {
+        Ok(handle) => handle,
+        Err(error) => {
+            state
+                .upload_cancel
+                .lock()
+                .map_err(|poisoned| format!("upload cancellation mutex poisoned: {poisoned}"))?
+                .remove(&job_id);
+            return Err(format!("enqueue upload: {error}"));
+        }
+    };
+    let result = handle.result().await.as_ref().clone();
+    state
+        .upload_cancel
+        .lock()
+        .map_err(|poisoned| format!("upload cancellation mutex poisoned: {poisoned}"))?
+        .remove(&job_id);
+    match result {
+        fotobase_jobs::Outcome::Done(result) => Ok(result),
+        fotobase_jobs::Outcome::Cancelled => Err("upload job cancelled".into()),
+        fotobase_jobs::Outcome::Failed(error) => Err(error),
+    }
+}
+
+#[tauri::command]
+fn cancel_upload(job_id: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let active = state
+        .upload_cancel
+        .lock()
+        .map_err(|error| format!("upload cancellation mutex poisoned: {error}"))?;
+    let token = active.get(&job_id).ok_or_else(|| format!("no active upload job `{job_id}`"))?;
+    token.cancel();
+    Ok(())
 }
 
 /// Email dialog result: how the photos reached the mail flow, and how many
@@ -3656,6 +3910,7 @@ async fn switch_to_catalog(
     state.imports.drain().await;
     state.datetime_jobs.drain().await;
     state.exports.drain().await;
+    state.uploads.drain().await;
 
     // 3. Close the DB: dropping the connection closes it; SQLite
     //    checkpoints the WAL when the last connection closes. The next
@@ -3889,6 +4144,7 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             // Queue::new spawns its worker; block_on supplies the runtime
             // context (setup runs outside an async fn).
+            let face_battery = std::sync::Arc::new(fotobase_jobs::BatteryHook::new(false));
             let thumbs = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(THUMB_QUEUE_CAPACITY)
             });
@@ -3906,6 +4162,14 @@ pub fn run() {
             });
             let photo_exports = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(PHOTO_EXPORT_QUEUE_CAPACITY)
+            });
+            // Upload preparation and transfers yield to visible work and
+            // pause on battery through the shared admission hook.
+            let uploads = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::with_throttle(
+                    UPLOAD_QUEUE_CAPACITY,
+                    face_battery.clone() as std::sync::Arc<dyn fotobase_jobs::ThrottleHook>,
+                )
             });
             let prints = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(PRINT_QUEUE_CAPACITY)
@@ -3933,7 +4197,6 @@ pub fn run() {
             });
             // The face queue runs on the battery hook: on battery the
             // dequeue pauses (§10), on AC it admits immediately.
-            let face_battery = std::sync::Arc::new(fotobase_jobs::BatteryHook::new(false));
             let faces = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::with_throttle(
                     FACES_QUEUE_CAPACITY,
@@ -3996,6 +4259,8 @@ pub fn run() {
                 datetime_jobs,
                 exports,
                 photo_exports,
+                uploads,
+                upload_cancel: Mutex::new(std::collections::HashMap::new()),
                 prints,
                 backups,
                 backup_cancel: Mutex::new(None),
@@ -4213,6 +4478,13 @@ pub fn run() {
             cancel_backup,
             list_backup_sets,
             export_photos,
+            list_upload_targets,
+            list_upload_albums,
+            google_photos_signed_in,
+            google_photos_sign_in,
+            google_photos_sign_out,
+            upload_photos,
+            cancel_upload,
             email_photos,
             print_plan,
             print_pages,
