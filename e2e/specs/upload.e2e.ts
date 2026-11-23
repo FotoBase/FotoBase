@@ -56,7 +56,7 @@ describe("Tools upload", () => {
   before(async () => {
     lib = makeGeotaggedLibrary(3);
     destinationRoot = fs.mkdtempSync(path.join(os.tmpdir(), "fb-e2e-upload-"));
-    destination = path.join(destinationRoot, "output");
+    destination = path.join(destinationRoot, "MixedCaseOutput");
     fs.mkdirSync(destination);
 
     await browser.waitUntil(async () =>
@@ -106,7 +106,14 @@ describe("Tools upload", () => {
       timeoutMsg: "Upload dialog never opened",
     });
     await $('[data-testid="upload-target"]').selectByAttribute("value", "local-folder");
-    await $('[data-testid="upload-local-folder"]').setValue(destination);
+    // WebKitWebDriver may change the case of characters sent through setValue.
+    await browser.execute((folder: string) => {
+      const input = document.querySelector('[data-testid="upload-local-folder"]');
+      if (!(input instanceof HTMLInputElement)) throw new Error("upload folder input not found");
+      input.value = folder;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, destination);
+    expect(await $('[data-testid="upload-local-folder"]').getValue()).toBe(destination);
     await domClick("upload-size-original");
     await domClick("upload-run");
 

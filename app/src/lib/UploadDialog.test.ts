@@ -63,8 +63,8 @@ describe("UploadDialog", () => {
     await fireEvent.change(screen.getByTestId("upload-target"), {
       target: { value: "local-folder" },
     });
-    await fireEvent.change(screen.getByTestId("upload-local-folder"), {
-      target: { value: "/tmp/fotobase-upload" },
+    await fireEvent.input(screen.getByTestId("upload-local-folder"), {
+      target: { value: "/tmp/MixedCaseUpload" },
     });
     await fireEvent.click(screen.getByTestId("upload-size"));
     await fireEvent.change(screen.getByTestId("upload-max-edge"), {
@@ -78,7 +78,10 @@ describe("UploadDialog", () => {
     await waitFor(() => expect(calls("upload_photos")).toHaveLength(2));
     expect(calls("upload_photos")[0]).toMatchObject({
       ids: [1, 2],
-      request: { size: { mode: "resized", max_edge: 2048 } },
+      request: {
+        config: { plugin: "local-folder", root: "/tmp/MixedCaseUpload" },
+        size: { mode: "resized", max_edge: 2048 },
+      },
     });
     expect(calls("upload_photos")[1]).toMatchObject({
       ids: [2],
@@ -103,7 +106,7 @@ describe("UploadDialog", () => {
     render(UploadDialog, { open: true, ids: [1] });
 
     await screen.findByRole("option", { name: "Immich" });
-    await fireEvent.change(screen.getByTestId("upload-local-folder"), {
+    await fireEvent.input(screen.getByTestId("upload-local-folder"), {
       target: { value: "/tmp/fotobase-upload" },
     });
     await fireEvent.click(screen.getByTestId("upload-run"));
