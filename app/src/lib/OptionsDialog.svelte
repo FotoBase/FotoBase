@@ -117,6 +117,20 @@
     apply({ ...settings, close_to_tray: on });
   }
 
+  // File-manager context menu (TASK-08-020): the backend registers or
+  // removes the OS entries on save; if the OS refuses to enable, it stores
+  // the setting off — mirror that and say why.
+  let contextMenuError = $state("");
+  function setContextMenu(on: boolean): void {
+    contextMenuError = "";
+    const next = { ...settings, context_menu_enabled: on };
+    onchange(next);
+    void saveSettings(next).catch((e: unknown) => {
+      contextMenuError = String(e);
+      if (on) onchange({ ...next, context_menu_enabled: false });
+    });
+  }
+
   // Screen capture (TASK-08-019): ticking the box is the consent to grab
   // PrtScn. If the OS refuses the key the backend stores it off — mirror
   // that and say why.
@@ -490,6 +504,22 @@
           />
           {t("options.closeToTray")}
         </label>
+
+        <!-- OS file-manager context menu (TASK-08-020). -->
+        <label class="options-row options-check">
+          <input
+            type="checkbox"
+            data-testid="context-menu"
+            checked={settings.context_menu_enabled}
+            onchange={(e) => setContextMenu(e.currentTarget.checked)}
+          />
+          {t("options.contextMenu")}
+        </label>
+        {#if contextMenuError}
+          <p class="options-row" role="alert" data-testid="context-menu-error">
+            {t("options.contextMenuFailed", { error: contextMenuError })}
+          </p>
+        {/if}
 
         <!-- Screen capture (TASK-08-019): opt-in global hotkey. -->
         <label class="options-row options-check">

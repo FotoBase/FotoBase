@@ -1,6 +1,6 @@
 # task: add os context menu integration
 
-**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-23)
 
 ## Description
 OS file-manager context menu entries "View with Fotobase" and "Upload with Fotobase" in Explorer/Finder (PLAN §2 §M Context menu P4; Nautilus included for Linux parity).
@@ -23,5 +23,5 @@ OS file-manager context menu entries "View with Fotobase" and "Upload with Fotob
 - Integration: uninstall removes the entries.
 
 ## Acceptance criteria
-- [ ] 08-020: OS context menu ("View with…", "Upload") works in Explorer/Finder for image files, launching or focusing the app with the right context.
-- [ ] 08-020: Install/uninstall registers and removes the menu entries cleanly.
+- [x] 08-020: OS context menu ("View with…", "Upload") works in Explorer/Finder for image files, launching or focusing the app with the right context.
+- [x] 08-020: Install/uninstall registers and removes the menu entries cleanly.

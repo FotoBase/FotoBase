@@ -60,7 +60,15 @@
   import { loadPhotoInfo } from "./lib/info-pane";
   import { resetFaces } from "./lib/people";
   import { queryLibraryItems, queryLibraryItemsSemantic, semanticContributed, type LibraryView } from "./lib/search";
-  import { findFileByPath, loadSettings, saveSettings, takeOpenFiles, type Settings } from "./lib/settings";
+  import {
+    findFileByPath,
+    loadSettings,
+    saveSettings,
+    takeOpenFiles,
+    takeUploadFiles,
+    type Settings,
+  } from "./lib/settings";
+  import { mergeUploadRequest, resolveUploadIds } from "./lib/os-launch";
   import { captionModeFromSettings, settingsWithCaptionMode } from "./lib/captions";
   import {
     DEFAULT_FOLDER_VIEW,
@@ -379,6 +387,7 @@
       await runUpdateFlow(s.update_mode);
       await refreshLibrary();
       await openOsFiles();
+      await openOsUploads();
     })();
   });
 
@@ -413,6 +422,19 @@
     }
   }
 
+  // "Upload with Fotobase" from the OS context menu (TASK-08-020): the
+  // backend parks the paths (launch argv, or a second launch forwarded by
+  // the single-instance plugin); draining empties the queue, so each launch
+  // opens the upload dialog once. Uncataloged files are ignored, like above.
+  async function openOsUploads(): Promise<void> {
+    try {
+      const ids = await resolveUploadIds(await takeUploadFiles(), findFileByPath);
+      uploadDialog = mergeUploadRequest(uploadDialog, ids);
+    } catch {
+      // Browser dev / backend down: nothing to upload.
+    }
+  }
+
   // Files opened with Fotobase while it is already running (macOS
   // open-with): the backend announces them on `open-file`.
   $effect(() => {
@@ -422,6 +444,21 @@
         const { listen } = await import("@tauri-apps/api/event");
         unlisten = await listen<string[]>("open-file", (e) => {
           void handleOpenPaths(e.payload);
+        });
+      } catch {
+        // Browser dev: no backend, no events.
+      }
+    })();
+    return () => unlisten?.();
+  });
+
+  $effect(() => {
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen("upload-files", () => {
+          void openOsUploads();
         });
       } catch {
         // Browser dev: no backend, no events.
