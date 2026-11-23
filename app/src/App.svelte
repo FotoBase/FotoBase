@@ -21,6 +21,7 @@
   import ImportDialog from "./lib/ImportDialog.svelte";
   import MapPanel from "./lib/MapPanel.svelte";
   import MemoriesPanel from "./lib/MemoriesPanel.svelte";
+  import TimelineView from "./lib/TimelineView.svelte";
   import OptionsDialog from "./lib/OptionsDialog.svelte";
   import PhotoTray from "./lib/PhotoTray.svelte";
   import FolderIniDialog from "./lib/FolderIniDialog.svelte";
@@ -98,6 +99,8 @@
   // Offline map panel (TASK-06-001): the bundled world basemap.
   let mapOpen = $state(false);
   let memoriesOpen = $state(false);
+  // Full-screen timeline (TASK-08-018): browses the grid's filtered view by day.
+  let timelineOpen = $state(false);
   // Memories open their photos in the normal viewer, paging through the
   // memory list instead of the grid's; closing the viewer returns to them.
   let memoryItems = $state<GridItem[] | null>(null);
@@ -1005,6 +1008,9 @@
   <button type="button" onclick={() => (memoriesOpen = true)} data-testid="open-memories">
     {t("app.memories")}
   </button>
+  <button type="button" onclick={() => (timelineOpen = true)} data-testid="open-timeline">
+    {t("app.timeline")}
+  </button>
   {#if settings}
     <OptionsDialog
       bind:open={optionsOpen}
@@ -1065,6 +1071,17 @@
         index: Math.max(0, all.findIndex((p) => p.id === item.id)),
         slideshow: false,
       };
+    }}
+  />
+  <!-- Timeline (TASK-08-018): the same LibraryView as the grid, so filters
+       apply. Opening a day shows the grid in capture order at that day. -->
+  <TimelineView
+    bind:open={timelineOpen}
+    view={mapView}
+    onopengroup={(group) => {
+      timelineOpen = false;
+      gridState.sort = "capture";
+      gridState.revealRequest = { id: group.first_id };
     }}
   />
   <StackPicker

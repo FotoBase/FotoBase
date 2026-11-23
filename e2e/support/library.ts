@@ -157,3 +157,38 @@ export function makeMemoriesLibrary(now: Date = new Date()): Library & {
   });
   return { dir, checksums, years: [newer, older] };
 }
+
+// TASK-08-018: a library for the timeline spec. Sidecar capture dates
+// (`exif:DateTimeOriginal`) put photos on three days across three years,
+// two of them on the same day — so the timeline has three groups, the first
+// of which holds two photos.
+export function makeTimelineLibrary(): Library & { days: string[] } {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fb-e2e-tl-"));
+  const jpeg = Buffer.from(TINY_JPEG_BASE64, "base64");
+  const photos: [string, string][] = [
+    ["tl_a1.jpg", "2022-01-15T08:00:00"],
+    ["tl_a2.jpg", "2022-01-15T18:30:00"],
+    ["tl_b.jpg", "2023-07-01T12:00:00"],
+    ["tl_c.jpg", "2024-03-09T10:00:00"],
+  ];
+  const checksums: Record<string, string> = {};
+  photos.forEach(([name, taken], i) => {
+    fs.writeFileSync(path.join(dir, name), Buffer.concat([jpeg, Buffer.from([i])]));
+    fs.writeFileSync(
+      path.join(dir, `${name}.xmp`),
+      `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:exif="http://ns.adobe.com/exif/1.0/"
+   exif:DateTimeOriginal="${taken}">
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>
+`,
+    );
+    checksums[name] = sha256(path.join(dir, name));
+  });
+  return { dir, checksums, days: ["2022-01-15", "2023-07-01", "2024-03-09"] };
+}

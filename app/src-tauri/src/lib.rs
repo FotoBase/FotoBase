@@ -781,6 +781,48 @@ fn memories(
     with_catalog(&state, |cat| cat.memories(&query, &today))
 }
 
+/// Full-screen timeline (TASK-08-018, PLAN §2 §B): one group per capture
+/// day, oldest first, narrowed by the grid's own filters so the timeline
+/// shows exactly what the grid would. Read-only catalog query — ids, hashes
+/// and counts only; thumbnails come through `thumb://` (§3 rule 3).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+fn timeline_groups(
+    text: Option<String>,
+    folders: Option<Vec<i64>>,
+    album: Option<i64>,
+    starred: Option<bool>,
+    videos_only: Option<bool>,
+    has_faces: Option<bool>,
+    geotagged: Option<bool>,
+    taken_since: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<fotobase_catalog::TimelineGroup>, String> {
+    let min_rating = if starred == Some(true) {
+        Some(rating::starred_threshold(ratings_enabled(&state)?))
+    } else {
+        None
+    };
+    let (text, parsed) = split_field_filters(text);
+    let mut query = grid_file_query(
+        text,
+        folders,
+        album,
+        min_rating,
+        videos_only,
+        has_faces,
+        geotagged,
+        taken_since,
+        None,
+        None,
+    );
+    query.person = parsed.person;
+    query.camera = parsed.camera;
+    query.taken_before = parsed.before;
+    query.taken_after = parsed.after;
+    with_catalog(&state, |cat| cat.timeline_groups(&query))
+}
+
 fn ratings_enabled(state: &AppState) -> Result<bool, String> {
     let guard = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
     Ok(guard.ratings_enabled)
@@ -4576,6 +4618,7 @@ pub fn run() {
             map_pins,
             map_pins_filtered,
             memories,
+            timeline_groups,
             set_rating,
             get_caption,
             set_caption,
