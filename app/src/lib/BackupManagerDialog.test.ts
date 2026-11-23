@@ -1,4 +1,5 @@
-// TASK-08-014 tests: Backup Manager dialog (PLAN §2L "Backup Pictures").
+// TASK-08-014 / TASK-08-015 tests: Backup Manager dialog (PLAN §2L "Backup
+// Pictures" and "Restore").
 // The user picks an external destination and a schedule, runs a backup with
 // progress, and sees the sets already stored there. IPC is mocked at the
 // Tauri core module; the set format itself is tested in Rust.
@@ -7,7 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/sv
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BackupManagerDialog from "./BackupManagerDialog.svelte";
-import { formatBytes, type BackupReport, type BackupSet } from "./backup";
+import { formatBytes, type BackupReport, type BackupSet, type RestoreReport } from "./backup";
 import { setLocale } from "./i18n.svelte.js";
 
 const invoke = vi.fn();
@@ -48,6 +49,13 @@ const report: BackupReport = {
   bytes_copied: 4096,
 };
 
+const restoreReport: RestoreReport = {
+  set_id: set1.id,
+  files_restored: 118,
+  files_unchanged: 2,
+  skipped: [],
+};
+
 type Handler = (args: Record<string, unknown>) => unknown;
 
 function backend(overrides: Record<string, Handler> = {}): void {
@@ -57,6 +65,7 @@ function backend(overrides: Record<string, Handler> = {}): void {
     list_backup_sets: () => [set1],
     run_backup: () => report,
     cancel_backup: () => undefined,
+    restore_backup: () => restoreReport,
     ...overrides,
   };
   invoke.mockImplementation((cmd: string, args: Record<string, unknown>) =>
@@ -175,6 +184,77 @@ describe("BackupManagerDialog", () => {
     await fireEvent.click(await screen.findByTestId("backup-cancel"));
 
     await waitFor(() => expect(calls("cancel_backup")).toHaveLength(1));
+  });
+});
+
+describe("BackupManagerDialog restore", () => {
+  it("asks for explicit confirmation before replacing the library", async () => {
+    backend();
+    render(BackupManagerDialog, { open: true });
+    await screen.findAllByTestId("backup-set");
+
+    await fireEvent.click(screen.getByTestId("backup-restore"));
+
+    expect(await screen.findByTestId("restore-confirm")).toBeTruthy();
+    expect(calls("restore_backup")).toEqual([]);
+
+    await fireEvent.click(screen.getByTestId("restore-confirm-no"));
+    expect(screen.queryByTestId("restore-confirm")).toBeNull();
+    expect(calls("restore_backup")).toEqual([]);
+  });
+
+  it("restores the chosen set once confirmed and reports the result", async () => {
+    backend();
+    render(BackupManagerDialog, { open: true });
+    await screen.findAllByTestId("backup-set");
+
+    await fireEvent.click(screen.getByTestId("backup-restore"));
+    await fireEvent.click(await screen.findByTestId("restore-confirm-yes"));
+
+    await waitFor(() =>
+      expect(calls("restore_backup")).toEqual([
+        { dest: "/Volumes/Backup", setId: set1.id, confirmOverwrite: true },
+      ]),
+    );
+    const done = await screen.findByTestId("restore-result");
+    expect(done.textContent).toContain("118");
+    expect(screen.queryByTestId("restore-confirm")).toBeNull();
+  });
+
+  it("shows restore progress while it runs", async () => {
+    let finish: (r: RestoreReport) => void = () => {};
+    backend({ restore_backup: () => new Promise<RestoreReport>((r) => (finish = r)) });
+    render(BackupManagerDialog, { open: true });
+    await screen.findAllByTestId("backup-set");
+    await fireEvent.click(screen.getByTestId("backup-restore"));
+    await fireEvent.click(await screen.findByTestId("restore-confirm-yes"));
+    await waitFor(() => expect(calls("restore_backup")).toHaveLength(1));
+
+    progressCb?.({ payload: { done: 4, total: 8, current: "/p/a.jpg.xmp" } });
+
+    const progress = (await screen.findByTestId("backup-progress")) as HTMLProgressElement;
+    await waitFor(() => expect(progress.value).toBe(4));
+    finish(restoreReport);
+    await screen.findByTestId("restore-result");
+  });
+
+  it("names the broken files when a set fails validation", async () => {
+    backend({
+      restore_backup: () =>
+        Promise.reject(
+          "backup set X is corrupt (1 problem(s), e.g. /p/a.jpg.xmp: content hash mismatch); nothing was restored",
+        ),
+    });
+    render(BackupManagerDialog, { open: true });
+    await screen.findAllByTestId("backup-set");
+
+    await fireEvent.click(screen.getByTestId("backup-restore"));
+    await fireEvent.click(await screen.findByTestId("restore-confirm-yes"));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("/p/a.jpg.xmp");
+    expect(alert.textContent).toContain("nothing was restored");
+    expect(screen.queryByTestId("restore-result")).toBeNull();
   });
 });
 

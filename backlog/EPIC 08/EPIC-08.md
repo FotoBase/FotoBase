@@ -32,7 +32,7 @@
 ## feat: backup
 
 - [x] `08-014` (L) Backup Manager: incremental backup sets of catalog + sidecars + settings to external location.
-- [ ] `08-015` (M) Restore from backup sets; byte-identical restore acceptance test (§9).
+- [x] `08-015` (M) Restore from backup sets; byte-identical restore acceptance test (§9).
 
 ## feat: misc output
 

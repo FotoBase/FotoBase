@@ -90,6 +90,9 @@ const EXPORT_QUEUE_CAPACITY: usize = 2;
 /// 4; runs key on their destination, so a scheduled run coalesces onto a
 /// user-started one to the same drive.
 const BACKUP_QUEUE_CAPACITY: usize = 2;
+/// Capacity of the restore queue (TASK-08-015): a restore replaces the whole
+/// library, so only one may run (PLAN §3 rule 4).
+const RESTORE_QUEUE_CAPACITY: usize = 1;
 /// Capacity of the photo-export queue (TASK-04-015): one batch at a time,
 /// the single worker serializes them (PLAN §3 rule 4).
 const PHOTO_EXPORT_QUEUE_CAPACITY: usize = 1;
@@ -180,6 +183,8 @@ struct AppState {
     exports: fotobase_jobs::Queue<fotobase_catalog::ExportReport>,
     /// Bounded queue for Backup Manager runs (TASK-08-014).
     backups: fotobase_jobs::Queue<fotobase_catalog::backup::BackupReport>,
+    /// Bounded queue for restores from a backup set (TASK-08-015).
+    restores: fotobase_jobs::Queue<fotobase_catalog::restore::RestoreReport>,
     /// Cancel token of the running backup (TASK-08-014).
     backup_cancel: Mutex<Option<fotobase_jobs::CancelToken>>,
     /// Backup Manager destination + schedule, mirrored in backup.json.
@@ -2469,6 +2474,135 @@ fn list_backup_sets(dest: String) -> Result<Vec<fotobase_catalog::backup::SetSum
     fotobase_catalog::backup::list_sets(Path::new(&dest)).map_err(|e| e.to_string())
 }
 
+/// Restore a backup set (TASK-08-015, PLAN §6 P4): validate the whole set,
+/// then replace the active catalog, sidecars and settings from it. Like a
+/// catalog switch, the watcher and the other queues are stopped first and the
+/// catalog connection is closed; it stays locked for the swap so no command
+/// reopens a half-replaced database. The frontend reloads on
+/// `catalog-switched`. `confirm_overwrite` is the user's explicit consent to
+/// replace existing files; progress streams on [`backup::RESTORE_EVENT`].
+#[tauri::command]
+async fn restore_backup(
+    dest: String,
+    set_id: String,
+    confirm_overwrite: bool,
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<fotobase_catalog::restore::RestoreReport, String> {
+    // Validate before disturbing anything: a corrupt set must not even stop
+    // the watcher.
+    {
+        let (dest, set_id) = (PathBuf::from(&dest), set_id.clone());
+        tauri::async_runtime::spawn_blocking(move || {
+            fotobase_catalog::restore::validate_set(&dest, &set_id)
+        })
+        .await
+        .map_err(|e| format!("validate task: {e}"))?
+        .map_err(|e| e.to_string())?;
+    }
+
+    if let Some(fm) =
+        state.folders.lock().map_err(|e| format!("folder manager mutex poisoned: {e}"))?.take()
+    {
+        fm.stop();
+    }
+    state.thumbs.drain().await;
+    state.rebuilds.drain().await;
+    state.imports.drain().await;
+    state.datetime_jobs.drain().await;
+    state.exports.drain().await;
+    state.uploads.drain().await;
+    state.backups.drain().await;
+
+    let catalog_path = state.catalog_path();
+    let queue = state.restores.clone();
+    let job_app = app.clone();
+    let handle = queue
+        .try_enqueue(
+            format!("restore:{set_id}"),
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |ctx| {
+                let (app, dest, set_id, catalog_path) =
+                    (job_app.clone(), dest.clone(), set_id.clone(), catalog_path.clone());
+                async move {
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        let state = app.state::<AppState>();
+                        let mut guard = state
+                            .catalog
+                            .lock()
+                            .map_err(|e| format!("catalog mutex poisoned: {e}"))?;
+                        // Close the connection (WAL checkpoint) while the
+                        // lock keeps every command off the files.
+                        *guard = None;
+                        let opts = fotobase_catalog::restore::RestoreOptions {
+                            catalog_path,
+                            confirm_overwrite,
+                        };
+                        let progress = |p: &fotobase_catalog::restore::RestoreProgress| {
+                            let _ = app.emit(backup::RESTORE_EVENT, p);
+                        };
+                        let cancelled = || ctx.is_cancelled();
+                        let hooks = fotobase_catalog::restore::RestoreHooks {
+                            progress: &progress,
+                            cancelled: &cancelled,
+                            ..fotobase_catalog::restore::RestoreHooks::none()
+                        };
+                        fotobase_catalog::restore::restore_set(
+                            Path::new(&dest),
+                            &set_id,
+                            &opts,
+                            &hooks,
+                        )
+                        .map_err(|e| e.to_string())
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(report)) => fotobase_jobs::Outcome::Done(report),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("restore task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue restore: {e}"))?;
+    let outcome = handle.result().await;
+
+    // Settings files may have been replaced: reload what the process
+    // mirrors in memory, then tell the frontend to reload the library.
+    // Done on failure too — a rolled-back restore reloads identical files.
+    let name = reload_restored_state(&state);
+    let _ = app.emit("catalog-switched", name);
+    let _ = app.emit("library-changed", ());
+
+    match outcome.as_ref() {
+        fotobase_jobs::Outcome::Done(report) => Ok(report.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("restore cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Re-read the settings files a restore may have replaced; returns the name
+/// of the active catalog.
+fn reload_restored_state(state: &AppState) -> String {
+    if let Ok(mut settings) = state.settings.lock() {
+        *settings = settings::Settings::load(&state.data_dir);
+    }
+    if let Ok(mut config) = state.backup_config.lock() {
+        *config = backup::BackupConfig::load(&state.data_dir);
+    }
+    let current = state.catalog_path();
+    let Ok(mut registry) = state.registry.lock() else {
+        return String::new();
+    };
+    *registry = catalog_registry::Registry::load(&state.data_dir);
+    registry
+        .catalogs
+        .iter()
+        .find(|c| catalog_db_path(&c.dir) == current)
+        .map(|c| c.name.clone())
+        .unwrap_or_default()
+}
+
 /// Batch rename: real file renames, sidecars and catalog rows following.
 /// All-or-nothing; returns the applied moves (the undo window's input).
 #[tauri::command]
@@ -4177,6 +4311,9 @@ pub fn run() {
             let backups = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(BACKUP_QUEUE_CAPACITY)
             });
+            let restores = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(RESTORE_QUEUE_CAPACITY)
+            });
             let edits = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(EDIT_QUEUE_CAPACITY)
             });
@@ -4228,6 +4365,13 @@ pub fn run() {
             let catalog_path = catalog_db_path(&entry.dir);
             let cache_dir = catalog_cache_dir(&entry.dir);
             std::fs::create_dir_all(&cache_dir)?;
+            // A restore killed mid-swap (TASK-08-015) is rolled back before
+            // anything opens the catalog.
+            match fotobase_catalog::restore::recover_interrupted(&entry.dir) {
+                Ok(true) => tracing::warn!("rolled back an interrupted restore"),
+                Ok(false) => {}
+                Err(err) => tracing::error!(error = %err, "interrupted-restore recovery failed"),
+            }
             tracing::info!(catalog = %entry.name, "opening catalog");
             // Offline basemap (TASK-06-001, ADR-0008): the bundled world
             // archive ships in the installer; a user-consented regional
@@ -4263,6 +4407,7 @@ pub fn run() {
                 upload_cancel: Mutex::new(std::collections::HashMap::new()),
                 prints,
                 backups,
+                restores,
                 backup_cancel: Mutex::new(None),
                 backup_config: Mutex::new(backup::BackupConfig::load(&data_dir)),
                 battery: face_battery.clone(),
@@ -4477,6 +4622,7 @@ pub fn run() {
             run_backup,
             cancel_backup,
             list_backup_sets,
+            restore_backup,
             export_photos,
             list_upload_targets,
             list_upload_albums,

@@ -49,7 +49,7 @@ pub const MANIFEST_FORMAT: &str = "fotobase-backup-set";
 pub const MANIFEST_VERSION: u32 = 1;
 
 const PARTIAL_SUFFIX: &str = ".partial";
-const FILES_DIR: &str = "files";
+pub(crate) const FILES_DIR: &str = "files";
 const TMP_BLOB: &str = ".incoming";
 const PROBE_FILE: &str = ".fb-write-probe";
 
@@ -557,7 +557,7 @@ fn copy_hashed(src: &Path, dst: &Path) -> Result<(String, u64), BackupError> {
     Ok((hex(&hasher.finalize()), size))
 }
 
-fn hash_file(path: &Path) -> std::io::Result<(String, u64)> {
+pub(crate) fn hash_file(path: &Path) -> std::io::Result<(String, u64)> {
     let mut input = std::fs::File::open(path)?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 64 * 1024];
