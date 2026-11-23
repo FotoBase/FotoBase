@@ -1,6 +1,6 @@
 # task: add screen capture folder
 
-**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-23)
+**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-23)
 
 ## Description
 PrtScn key captures the screen into a "Screen Captures" library folder (PLAN §2 §A Screen capture P4: "PrtScn key saved screenshots directly into a 'Screen Captures' library folder").
