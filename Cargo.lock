@@ -1774,7 +1774,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
+ "fotobase-render",
  "getrandom 0.3.4",
+ "image",
  "instant-xml",
  "jiff 1.0.1",
  "md-5",

@@ -1,6 +1,6 @@
 # task: add html gallery export
 
-**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-23)
 
 ## Description
 Static HTML gallery export from templates — resized images + tiny JS viewer — producing a self-contained site (PLAN §2 §J HTML export; §7 F1 layer 1: "this is also the project's best shareable demo artifact"). The same generator is reused by F1.1 web albums and F4 gift export, so build it as a standalone generator, not a UI-internal feature.
@@ -22,5 +22,5 @@ Static HTML gallery export from templates — resized images + tiny JS viewer �
 - Unit: re-export after one photo changes → only that photo's files differ.
 
 ## Acceptance criteria
-- [ ] 08-016: HTML gallery export produces a self-contained static site reusable by F1.1/F4.
-- [ ] 08-016: Gallery opens offline with zero network requests; re-export is incremental.
+- [x] 08-016: HTML gallery export produces a self-contained static site reusable by F1.1/F4.
+- [x] 08-016: Gallery opens offline with zero network requests; re-export is incremental.
