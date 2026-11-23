@@ -1,6 +1,6 @@
 # task: add screen capture folder
 
-**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-23)
 
 ## Description
 PrtScn key captures the screen into a "Screen Captures" library folder (PLAN §2 §A Screen capture P4: "PrtScn key saved screenshots directly into a 'Screen Captures' library folder").
@@ -21,5 +21,5 @@ PrtScn key captures the screen into a "Screen Captures" library folder (PLAN §2
 - Unit: opt-in disabled → no hotkey registered, no capture.
 
 ## Acceptance criteria
-- [ ] 08-019: PrtScn saves screenshots into the "Screen Captures" library folder, opt-in, appearing in the grid via the watcher.
-- [ ] 08-019: No capture happens without consent/permission.
+- [x] 08-019: PrtScn saves screenshots into the "Screen Captures" library folder, opt-in, appearing in the grid via the watcher.
+- [x] 08-019: No capture happens without consent/permission.

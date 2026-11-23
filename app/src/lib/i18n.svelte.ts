@@ -147,6 +147,12 @@ const messages: Record<string, Dict> = {
       "Single click opens the edit view (Ctrl/Cmd-click selects)",
     "options.closeToTray":
       "Closing the window keeps watching from the tray (quit from the tray icon)",
+    "options.screenCapture":
+      "Save PrtScn screenshots into the “Screen Captures” folder (Fotobase takes over the PrtScn key; macOS needs screen-recording permission and uses F13)",
+    "options.screenCaptureFailed": "Could not enable screen capture: {error}",
+    "options.screenCaptureDisplay": "Capture",
+    "options.screenCaptureAll": "All displays",
+    "options.screenCaptureActive": "Active display",
     "options.quickTags": "Quick Tags (one per line, up to 10)",
     "quickTags.title": "Quick Tags",
     "tags.title": "Tags",
@@ -996,6 +1002,13 @@ const messages: Record<string, Dict> = {
       "Einzelklick öffnet die Bearbeitungsansicht (Strg/Cmd-Klick wählt aus)",
     "options.closeToTray":
       "Beim Schließen des Fensters läuft das Beobachten über das Tray-Symbol weiter (Beenden über das Tray-Symbol)",
+    "options.screenCapture":
+      "Druck-Screenshots im Ordner „Screen Captures“ speichern (Fotobase belegt die Taste Druck; macOS braucht die Berechtigung zur Bildschirmaufnahme und nutzt F13)",
+    "options.screenCaptureFailed":
+      "Bildschirmaufnahme konnte nicht aktiviert werden: {error}",
+    "options.screenCaptureDisplay": "Aufnahme",
+    "options.screenCaptureAll": "Alle Bildschirme",
+    "options.screenCaptureActive": "Aktiver Bildschirm",
     "options.quickTags": "Schnell-Tags (einer pro Zeile, bis zu 10)",
     "quickTags.title": "Schnell-Tags",
     "tags.title": "Tags",

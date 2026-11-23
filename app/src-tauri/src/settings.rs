@@ -13,6 +13,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::screen_capture::CaptureDisplay;
+
 /// Automatic-update policy (PLAN §2: Auto / check but ask / no).
 ///
 /// Semantics (TASK-01-022 functional spec):
@@ -162,6 +164,13 @@ pub struct Settings {
     /// off, closing the window quits the app as before.
     #[serde(default = "default_close_to_tray")]
     pub close_to_tray: bool,
+    /// Opt-in PrtScn capture into the "Screen Captures" folder (TASK-08-019,
+    /// PLAN §2). Off: no global hotkey is registered and nothing captures.
+    #[serde(default)]
+    pub screen_capture_enabled: bool,
+    /// Which displays a capture grabs (TASK-08-019).
+    #[serde(default)]
+    pub screen_capture_display: CaptureDisplay,
 }
 
 fn default_close_to_tray() -> bool {
@@ -196,6 +205,8 @@ impl Default for Settings {
             single_click_edit: false,
             stack_window_secs: default_stack_window_secs(),
             close_to_tray: default_close_to_tray(),
+            screen_capture_enabled: false,
+            screen_capture_display: CaptureDisplay::default(),
         }
     }
 }
@@ -245,6 +256,20 @@ mod tests {
         s.save(dir.path()).unwrap();
         let reloaded = Settings::load(dir.path());
         assert!(!reloaded.close_to_tray);
+    }
+
+    #[test]
+    fn screen_capture_is_opt_in_and_survives_old_files() {
+        // TASK-08-019: no consent by default; older settings.json files
+        // keep the user's other settings.
+        let s = Settings::default();
+        assert!(!s.screen_capture_enabled);
+        assert_eq!(s.screen_capture_display, CaptureDisplay::All);
+        let old: Settings =
+            serde_json::from_str(r#"{"language":"de","update_mode":"off","show_tooltips":false}"#)
+                .unwrap();
+        assert_eq!(old.language, "de");
+        assert!(!old.screen_capture_enabled);
     }
 
     #[test]

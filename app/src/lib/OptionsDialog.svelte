@@ -117,6 +117,25 @@
     apply({ ...settings, close_to_tray: on });
   }
 
+  // Screen capture (TASK-08-019): ticking the box is the consent to grab
+  // PrtScn. If the OS refuses the key the backend stores it off — mirror
+  // that and say why.
+  let captureError = $state("");
+  function setScreenCapture(on: boolean): void {
+    captureError = "";
+    const next = { ...settings, screen_capture_enabled: on };
+    onchange(next);
+    void saveSettings(next).catch((e: unknown) => {
+      if (!on) return;
+      captureError = String(e);
+      onchange({ ...next, screen_capture_enabled: false });
+    });
+  }
+
+  function setCaptureDisplay(display: Settings["screen_capture_display"]): void {
+    apply({ ...settings, screen_capture_display: display });
+  }
+
   function setShowHidden(show: boolean): void {
     apply({ ...settings, show_hidden: show });
   }
@@ -471,6 +490,38 @@
           />
           {t("options.closeToTray")}
         </label>
+
+        <!-- Screen capture (TASK-08-019): opt-in global hotkey. -->
+        <label class="options-row options-check">
+          <input
+            type="checkbox"
+            data-testid="screen-capture"
+            checked={settings.screen_capture_enabled}
+            onchange={(e) => setScreenCapture(e.currentTarget.checked)}
+          />
+          {t("options.screenCapture")}
+        </label>
+        {#if captureError}
+          <p class="options-row" role="alert" data-testid="screen-capture-error">
+            {t("options.screenCaptureFailed", { error: captureError })}
+          </p>
+        {/if}
+        {#if settings.screen_capture_enabled}
+          <label class="options-row">
+            {t("options.screenCaptureDisplay")}
+            <select
+              data-testid="screen-capture-display"
+              value={settings.screen_capture_display}
+              onchange={(e) =>
+                setCaptureDisplay(
+                  e.currentTarget.value as Settings["screen_capture_display"],
+                )}
+            >
+              <option value="all">{t("options.screenCaptureAll")}</option>
+              <option value="active">{t("options.screenCaptureActive")}</option>
+            </select>
+          </label>
+        {/if}
 
         <!-- Hidden items (TASK-03-009) and the catalog-trash undo window
              (TASK-03-012). -->

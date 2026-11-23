@@ -44,6 +44,11 @@ export interface Settings {
   /// Closing the main window hides it and watching continues from the
   /// tray (TASK-03-025, PLAN §6 P2a). Off: close quits the app.
   close_to_tray: boolean;
+  /// Opt-in PrtScn capture into the "Screen Captures" folder (TASK-08-019).
+  /// Off registers no global hotkey and captures nothing.
+  screen_capture_enabled: boolean;
+  /// Which displays a capture grabs (TASK-08-019).
+  screen_capture_display: "all" | "active";
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -64,6 +69,8 @@ export const DEFAULT_SETTINGS: Settings = {
   single_click_edit: false,
   stack_window_secs: 5,
   close_to_tray: true,
+  screen_capture_enabled: false,
+  screen_capture_display: "all",
 };
 
 // Image types the file-association option (TASK-01-025, PLAN §2M) can

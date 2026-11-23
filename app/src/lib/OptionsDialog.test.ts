@@ -308,6 +308,49 @@ describe("OptionsDialog single-click-to-edit (TASK-03-017)", () => {
   });
 });
 
+describe("OptionsDialog screen capture (TASK-08-019)", () => {
+  it("is opt-in: off by default, ticking saves the consent", async () => {
+    expect(DEFAULT_SETTINGS.screen_capture_enabled).toBe(false);
+    const base: Settings = { ...DEFAULT_SETTINGS };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+    expect((screen.getByTestId("screen-capture") as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByTestId("screen-capture-display")).toBeNull();
+
+    await fireEvent.click(screen.getByTestId("screen-capture"));
+    await settle();
+
+    expect(saveSettings).toHaveBeenCalledWith({ ...base, screen_capture_enabled: true });
+    expect(onchange).toHaveBeenCalledWith({ ...base, screen_capture_enabled: true });
+  });
+
+  it("reverts and explains when the OS refuses the hotkey", async () => {
+    vi.mocked(saveSettings).mockRejectedValue("register PrintScreen: taken");
+    const base: Settings = { ...DEFAULT_SETTINGS };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+
+    await fireEvent.click(screen.getByTestId("screen-capture"));
+    await settle();
+
+    expect(onchange).toHaveBeenLastCalledWith({ ...base, screen_capture_enabled: false });
+    expect(screen.getByTestId("screen-capture-error").textContent).toContain("taken");
+  });
+
+  it("offers the display choice once enabled", async () => {
+    const base: Settings = { ...DEFAULT_SETTINGS, screen_capture_enabled: true };
+    const onchange = vi.fn();
+    render(OptionsDialog, { open: true, settings: base, onchange });
+
+    await fireEvent.change(screen.getByTestId("screen-capture-display"), {
+      target: { value: "active" },
+    });
+    await settle();
+
+    expect(saveSettings).toHaveBeenCalledWith({ ...base, screen_capture_display: "active" });
+  });
+});
+
 describe("OptionsDialog portable export (TASK-03-023)", () => {
   it("opens the export dialog", async () => {
     render(OptionsDialog, { open: true, settings: { ...DEFAULT_SETTINGS }, onchange: vi.fn() });

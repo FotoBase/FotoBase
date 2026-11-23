@@ -46,6 +46,7 @@ pub mod rating;
 pub mod rebuild;
 pub mod rebuild_harness;
 pub mod save;
+pub mod screen_capture;
 pub mod settings;
 pub mod stream;
 pub mod tag_commands;
@@ -3722,7 +3723,21 @@ fn get_settings(state: tauri::State<'_, AppState>) -> Result<settings::Settings,
 /// The file write happens first: if it fails, the in-memory state is not
 /// left diverging from disk.
 #[tauri::command]
-fn set_settings(new: settings::Settings, state: tauri::State<'_, AppState>) -> Result<(), String> {
+fn set_settings(
+    mut new: settings::Settings,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    // Screen capture hotkey (TASK-08-019): follows the opt-in. If the OS
+    // refuses the key, the opt-in is stored off so the UI never shows a
+    // hotkey that is not live; the error still reaches the caller.
+    let hotkey = screen_capture::sync_hotkey(
+        &screen_capture::TauriHotkeys(&app),
+        new.screen_capture_enabled,
+    );
+    if hotkey.is_err() {
+        new.screen_capture_enabled = false;
+    }
     new.save(&state.data_dir).map_err(|e| format!("save settings: {e}"))?;
     {
         let mut guard =
@@ -3735,7 +3750,7 @@ fn set_settings(new: settings::Settings, state: tauri::State<'_, AppState>) -> R
     if let Some(cat) = guard.as_mut() {
         trash_commands::apply_settings(cat, &new)?;
     }
-    Ok(())
+    hotkey
 }
 
 /// "Clear cache files": drain the render queue, then empty the thumbnail
@@ -4206,6 +4221,9 @@ pub fn run() {
         // the pubkey pinned in tauri.conf.json) and cannot be disabled.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        // Screen capture hotkey (TASK-08-019): the plugin registers nothing
+        // until the user opts in (`screen_capture::sync_hotkey`).
+        .plugin(screen_capture::plugin())
         .register_uri_scheme_protocol(THUMB_PROTOCOL, |ctx, request| {
             let state = ctx.app_handle().state::<AppState>();
             // `?s=2` selects the HiDPI (1024px) cache entry (TASK-01-024).
@@ -4585,6 +4603,18 @@ pub fn run() {
                 tracing::warn!("tray icon unavailable: {e}");
             }
             tray::spawn_status_updater(app.handle().clone());
+            // Screen capture hotkey (TASK-08-019): only when opted in.
+            let capture_on = app
+                .state::<AppState>()
+                .settings
+                .lock()
+                .map(|s| s.screen_capture_enabled)
+                .unwrap_or(false);
+            if let Err(e) =
+                screen_capture::sync_hotkey(&screen_capture::TauriHotkeys(app.handle()), capture_on)
+            {
+                tracing::warn!("screen capture hotkey unavailable: {e}");
+            }
             Ok(())
         })
         // Close-to-tray (TASK-03-025): the close button hides the window
