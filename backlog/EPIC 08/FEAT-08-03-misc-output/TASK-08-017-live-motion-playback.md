@@ -1,6 +1,6 @@
 # task: add live and motion photo playback
 
-**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-23)
+**Feature:** [FEAT-08-03-misc-output](FEAT-08-03-misc-output.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in review (2026-11-23)
 
 ## Description
 Play Apple Live Photos and Android Motion Photos (PLAN §2 2026 additions, P4 phasing). A still+video pair plays its embedded video on press/hold in the viewer.
