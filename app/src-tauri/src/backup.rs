@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 
 /// Tauri event a run streams [`BackupProgress`] on (counters only, §3).
 pub const BACKUP_EVENT: &str = "backup-progress";
+/// Tauri event a restore streams `RestoreProgress` on (counters only, §3).
+pub const RESTORE_EVENT: &str = "restore-progress";
 /// Tauri event a *scheduled* run reports its outcome on (no caller awaits it).
 pub const BACKUP_FINISHED_EVENT: &str = "backup-finished";
 /// The Backup Manager's own settings file under the app data dir.

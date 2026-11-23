@@ -1,7 +1,8 @@
 // Backup Manager (TASK-08-014, PLAN §2L "Backup Pictures", §6 P4):
 // incremental backup sets of the catalog, sidecars and settings to an
 // external location. The backend owns the set format and runs the job; this
-// module is the IPC wrapper.
+// module is the IPC wrapper. Restore (TASK-08-015) is the reverse: the
+// backend validates the whole set before it writes anything.
 
 export type BackupSchedule = "off" | "daily" | "weekly";
 
@@ -43,7 +44,24 @@ export interface BackupSet {
   new_bytes: number;
 }
 
+/// Outcome of a restore (mirrors the backend `RestoreReport`).
+export interface RestoreReport {
+  set_id: string;
+  files_restored: number;
+  files_unchanged: number;
+  /// Sidecars whose folder no longer exists.
+  skipped: string[];
+}
+
+/// Restore progress event payload (counters only).
+export interface RestoreProgress {
+  done: number;
+  total: number;
+  current: string;
+}
+
 export const BACKUP_EVENT = "backup-progress";
+export const RESTORE_EVENT = "restore-progress";
 
 async function call<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
@@ -70,6 +88,21 @@ export function cancelBackup(): Promise<void> {
 
 export function listBackupSets(dest: string): Promise<BackupSet[]> {
   return call<BackupSet[]>("list_backup_sets", { dest });
+}
+
+/// Replace the active catalog, sidecars and settings from a set. The caller
+/// must have the user's explicit consent for `confirmOverwrite`.
+export function restoreBackup(
+  dest: string,
+  setId: string,
+  confirmOverwrite: boolean,
+): Promise<RestoreReport> {
+  return call<RestoreReport>("restore_backup", { dest, setId, confirmOverwrite });
+}
+
+export async function onRestoreProgress(cb: (p: RestoreProgress) => void): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return await listen<RestoreProgress>(RESTORE_EVENT, (e) => cb(e.payload));
 }
 
 export async function onBackupProgress(cb: (p: BackupProgress) => void): Promise<() => void> {

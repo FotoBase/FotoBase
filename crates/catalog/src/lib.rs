@@ -26,6 +26,7 @@ pub mod people;
 pub mod portable;
 pub mod query;
 pub mod relocate;
+pub mod restore;
 pub mod search_syntax;
 pub mod stacks;
 pub mod sync;

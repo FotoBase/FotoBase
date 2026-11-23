@@ -1,6 +1,6 @@
 # task: add restore from backup sets
 
-**Feature:** [FEAT-08-01-backup](FEAT-08-01-backup.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** todo
+**Feature:** [FEAT-08-01-backup](FEAT-08-01-backup.md) · **Epic:** [EPIC-08 — Output & sharing](../EPIC-08.md) · **Status:** in progress (2026-11-23)
 
 ## Description
 Restore from backup sets with integrity validation before writing anything, and the byte-identical restore acceptance test (PLAN §6 P4 acceptance: "Backup → wipe → restore reproduces library and sidecars byte-identical"; §9).
@@ -21,5 +21,5 @@ Restore from backup sets with integrity validation before writing anything, and 
 - Integration: mid-restore kill → previous library still intact (atomic staging).
 
 ## Acceptance criteria
-- [ ] 08-015: Restore validates set integrity before writing anything and reproduces library and sidecars byte-identical (§9 acceptance test).
-- [ ] 08-015: A mid-restore failure never leaves a half-restored library.
+- [x] 08-015: Restore validates set integrity before writing anything and reproduces library and sidecars byte-identical (§9 acceptance test).
+- [x] 08-015: A mid-restore failure never leaves a half-restored library.

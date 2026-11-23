@@ -4,6 +4,11 @@
   the sets already stored there. The first set is full; later sets hold only
   what changed. A full or unplugged destination stops cleanly — no set is
   recorded — and the error says why.
+
+  Restore (TASK-08-015): each set can be restored. Replacing the current
+  library needs an explicit confirmation; the backend validates the whole set
+  before writing anything, so a corrupt set is rejected with the broken
+  files named and the current library stays as it was.
 -->
 <script lang="ts">
   import {
@@ -12,6 +17,8 @@
     getBackupConfig,
     listBackupSets,
     onBackupProgress,
+    onRestoreProgress,
+    restoreBackup,
     runBackup,
     setBackupConfig,
     SCHEDULES,
@@ -19,6 +26,8 @@
     type BackupReport,
     type BackupSchedule,
     type BackupSet,
+    type RestoreProgress,
+    type RestoreReport,
   } from "./backup";
   import { t } from "./i18n.svelte.js";
 
@@ -31,12 +40,20 @@
   let progress = $state<BackupProgress | null>(null);
   let report = $state<BackupReport | null>(null);
   let error = $state<string | null>(null);
+  let restoring = $state(false);
+  let restoreProgress = $state<RestoreProgress | null>(null);
+  let restoreReport = $state<RestoreReport | null>(null);
+  // Set the user asked to restore; non-null while the confirmation shows.
+  let confirmSet = $state<BackupSet | null>(null);
 
-  let canRun = $derived(!running && destination.trim() !== "");
+  let busy = $derived(running || restoring);
+  let canRun = $derived(!busy && destination.trim() !== "");
 
   $effect(() => {
     if (!open) return;
     report = null;
+    restoreReport = null;
+    confirmSet = null;
     error = null;
     progress = null;
     void load();
@@ -103,6 +120,27 @@
     }
   }
 
+  async function restore(set: BackupSet): Promise<void> {
+    confirmSet = null;
+    restoring = true;
+    error = null;
+    report = null;
+    restoreReport = null;
+    restoreProgress = null;
+    let unlisten: () => void = () => {};
+    try {
+      unlisten = await onRestoreProgress((p) => (restoreProgress = p)).catch(() => () => {});
+      // The confirmation the user just gave is the overwrite consent.
+      restoreReport = await restoreBackup(destination.trim(), set.id, true);
+    } catch (e) {
+      error = t("restore.error", { error: String(e) });
+    } finally {
+      unlisten();
+      restoring = false;
+      restoreProgress = null;
+    }
+  }
+
   async function cancel(): Promise<void> {
     try {
       await cancelBackup();
@@ -127,9 +165,9 @@
             placeholder={t("backup.destination.placeholder")}
             bind:value={destination}
             onchange={() => void refreshSets()}
-            disabled={running}
+            disabled={busy}
           />
-          <button type="button" data-testid="backup-choose" onclick={choose} disabled={running}>
+          <button type="button" data-testid="backup-choose" onclick={choose} disabled={busy}>
             {t("backup.choose")}
           </button>
         </span>
@@ -141,7 +179,7 @@
           data-testid="backup-schedule"
           value={schedule}
           onchange={changeSchedule}
-          disabled={running}
+          disabled={busy}
         >
           {#each SCHEDULES as s (s)}
             <option value={s}>{t(`backup.schedule.${s}`)}</option>
@@ -159,6 +197,59 @@
           {#if progress}
             <span>{t("backup.progress", { done: progress.done, total: progress.total })}</span>
           {/if}
+        </div>
+      {/if}
+
+      {#if restoring}
+        <div class="bm-progress">
+          <progress
+            data-testid="backup-progress"
+            value={restoreProgress?.done ?? 0}
+            max={restoreProgress?.total || 1}
+          ></progress>
+          <span>
+            {restoreProgress
+              ? t("restore.progress", { done: restoreProgress.done, total: restoreProgress.total })
+              : t("restore.running")}
+          </span>
+        </div>
+      {/if}
+
+      {#if restoreReport}
+        <p class="bm-done" data-testid="restore-result">
+          {t("restore.done", {
+            restored: restoreReport.files_restored,
+            unchanged: restoreReport.files_unchanged,
+          })}
+          {#if restoreReport.skipped.length > 0}
+            {t("restore.skipped", { count: restoreReport.skipped.length })}
+          {/if}
+        </p>
+      {/if}
+
+      {#if confirmSet}
+        <div class="bm-confirm" role="group" data-testid="restore-confirm">
+          <p>
+            {t("restore.confirm", {
+              date: confirmSet.created_at.replace("T", " ").replace("Z", " UTC"),
+            })}
+          </p>
+          <div class="bm-actions">
+            <button
+              type="button"
+              data-testid="restore-confirm-no"
+              onclick={() => (confirmSet = null)}
+            >
+              {t("restore.confirm.no")}
+            </button>
+            <button
+              type="button"
+              data-testid="restore-confirm-yes"
+              onclick={() => restore(confirmSet!)}
+            >
+              {t("restore.confirm.yes")}
+            </button>
+          </div>
         </div>
       {/if}
 
@@ -185,6 +276,7 @@
               <th>{t("backup.sets.date")}</th>
               <th>{t("backup.sets.files")}</th>
               <th>{t("backup.sets.new")}</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -193,6 +285,16 @@
                 <td>{s.created_at.replace("T", " ").replace("Z", " UTC")}</td>
                 <td>{s.files}</td>
                 <td>{s.new_files} ({formatBytes(s.new_bytes)})</td>
+                <td>
+                  <button
+                    type="button"
+                    data-testid="backup-restore"
+                    disabled={busy}
+                    onclick={() => (confirmSet = s)}
+                  >
+                    {t("restore.action")}
+                  </button>
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -211,7 +313,7 @@
         <button
           type="button"
           data-testid="backup-close"
-          disabled={running}
+          disabled={busy}
           onclick={() => (open = false)}
         >
           {t("backup.close")}
@@ -293,6 +395,13 @@
     text-align: left;
     padding: 0.2rem 0.4rem;
     border-bottom: 1px solid var(--fb-border, #ddd);
+  }
+  .bm-confirm {
+    border: 1px solid var(--fb-error, #b00020);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.6rem;
+    font-size: 0.85rem;
   }
   .bm-actions {
     display: flex;
