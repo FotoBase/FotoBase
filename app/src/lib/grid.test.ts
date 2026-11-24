@@ -6,9 +6,11 @@ import {
   cellAt,
   columnCount,
   debounce,
+  inStarBadge,
   nextCell,
   revealScrollTop,
   rowItems,
+  STAR_BADGE,
   throttle,
   thumbSrcset,
   thumbUri,
@@ -265,5 +267,21 @@ describe("caption strip geometry (TASK-03-015)", () => {
     expect(cellAt(10, 190, 0, 160, 4, 100, 18)).toBe(4);
     expect(cellAt(10, 180, 0, 160, 4, 100)).toBe(4);
     expect(cellAt(10, 180, 0, 160, 4, 100, 18)).toBe(0);
+  });
+});
+
+describe("inStarBadge (touch star hit-test, TASK-09-004)", () => {
+  const size = 160;
+  const { size: badge, margin } = STAR_BADGE;
+
+  it("hits inside the bottom-left button", () => {
+    expect(inStarBadge(margin + 1, size - margin - 1, size)).toBe(true);
+    expect(inStarBadge(margin + badge, size - margin - badge, size)).toBe(true);
+  });
+
+  it("misses the rest of the thumbnail", () => {
+    expect(inStarBadge(size / 2, size / 2, size)).toBe(false);
+    expect(inStarBadge(size - 5, 5, size)).toBe(false);
+    expect(inStarBadge(margin + badge + 2, size - margin - 1, size)).toBe(false);
   });
 });

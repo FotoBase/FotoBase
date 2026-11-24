@@ -41,6 +41,18 @@ export function hasCoarsePointer(): boolean {
     window.matchMedia("(pointer: coarse)").matches;
 }
 
+/// Touch star button geometry in px (TASK-09-004): bottom-left of the
+/// thumbnail, shared by the DOM button's CSS and the canvas renderer's
+/// drawing and hit test. 32px keeps it a usable touch target.
+export const STAR_BADGE = { size: 32, margin: 4 } as const;
+
+/// Is a point (relative to a thumbnail's top-left) on its star button?
+export function inStarBadge(localX: number, localY: number, thumbSize: number): boolean {
+  const { size, margin } = STAR_BADGE;
+  const top = thumbSize - margin - size;
+  return localX >= margin && localX <= margin + size && localY >= top && localY <= thumbSize - margin;
+}
+
 /// Full columns that fit `containerWidth` px at `thumbSize` px cells with
 /// `gap` px gutters: at least one, only whole columns (no clipped cells).
 export function columnCount(

@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CanvasThumbnailGrid from "./CanvasThumbnailGrid.svelte";
 import ThumbnailGrid from "./ThumbnailGrid.svelte";
 import { gridState, resetGridState } from "./grid-state.svelte.js";
-import type { GridItem } from "./grid";
+import { STAR_BADGE, type GridItem } from "./grid";
 
 const HASH = (n: number) => n.toString(16).padStart(32, "0");
 
@@ -387,6 +387,71 @@ describe("CanvasThumbnailGrid touch browsing (TASK-09-003)", () => {
     expect(onopen).toHaveBeenCalledWith(makeItems(100)[1]);
     expect(oncontextmenu).not.toHaveBeenCalled();
     expect(gridState.selection.size).toBe(0);
+  });
+});
+
+describe("CanvasThumbnailGrid touch star (TASK-09-004)", () => {
+  const stubCoarse = (): void => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: query === "(pointer: coarse)",
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+  };
+
+  const clickAt = (x: number, y: number): void => {
+    const event = new MouseEvent("click", { bubbles: true });
+    Object.defineProperty(event, "offsetX", { value: x });
+    Object.defineProperty(event, "offsetY", { value: y });
+    screen.getByTestId("grid-canvas").dispatchEvent(event);
+    flushSync();
+  };
+
+  it("tapping the star corner stars the photo and does not open it", async () => {
+    stubCoarse();
+    const onopen = vi.fn();
+    const onstar = vi.fn();
+    render(CanvasThumbnailGrid, { items: makeItems(100), loadImage: fakeLoadImage, onopen, onstar });
+    await settle();
+
+    const { margin, size } = STAR_BADGE;
+    clickAt(margin + 4, gridState.thumbSize - margin - size / 2);
+
+    expect(onstar).toHaveBeenCalledWith(makeItems(100)[0]);
+    expect(onopen).not.toHaveBeenCalled();
+  });
+
+  it("tapping elsewhere on the cell still opens it", async () => {
+    stubCoarse();
+    const onopen = vi.fn();
+    const onstar = vi.fn();
+    render(CanvasThumbnailGrid, { items: makeItems(100), loadImage: fakeLoadImage, onopen, onstar });
+    await settle();
+
+    clickAt(gridState.thumbSize / 2, gridState.thumbSize / 2);
+
+    expect(onopen).toHaveBeenCalledWith(makeItems(100)[0]);
+    expect(onstar).not.toHaveBeenCalled();
+  });
+
+  it("a mouse click on the star corner just selects", async () => {
+    const onstar = vi.fn();
+    render(CanvasThumbnailGrid, { items: makeItems(100), loadImage: fakeLoadImage, onstar });
+    await settle();
+
+    const { margin, size } = STAR_BADGE;
+    clickAt(margin + 4, gridState.thumbSize - margin - size / 2);
+
+    expect(onstar).not.toHaveBeenCalled();
+    expect(gridState.selection.has(0)).toBe(true);
   });
 });
 

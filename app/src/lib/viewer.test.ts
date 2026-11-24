@@ -232,23 +232,91 @@ describe("Viewer", () => {
     expect(onclose).toHaveBeenCalledOnce();
   });
 
-  it("keeps edit and rating controls out of the touch viewer", () => {
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: query === "(pointer: coarse)",
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    }));
-    renderViewer(makeItems(3), { ratingsEnabled: true });
+  describe("touch viewer editing (TASK-09-004)", () => {
+    beforeEach(() => {
+      vi.stubGlobal("matchMedia", (query: string) => ({
+        matches: query === "(pointer: coarse)",
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+    });
 
-    expect(screen.queryByTestId("rating-buttons")).toBeNull();
-    expect(screen.queryByTestId("star-toggle")).toBeNull();
-    expect(screen.queryByTestId("edit-open")).toBeNull();
-    expect(screen.getByTestId("viewer-close")).not.toBeNull();
+    it("keeps the full editor out but offers star and tags by touch", () => {
+      renderViewer(makeItems(3), { ratingsEnabled: true });
+
+      expect(screen.queryByTestId("edit-open")).toBeNull();
+      expect(screen.getByTestId("rating-buttons")).not.toBeNull();
+      expect(screen.getByTestId("tags-toggle")).not.toBeNull();
+      expect(screen.getByTestId("viewer-close")).not.toBeNull();
+    });
+
+    it("tapping the star writes the rating through set_rating", async () => {
+      invokeMock.mockImplementation((cmd: string, args: { rating?: number }) =>
+        Promise.resolve(cmd === "set_rating" ? (args.rating ?? 0) : null),
+      );
+      const onrate = vi.fn();
+      renderViewer(makeItems(3), { onrate });
+
+      await fireEvent.click(screen.getByTestId("star-toggle"));
+      await new Promise((r) => setTimeout(r, 0));
+      flushSync();
+
+      expect(invokeMock).toHaveBeenCalledWith("set_rating", { fileId: 0, rating: 5 });
+      expect(onrate).toHaveBeenCalledWith(0, 5);
+      expect(screen.getByTestId("star-toggle").getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("a failed star write (read-only source) shows the error and keeps the old state", async () => {
+      invokeMock.mockImplementation((cmd: string) =>
+        cmd === "set_rating" ? Promise.reject("Permission denied") : Promise.resolve(null),
+      );
+      const onrate = vi.fn();
+      renderViewer(makeItems(3), { onrate });
+
+      await fireEvent.click(screen.getByTestId("star-toggle"));
+      await new Promise((r) => setTimeout(r, 0));
+      flushSync();
+
+      expect(screen.getByTestId("rating-error").textContent).toContain("Permission denied");
+      expect(onrate).not.toHaveBeenCalled();
+      expect(screen.getByTestId("star-toggle").getAttribute("aria-pressed")).toBe("false");
+    });
+
+    it("the tags panel adds and removes a tag on the current photo", async () => {
+      invokeMock.mockImplementation((cmd: string, args: { tag?: string }) => {
+        if (cmd === "get_tags") return Promise.resolve(["beach"]);
+        if (cmd === "add_tag") return Promise.resolve(["beach", args.tag]);
+        if (cmd === "remove_tag") return Promise.resolve([]);
+        return Promise.resolve(null);
+      });
+      renderViewer(makeItems(3));
+      expect(screen.queryByTestId("viewer-tags")).toBeNull();
+
+      await fireEvent.click(screen.getByTestId("tags-toggle"));
+      await new Promise((r) => setTimeout(r, 0));
+      flushSync();
+      expect(screen.getByTestId("tag-chip-beach")).not.toBeNull();
+      expect(screen.queryByTestId("rename-submit")).toBeNull();
+
+      const input = screen.getByTestId("tag-input") as HTMLInputElement;
+      await fireEvent.input(input, { target: { value: "sunset" } });
+      await fireEvent.keyDown(input, { key: "Enter" });
+      await new Promise((r) => setTimeout(r, 0));
+      flushSync();
+      expect(invokeMock).toHaveBeenCalledWith("add_tag", { fileId: 0, tag: "sunset" });
+      expect(screen.getByTestId("tag-chip-sunset")).not.toBeNull();
+
+      await fireEvent.click(screen.getAllByTestId("tag-remove")[0]);
+      await new Promise((r) => setTimeout(r, 0));
+      flushSync();
+      expect(invokeMock).toHaveBeenCalledWith("remove_tag", { fileId: 0, tag: "beach" });
+      expect(screen.queryByTestId("tag-chip-beach")).toBeNull();
+    });
   });
 
   it("clicking a filmstrip thumb jumps to that photo", () => {

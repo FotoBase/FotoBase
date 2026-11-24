@@ -43,6 +43,9 @@
     /// Called when a stack badge is clicked (TASK-03-021): the shell opens
     /// the stack picker at the pointer.
     onopenstack?: (e: { stackId: string; x: number; y: number }) => void;
+    /// Called when a touch user taps a cell's star button (TASK-09-004): the
+    /// shell toggles the star through the sidecar write path.
+    onstar?: (item: GridItem) => void;
   }
 
   let {
@@ -53,7 +56,11 @@
     oncontextmenu = () => {},
     singleClickEdit = false,
     onopenstack = () => {},
+    onstar = () => {},
   }: Props = $props();
+
+  // Touch devices have no hover or keyboard shortcut to star from the grid.
+  const touchStar = hasCoarsePointer();
 
   const REPORT_DEBOUNCE_MS = 100;
 
@@ -272,6 +279,23 @@
                   ondblclick={(e) => e.stopPropagation()}
                 >
                   {badgeText(item)}
+                </button>
+              {/if}
+              {#if touchStar}
+                <button
+                  type="button"
+                  class="grid-star{(item.rating ?? 0) > 0 ? ' on' : ''}"
+                  data-testid="grid-star"
+                  aria-pressed={(item.rating ?? 0) > 0}
+                  title={t("viewer.star")}
+                  aria-label={t("viewer.star")}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    onstar(item);
+                  }}
+                  ondblclick={(e) => e.stopPropagation()}
+                >
+                  {(item.rating ?? 0) > 0 ? "★" : "☆"}
                 </button>
               {/if}
               {#if captionH > 0}

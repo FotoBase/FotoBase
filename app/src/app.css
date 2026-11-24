@@ -144,6 +144,35 @@ main {
   cursor: pointer;
 }
 
+/* Touch star (TASK-09-004): bottom-left, same geometry as the canvas
+   renderer's (STAR_BADGE in grid.ts). */
+.grid-star {
+  position: absolute;
+  left: 4px;
+  top: calc(var(--thumb-size) - 36px);
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 20px;
+  line-height: 32px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.grid-star-error {
+  color: #ff8a80;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.grid-star.on {
+  color: var(--fb-accent);
+}
+
 /* Revealed hidden photos/folders (TASK-03-009): same cell, grayed out. */
 .grid-cell[data-hidden="true"] {
   opacity: 0.4;
@@ -843,6 +872,26 @@ main {
 
 .viewer-star.on {
   color: #f5c518;
+}
+
+/* Touch tags panel (TASK-09-004): the compact tag editor over the stage. */
+.viewer-tags {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 50%;
+  overflow-y: auto;
+  padding: 0.75rem max(1rem, env(safe-area-inset-left));
+  background: rgba(17, 17, 17, 0.92);
+  border-top: 1px solid #333;
+  font-size: 0.85rem;
+  z-index: 1;
+}
+
+.viewer-tags .tag-input {
+  min-height: 40px;
+  font-size: 16px;
 }
 
 .viewer-rating-error {

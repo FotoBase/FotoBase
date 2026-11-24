@@ -99,7 +99,8 @@ describe("mobile touch browsing", () => {
       cell.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await expect($('[data-testid="viewer-stage"]')).toBeDisplayed();
-    await expect($('[data-testid="star-toggle"]')).not.toBeDisplayed();
+    await expect($('[data-testid="star-toggle"]')).toBeDisplayed();
+    await expect($('[data-testid="tags-toggle"]')).toBeDisplayed();
     await expect($('[data-testid="edit-open"]')).not.toBeDisplayed();
 
     await dispatchStageTouch("pointerdown", 1, 260, 100);
