@@ -18,6 +18,6 @@ Stand up iOS and Android build targets on Tauri v2 sharing the same Rust core as
 - e2e smoke: app launches to an empty/grid state on both simulators/emulators in CI.
 
 ## Acceptance criteria
-- [ ] 09-001: iOS and Android targets compile the same Rust core.
-- [ ] CI lanes build both platforms on every PR.
-- [ ] App launches on both iOS and Android.
+- [x] 09-001: iOS and Android targets compile the same Rust core.
+- [x] CI lanes build both platforms on every PR.
+- [x] App launches on both iOS and Android.

@@ -8,7 +8,7 @@
 
 ## feat: platform
 
-- [ ] `09-001` (L) Tauri v2 iOS/Android build targets sharing the Rust core; CI lanes.
+- [x] `09-001` (L) Tauri v2 iOS/Android build targets sharing the Rust core; CI lanes.
 - [ ] `09-002` (M) Catalog source: single-catalog access (NAS or Syncthing/iCloud-synced folder); read-only-safe open path.
 
 ## feat: mobile UI

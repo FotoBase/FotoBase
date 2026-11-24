@@ -35,4 +35,4 @@ Smoke = the app installs, launches, and the process is still alive after 30 s wi
 
 ## Breaking-the-lane check
 
-A PR that breaks the mobile build must fail the mobile lane. To verify, push a throwaway commit that adds a desktop-only call (e.g. `trash::delete("x")`) outside `#[cfg(desktop)]` and confirm both lanes go red; drop the commit afterwards.
+Verified once on PR #299 (an unresolved `tauri_plugin_updater` import turned both lanes red; reverted). A PR that breaks the mobile build must fail the mobile lane. To verify, push a throwaway commit that adds a desktop-only call (e.g. `trash::delete("x")`) outside `#[cfg(desktop)]` and confirm both lanes go red; drop the commit afterwards.
