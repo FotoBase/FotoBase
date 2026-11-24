@@ -50,6 +50,7 @@ pub mod rebuild_harness;
 pub mod save;
 pub mod screen_capture;
 pub mod settings;
+pub mod share_sheet;
 pub mod stream;
 pub mod tag_commands;
 pub mod thumb;
@@ -2170,6 +2171,79 @@ async fn email_photos(
     .map_err(|e| format!("email task: {e}"))?
     .map_err(|e| e.to_string())?;
     Ok(EmailReply { delivery, attached: batch.exported.len(), failed: batch.failed.len() })
+}
+
+/// Share sheet result: how many photos reached the sheet and how many could
+/// not be prepared.
+#[derive(Debug, Clone, serde::Serialize)]
+struct ShareReply {
+    shared: usize,
+    failed: usize,
+}
+
+/// Share sheet (TASK-09-005, PLAN §6 Phase 5): render the photos into a
+/// scratch folder on the bounded export queue (edits baked in, originals
+/// untouched, `photo-export-progress` {done,total} per photo), then open the
+/// native share sheet once with every file attached. iOS and Android only.
+#[tauri::command]
+async fn share_photos(
+    ids: Vec<i64>,
+    state: tauri::State<'_, AppState>,
+) -> Result<ShareReply, String> {
+    if ids.is_empty() {
+        return Err("no photos to share".into());
+    }
+    let queue = state.photo_exports.clone();
+    let catalog_path = state.catalog_path();
+    let app = state.app_handle.clone();
+    let root =
+        app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir()).join("fotobase-share");
+    let seq = EXPORT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let handle = queue
+        .try_enqueue(
+            format!("photo-share-{seq}"),
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |_ctx| {
+                let (catalog_path, app, ids, root) =
+                    (catalog_path.clone(), app.clone(), ids.clone(), root.clone());
+                async move {
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        let cat = Catalog::open(&catalog_path).map_err(|e| e.to_string())?;
+                        let prepared =
+                            share_sheet::prepare_share(&cat, &ids, &root, &mut |done, total| {
+                                let _ = app.emit(
+                                    "photo-export-progress",
+                                    serde_json::json!({ "done": done, "total": total }),
+                                );
+                            })
+                            .map_err(|e| e.to_string())?;
+                        share_sheet::hand_off(
+                            &prepared,
+                            &share_sheet::NativeShareSheet(app.clone()),
+                        )
+                        .map_err(|e| e.to_string())?;
+                        Ok::<_, String>(export_dialog::ExportBatch {
+                            exported: prepared.exported,
+                            failed: prepared.failed,
+                        })
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(batch)) => fotobase_jobs::Outcome::Done(batch),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("share task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue share: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(batch) => {
+            Ok(ShareReply { shared: batch.exported.len(), failed: batch.failed.len() })
+        }
+        fotobase_jobs::Outcome::Cancelled => Err("share cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
 }
 
 /// Print dialog preview (TASK-08-004, PLAN §2J Print): the page plan for the
@@ -4305,6 +4379,7 @@ pub fn run() {
     let builder = builder.plugin(screen_capture::plugin());
     builder
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_share_sheet::init())
         .register_uri_scheme_protocol(THUMB_PROTOCOL, |ctx, request| {
             let state = ctx.app_handle().state::<AppState>();
             // `?s=2` selects the HiDPI (1024px) cache entry (TASK-01-024).
@@ -4827,6 +4902,7 @@ pub fn run() {
             upload_photos,
             cancel_upload,
             email_photos,
+            share_photos,
             print_plan,
             print_pages,
             list_printers,

@@ -10,6 +10,7 @@
   import ExportDialog from "./lib/ExportDialog.svelte";
   import PrintDialog from "./lib/PrintDialog.svelte";
   import EmailDialog from "./lib/EmailDialog.svelte";
+  import ShareBar from "./lib/ShareBar.svelte";
   import UploadDialog from "./lib/UploadDialog.svelte";
   import BatchEditDialog from "./lib/BatchEditDialog.svelte";
   import CanvasThumbnailGrid from "./lib/CanvasThumbnailGrid.svelte";
@@ -1179,6 +1180,8 @@
       <!-- Filter buttons + date slider (TASK-03-014): same store-driven path
            as the search; they AND-combine with it and apply in the viewer. -->
       <FilterBar />
+      <!-- Touch multi-select + native share sheet (TASK-09-005). -->
+      <ShareBar {photos} />
       <!-- Quick Tags (TASK-03-006, PLAN §2B): one click applies/removes one
            of the 10 configured tags on the whole selection. -->
       {#if settings && (gridState.selection.size > 0 || tray.count > 0)}

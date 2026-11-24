@@ -10,7 +10,7 @@
 
 - [x] `09-003` (M) Browse + grid + viewer adapted for touch (Svelte reuse, mobile layout).
 - [x] `09-004` (M) Search (FTS) + star/tag editing on device.
-- [ ] `09-005` (M) Share sheet integration.
+- [x] `09-005` (M) Share sheet integration.
 - [ ] `09-006` (M) Camera roll as watched-folder equivalent via platform photo APIs.
 
 ## Tasks

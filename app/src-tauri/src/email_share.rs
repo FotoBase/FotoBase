@@ -126,12 +126,13 @@ pub fn sweep_stale(root: &Path, now: SystemTime, max_age: Duration) {
     }
 }
 
-fn new_scratch_dir(root: &Path) -> std::io::Result<PathBuf> {
+/// Fresh, uniquely named folder `<prefix>-<nanos>-<seq>` under `root`.
+pub(crate) fn new_scratch_dir(root: &Path, prefix: &str) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(root)?;
     let nanos =
         SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
     loop {
-        let dir = root.join(format!("email-{nanos}-{}", SEQ.fetch_add(1, Ordering::Relaxed)));
+        let dir = root.join(format!("{prefix}-{nanos}-{}", SEQ.fetch_add(1, Ordering::Relaxed)));
         match std::fs::create_dir(&dir) {
             Ok(()) => return Ok(dir),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -150,7 +151,7 @@ pub fn prepare_email(
     progress: &mut dyn FnMut(usize, usize),
 ) -> Result<PreparedEmail, EmailError> {
     sweep_stale(root, SystemTime::now(), STALE_AFTER);
-    let dir = new_scratch_dir(root)?;
+    let dir = new_scratch_dir(root, "email")?;
     let export = ExportRequest {
         resize_max_width: Some(req.max_edge),
         resize_max_height: Some(req.max_edge),

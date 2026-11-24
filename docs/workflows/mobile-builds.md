@@ -53,3 +53,13 @@ Verified once on PR #299 (an unresolved `tauri_plugin_updater` import turned bot
 - Star: a star button on every grid cell (touch only, DOM and canvas renderers) and the viewer's star/rating controls. Tags: the viewer's **Tags** button opens a compact tag editor (add/remove; library-wide rename and AI suggestions stay desktop-only).
 - Every edit is the desktop write-through: read-modify-write of the photo's XMP sidecar (unknown nodes preserved), then the catalog mirror. The sidecar is re-read on each edit, so content an external sync client delivered in between is merged, not overwritten.
 - A source that cannot be written (read-only mount, no permission) makes the sidecar write fail; the catalog is not touched and the UI shows the error. Covered by `crates/scanner/tests/mobile_edits.rs`.
+
+## Share sheet
+
+**Task:** TASK-09-005. A photo (viewer) or a multi-selection (grid) opens the native OS share sheet — `UIActivityViewController` on iOS, an `ACTION_SEND` / `ACTION_SEND_MULTIPLE` chooser on Android. There is no custom share UI.
+
+- Touch only (`hasCoarsePointer()`). Touch devices have no modifier keys, so the grid's **Select** button (`ShareBar`) switches taps from "open" to "toggle selection"; **Share** sends the selection in grid order. The viewer has its own **Share** button for the current photo.
+- The `share_photos` command renders the photos into a scratch folder under the app cache dir through the shared export path (edits baked in, never upscaled, longest edge capped at 4096 px, JPEG q90), then calls the sheet once with every file. The sheet receives copies; originals are never touched. Photos that cannot be rendered (e.g. videos) are skipped and reported; if none can, nothing opens. Scratch folders older than 24 h are swept on the next share.
+- No third-party plugin: the available Tauri share plugins share a single file, so `crates/share-sheet` (`tauri-plugin-share-sheet`) is a small in-repo plugin with Kotlin and Swift sources. It exposes no JS commands, so no capability entry is needed. On desktop its call reports "only available on iOS and Android".
+- Android: the plugin manifest declares its own `FileProvider` subclass (`${applicationId}.fotobase.share`, cache dir only) and grants read access to the attached URIs via `ClipData`.
+- Unit coverage: `app/src-tauri/tests/share_sheet.rs` (the file list handed to the share API) and `app/src/lib/share.test.ts`. The sheet itself is only verifiable on a device or emulator.

@@ -22,6 +22,9 @@ class GridState {
   thumbSize = $state(DEFAULT_THUMB_SIZE);
   /// Selected photo ids. Both renderers read the same set.
   selection = $state(new Set<number>());
+  /// Touch multi-select (TASK-09-005): taps toggle selection instead of
+  /// opening the viewer. Touch devices have no modifier keys.
+  selectMode = $state(false);
   /// Last scroll offset, so a renderer switch resumes where the user was.
   scrollTop = $state(0);
   /// Live-search query (TASK-01-018, PLAN §2C). Lives in the shared store so
@@ -120,6 +123,7 @@ export const gridState = new GridState();
 export function resetGridState(): void {
   gridState.thumbSize = DEFAULT_THUMB_SIZE;
   gridState.selection = new Set();
+  gridState.selectMode = false;
   gridState.scrollTop = 0;
   gridState.searchQuery = "";
   gridState.clearFilters();

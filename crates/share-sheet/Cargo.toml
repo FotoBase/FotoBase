@@ -1,0 +1,19 @@
+[package]
+name = "tauri-plugin-share-sheet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Native share sheet for image files on iOS and Android (TASK-09-005)"
+links = "tauri-plugin-share-sheet"
+
+[dependencies]
+tauri = "2"
+serde = { version = "1", features = ["derive"] }
+thiserror.workspace = true
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[lints]
+workspace = true

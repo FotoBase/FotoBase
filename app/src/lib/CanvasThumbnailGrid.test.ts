@@ -506,3 +506,40 @@ describe("CanvasThumbnailGrid stack badge (TASK-03-021)", () => {
     expect(gridState.selection.has(0)).toBe(true);
   });
 });
+
+describe("CanvasThumbnailGrid select mode (TASK-09-005)", () => {
+  it("toggles selection instead of opening a photo on tap", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: query === "(pointer: coarse)",
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    gridState.selectMode = true;
+    const onopen = vi.fn();
+    render(CanvasThumbnailGrid, { items: makeItems(100), loadImage: fakeLoadImage, onopen });
+    await settle();
+
+    const tap = (x: number): void => {
+      const event = new MouseEvent("click", { bubbles: true });
+      Object.defineProperty(event, "offsetX", { value: x });
+      Object.defineProperty(event, "offsetY", { value: 10 });
+      screen.getByTestId("grid-canvas").dispatchEvent(event);
+      flushSync();
+    };
+    tap(10);
+    tap(200);
+    expect(onopen).not.toHaveBeenCalled();
+    expect([...gridState.selection].sort()).toEqual([0, 1]);
+
+    tap(10);
+    expect([...gridState.selection]).toEqual([1]);
+  });
+});

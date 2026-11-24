@@ -26,7 +26,9 @@ async fn rustfs_passes_the_contract_suite_and_resumes_multipart_uploads() {
     let started = GenericImage::new(IMAGE, TAG)
         .with_exposed_port(9000.tcp())
         .with_wait_for(WaitFor::http(
-            HttpWaitStrategy::new("/health")
+            // `/health` is liveness-only and returns 200 before S3 requests
+            // can succeed. Wait for storage, IAM and startup to be ready.
+            HttpWaitStrategy::new("/health/ready")
                 .with_port(9000.tcp())
                 .with_expected_status_code(200u16),
         ))

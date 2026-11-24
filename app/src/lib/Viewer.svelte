@@ -22,6 +22,7 @@
   import { isEditableTarget, nextIndex, preloadUris, previewUri, prevIndex } from "./viewer";
   import { probeAndCache } from "./codec-probe";
   import { ratingForKey, setRating, toggleStar } from "./rating";
+  import { sharePhotos } from "./share";
   import {
     displayFilter,
     toggleDisplayMode,
@@ -167,6 +168,23 @@
       onrate(item.id, saved);
     } catch (e) {
       ratingError = t("viewer.ratingFailed", { error: String(e) });
+    }
+  }
+
+  // Share the current photo through the native share sheet (TASK-09-005).
+  let shareError = $state<string | null>(null);
+  let sharing = $state(false);
+  async function shareCurrent(): Promise<void> {
+    const item = current;
+    if (item === null || sharing) return;
+    shareError = null;
+    sharing = true;
+    try {
+      await sharePhotos([item.id]);
+    } catch (e) {
+      shareError = t("share.failed", { error: String(e) });
+    } finally {
+      sharing = false;
     }
   }
 
@@ -424,6 +442,20 @@
         </button>
       {/each}
     </span>
+    {#if current && !isVideo && hasCoarsePointer()}
+      <button
+        type="button"
+        class="viewer-info-toggle"
+        data-testid="viewer-share"
+        disabled={sharing}
+        onclick={() => void shareCurrent()}
+      >
+        {t("share.action")}
+      </button>
+    {/if}
+    {#if shareError}
+      <span class="viewer-rating-error" data-testid="share-error" role="alert">{shareError}</span>
+    {/if}
     {#if hasCoarsePointer()}
       <button
         type="button"
