@@ -1,6 +1,6 @@
 # task: build touch-adapted browse, grid, and viewer ui
 
-**Feature:** [FEAT-09-01-mobile-ui](FEAT-09-01-mobile-ui.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** in progress (2026-11-24)
+**Feature:** [FEAT-09-01-mobile-ui](FEAT-09-01-mobile-ui.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** in review (2026-11-24)
 
 ## Description
 Adapt the existing Svelte browse/grid/viewer UI for touch on iOS and Android (PLAN §6 Phase 5: read-mostly first). Reuses desktop components from EPIC-01/EPIC-07 rather than a separate mobile app UI. Depends on FEAT-09-02 (Tauri mobile targets) to run.
