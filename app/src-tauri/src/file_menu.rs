@@ -21,8 +21,27 @@ use crate::thumb::ThumbOutcome;
 /// "Locate on disk" (PLAN §2 File menu / Folder context menu): reveal a file
 /// or folder in the OS file manager (Finder / Explorer / the freedesktop
 /// handler), with the item selected. Works for folders too.
+#[cfg(desktop)]
 pub fn reveal_path(path: &str) -> Result<(), String> {
     tauri_plugin_opener::reveal_item_in_dir(path).map_err(|e| format!("reveal {path}: {e}"))
+}
+
+/// Mobile has no file manager to reveal in (TASK-09-001).
+#[cfg(mobile)]
+pub fn reveal_path(path: &str) -> Result<(), String> {
+    Err(format!("reveal {path}: not available on mobile"))
+}
+
+#[cfg(desktop)]
+fn move_to_trash(path: &str) -> Result<(), String> {
+    trash::delete(path).map_err(|e| format!("move to trash {path}: {e}"))
+}
+
+/// No OS trash backend on mobile (TASK-09-001): refuse rather than fall back
+/// to a permanent delete (PLAN §3 rule 1).
+#[cfg(mobile)]
+fn move_to_trash(path: &str) -> Result<(), String> {
+    Err(format!("move to trash {path}: not available on mobile"))
 }
 
 /// "Delete from disk" (PLAN §2, §3 rule 1): move the photo to the OS trash
@@ -32,7 +51,7 @@ pub fn reveal_path(path: &str) -> Result<(), String> {
 /// Confirmation happens in the UI before this runs; there is no permanent
 /// delete anywhere on this path.
 pub fn delete_to_trash(file_id: i64, path: &str, catalog: &mut Catalog) -> Result<(), String> {
-    trash::delete(path).map_err(|e| format!("move to trash {path}: {e}"))?;
+    move_to_trash(path)?;
     catalog
         .remove_file(file_id)
         .map(|_| ())

@@ -800,6 +800,21 @@ fn is_registered(ext: &str) -> bool {
     linux::is_registered(ext)
 }
 
+// Mobile (TASK-09-001): file associations are declared in the app manifest
+// (Info.plist / AndroidManifest), not registered at runtime.
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+fn do_register(_ext: &str, _exe: &Path) -> Result<Option<serde_json::Value>, String> {
+    Err("file associations are not available on this platform".into())
+}
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+fn do_unregister(_ext: &str, _prior: Option<serde_json::Value>) -> Result<(), String> {
+    Err("file associations are not available on this platform".into())
+}
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+fn is_registered(_ext: &str) -> bool {
+    false
+}
+
 /// The types currently registered at the OS level (desktop-file sync uses
 /// this so the Linux desktop entry always matches reality).
 #[cfg(target_os = "linux")]

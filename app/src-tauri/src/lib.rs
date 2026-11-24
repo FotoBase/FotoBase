@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use fotobase_catalog::{Catalog, SyncError};
 use serde::Serialize;
 use tauri::{Emitter, Manager};
+#[cfg(desktop)]
 use tauri_plugin_updater::UpdaterExt;
 
 pub mod associations;
@@ -53,6 +54,11 @@ pub mod stream;
 pub mod tag_commands;
 pub mod thumb;
 pub mod trash_commands;
+#[cfg(desktop)]
+pub mod tray;
+// Mobile has no tray or close-to-tray (TASK-09-001): same call surface, no-ops.
+#[cfg(mobile)]
+#[path = "tray_mobile.rs"]
 pub mod tray;
 pub mod upload_dialog;
 
@@ -247,6 +253,7 @@ struct AppState {
     settings: Mutex<settings::Settings>,
     /// Update feed artifact found by the last check, awaiting the user's
     /// install decision (check-but-ask) or immediate install (auto).
+    #[cfg(desktop)]
     pending_update: Mutex<Option<tauri_plugin_updater::Update>>,
     /// Folder Manager backend (TASK-01-016): watcher + its own catalog
     /// connection, created lazily on the first folder-manager command (and
@@ -3697,7 +3704,9 @@ fn take_upload_files(state: tauri::State<'_, AppState>) -> Vec<String> {
 
 /// Route a launch request that reached an already-running instance: park
 /// the files (a frontend that is still starting drains them), tell a live
-/// frontend, and bring the window forward.
+/// frontend, and bring the window forward. Desktop only: the single-instance
+/// plugin is its sole caller.
+#[cfg(desktop)]
 fn route_launch(app: &tauri::AppHandle, request: context_menu::LaunchRequest) {
     tray::show_main_window(app);
     if request.paths.is_empty() {
@@ -3965,6 +3974,7 @@ pub struct UpdateCheck {
 /// `off` returns without any network access — §1 allows update checks only
 /// when the user has not disabled them. A found artifact is held in state
 /// for [`install_pending_update`]; it is never downloaded before then.
+#[cfg(desktop)]
 #[tauri::command]
 async fn check_for_updates(
     app: tauri::AppHandle,
@@ -4004,6 +4014,7 @@ async fn check_for_updates(
 /// Download + install the update found by [`check_for_updates`]. The
 /// artifact is signature-verified by the updater plugin (minisign against
 /// the pinned public key) before it ever runs.
+#[cfg(desktop)]
 #[tauri::command]
 async fn install_pending_update(state: tauri::State<'_, AppState>) -> Result<(), String> {
     let update = state
@@ -4022,7 +4033,21 @@ async fn install_pending_update(state: tauri::State<'_, AppState>) -> Result<(),
     Ok(())
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// Mobile builds are updated by the app stores (TASK-09-001): the updater
+/// plugin is desktop-only, so the check reports "nothing contacted".
+#[cfg(mobile)]
+#[tauri::command]
+async fn check_for_updates() -> Result<UpdateCheck, String> {
+    Ok(UpdateCheck { checked: false, available: false, version: None, notes: None })
+}
+
+/// Nothing is ever pending on mobile (see [`check_for_updates`]).
+#[cfg(mobile)]
+#[tauri::command]
+async fn install_pending_update() -> Result<(), String> {
+    Ok(())
+}
+
 /// One row of the switcher UI: name, directory, and whether it is active.
 #[derive(Debug, Serialize)]
 pub struct CatalogSummary {
@@ -4251,6 +4276,7 @@ fn basemap_status() -> BasemapStatus {
     }
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -4267,15 +4293,18 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
         route_launch(app, context_menu::parse_launch_args(&argv[1.min(argv.len())..]));
     }));
+    // TASK-01-003: signed updater (PLAN §4). Signature verification of
+    // downloaded artifacts is done by the plugin itself (minisign against
+    // the pubkey pinned in tauri.conf.json) and cannot be disabled. Desktop
+    // only: mobile apps are updated by their stores (TASK-09-001).
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    // Screen capture hotkey (TASK-08-019): the plugin registers nothing
+    // until the user opts in (`screen_capture::sync_hotkey`). Desktop only.
+    #[cfg(desktop)]
+    let builder = builder.plugin(screen_capture::plugin());
     builder
-        // TASK-01-003: signed updater (PLAN §4). Signature verification of
-        // downloaded artifacts is done by the plugin itself (minisign against
-        // the pubkey pinned in tauri.conf.json) and cannot be disabled.
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        // Screen capture hotkey (TASK-08-019): the plugin registers nothing
-        // until the user opts in (`screen_capture::sync_hotkey`).
-        .plugin(screen_capture::plugin())
         .register_uri_scheme_protocol(THUMB_PROTOCOL, |ctx, request| {
             let state = ctx.app_handle().state::<AppState>();
             // `?s=2` selects the HiDPI (1024px) cache entry (TASK-01-024).
@@ -4558,6 +4587,7 @@ pub fn run() {
                 print_cancel: Mutex::new(None),
                 import_cancel: Mutex::new(None),
                 settings: Mutex::new(persisted),
+                #[cfg(desktop)]
                 pending_update: Mutex::new(None),
                 folders: Mutex::new(None),
                 pending_open: Mutex::new(pending_open),
@@ -4657,10 +4687,13 @@ pub fn run() {
             // Tray icon (TASK-03-025, PLAN §6 P2a): shows and controls
             // background watching; the window sits hidden under it when
             // closed. Failure is non-fatal — the app runs without a tray.
-            if let Err(e) = tray::build_tray(app.handle()) {
-                tracing::warn!("tray icon unavailable: {e}");
+            #[cfg(desktop)]
+            {
+                if let Err(e) = tray::build_tray(app.handle()) {
+                    tracing::warn!("tray icon unavailable: {e}");
+                }
+                tray::spawn_status_updater(app.handle().clone());
             }
-            tray::spawn_status_updater(app.handle().clone());
             // Context menu (TASK-08-020): re-register on every release start so
             // a moved or updated app never leaves stale entries. Dev builds
             // skip it — their exe path must not leak into the user's menus.

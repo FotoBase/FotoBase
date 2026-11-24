@@ -8,6 +8,10 @@ __pycache__/
 # Rust
 /target/
 
+# Mobile projects (TASK-09-001): generated in CI by `tauri android|ios init`
+app/src-tauri/gen/android/
+app/src-tauri/gen/apple/
+
 # Frontend
 node_modules/
 app/dist/

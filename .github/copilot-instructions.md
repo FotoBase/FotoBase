@@ -68,6 +68,7 @@ Before touching anything that writes metadata, read `docs/sidecar-merge-on-write
 | `docs/workflows/release-checklist.md`                   | Per-release steps                                                                    |
 | `docs/workflows/lint-format.md`                         | Lint/format/commit policy                                                            |
 | `docs/workflows/dependency-tracking.md`                 | Upstream dependency watch (exiv2, LibRaw, WebKitGTK…)                                |
+| `docs/workflows/mobile-builds.md`                       | iOS/Android targets, cfg gates, `mobile` CI lanes                                    |
 
 ## Repo hygiene
 

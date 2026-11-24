@@ -14,10 +14,14 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+#[cfg(desktop)]
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+#[cfg(desktop)]
+use tauri::Manager;
+#[cfg(desktop)]
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use fotobase_catalog::ScanMode;
@@ -262,6 +266,22 @@ pub fn sync_hotkey(registrar: &impl HotkeyRegistrar, enabled: bool) -> Result<()
 /// The Tauri global-shortcut plugin as a [`HotkeyRegistrar`].
 pub struct TauriHotkeys<'a>(pub &'a AppHandle);
 
+/// Mobile has no global shortcuts and no screen-capture folder
+/// (TASK-09-001): nothing is ever registered, enabling it reports why.
+#[cfg(mobile)]
+impl HotkeyRegistrar for TauriHotkeys<'_> {
+    fn is_registered(&self, _shortcut: &str) -> bool {
+        false
+    }
+    fn register(&self, _shortcut: &str) -> Result<(), String> {
+        Err("screen capture hotkey is not available on mobile".into())
+    }
+    fn unregister(&self, _shortcut: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+#[cfg(desktop)]
 impl HotkeyRegistrar for TauriHotkeys<'_> {
     fn is_registered(&self, shortcut: &str) -> bool {
         self.0.global_shortcut().is_registered(shortcut)
@@ -279,6 +299,7 @@ impl HotkeyRegistrar for TauriHotkeys<'_> {
 
 /// The plugin: its handler runs a capture on every key press. It registers
 /// no shortcut itself — that only happens through [`sync_hotkey`].
+#[cfg(desktop)]
 pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, _shortcut, event| {
@@ -289,10 +310,12 @@ pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .build()
 }
 
+#[cfg(desktop)]
 static CAPTURING: AtomicBool = AtomicBool::new(false);
 
 /// Capture on a blocking thread; a press while one is running is dropped
 /// (key repeat must not stack grabs).
+#[cfg(desktop)]
 fn spawn_capture(app: AppHandle) {
     if CAPTURING.swap(true, Ordering::SeqCst) {
         return;
@@ -305,6 +328,7 @@ fn spawn_capture(app: AppHandle) {
     });
 }
 
+#[cfg(desktop)]
 fn capture_now(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<crate::AppState>();
     let settings =

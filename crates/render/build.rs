@@ -12,12 +12,20 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
-    // Only needed when the raw feature is actually compiled in (and it is
-    // target-gated off on Windows until a CI/packaging leg lands, same as
-    // the `heif` feature — recorded in TASK-04-013).
+    // `fb_native_codecs`: the targets that link the C/C++ codec libraries
+    // (libheif, LibRaw). Windows is gated off until a CI/packaging leg lands
+    // (TASK-04-013); Android/iOS until a mobile codec story exists
+    // (TASK-09-001) — mobile decodes HEIC/RAW through the platform later.
+    println!("cargo:rustc-check-cfg=cfg(fb_native_codecs)");
+    let os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let native = !matches!(os.as_str(), "windows" | "android" | "ios");
+    if native {
+        println!("cargo:rustc-cfg=fb_native_codecs");
+    }
+
+    // LibRaw link setup is only needed when the raw feature is compiled in.
     let feature_on = env::var("CARGO_FEATURE_RAW").is_ok();
-    let windows = env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows");
-    if !feature_on || windows {
+    if !feature_on || !native {
         return;
     }
 

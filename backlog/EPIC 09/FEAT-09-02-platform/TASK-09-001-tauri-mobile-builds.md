@@ -1,6 +1,6 @@
 # task: set up tauri v2 ios/android targets and ci lanes
 
-**Feature:** [FEAT-09-02-platform](FEAT-09-02-platform.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** todo
+**Feature:** [FEAT-09-02-platform](FEAT-09-02-platform.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** in progress (2026-11-24)
 
 ## Description
 Stand up iOS and Android build targets on Tauri v2 sharing the same Rust core as desktop, plus CI lanes building both on PR (PLAN §6 Phase 5). This is the platform foundation for all of EPIC-09.
