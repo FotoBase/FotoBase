@@ -22,6 +22,14 @@ describe("columnCount", () => {
     expect(columnCount(800, 160, 8)).toBe(4);
   });
 
+  it.each([
+    ["phone portrait", 320, 1],
+    ["wide phone portrait", 390, 2],
+    ["phone landscape", 844, 5],
+  ])("fits expected columns at %s viewport width", (_label, width, expected) => {
+    expect(columnCount(width, 160)).toBe(expected);
+  });
+
   it("is at least one, even for a zero-width or oversized thumb", () => {
     expect(columnCount(0, 160, 8)).toBe(1);
     expect(columnCount(100, 500, 8)).toBe(1);

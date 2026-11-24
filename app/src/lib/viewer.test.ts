@@ -140,6 +140,23 @@ function pressKey(key: string): void {
   flushSync();
 }
 
+function touchPointer(
+  target: Element,
+  type: string,
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+): void {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperties(event, {
+    pointerId: { value: pointerId },
+    pointerType: { value: "touch" },
+    clientX: { value: clientX },
+    clientY: { value: clientY },
+  });
+  target.dispatchEvent(event);
+}
+
 function renderViewer(items: GridItem[], props: Record<string, unknown> = {}) {
   const result = render(Viewer, { items, ...props });
   flushSync();
@@ -157,6 +174,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   cleanup();
   vi.useRealTimers();
 });
@@ -206,12 +224,67 @@ describe("Viewer", () => {
     expect(onclose).toHaveBeenCalledOnce();
   });
 
+  it("close button exits the viewer by touch", () => {
+    const onclose = vi.fn();
+    renderViewer(makeItems(3), { onclose });
+
+    fireEvent.click(screen.getByTestId("viewer-close"));
+    expect(onclose).toHaveBeenCalledOnce();
+  });
+
+  it("keeps edit and rating controls out of the touch viewer", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    renderViewer(makeItems(3), { ratingsEnabled: true });
+
+    expect(screen.queryByTestId("rating-buttons")).toBeNull();
+    expect(screen.queryByTestId("star-toggle")).toBeNull();
+    expect(screen.queryByTestId("edit-open")).toBeNull();
+    expect(screen.getByTestId("viewer-close")).not.toBeNull();
+  });
+
   it("clicking a filmstrip thumb jumps to that photo", () => {
     renderViewer(makeItems(3));
 
     fireEvent.click(screen.getAllByTestId("filmstrip-thumb")[2]);
     flushSync();
     expect(mainSrc()).toContain(HASH(2));
+  });
+
+  it("swiping left and right navigates photos by touch", () => {
+    renderViewer(makeItems(3));
+    const stage = screen.getByTestId("viewer-stage");
+
+    touchPointer(stage, "pointerdown", 1, 260, 100);
+    touchPointer(stage, "pointerup", 1, 90, 104);
+    flushSync();
+    expect(mainSrc()).toContain(HASH(1));
+
+    touchPointer(stage, "pointerdown", 2, 90, 100);
+    touchPointer(stage, "pointerup", 2, 260, 104);
+    flushSync();
+    expect(mainSrc()).toContain(HASH(0));
+  });
+
+  it("pinch zooms the image without changing photos", () => {
+    renderViewer(makeItems(3));
+    const stage = screen.getByTestId("viewer-stage");
+
+    touchPointer(stage, "pointerdown", 1, 100, 100);
+    touchPointer(stage, "pointerdown", 2, 200, 100);
+    touchPointer(stage, "pointermove", 2, 260, 100);
+    flushSync();
+
+    expect(stage.getAttribute("data-zoom")).toBe("1.6");
+    expect(mainSrc()).toContain(HASH(0));
   });
 
   it("F toggles fullscreen through the Tauri window API", async () => {

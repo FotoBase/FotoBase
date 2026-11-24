@@ -66,6 +66,10 @@ main {
   text-align: center;
 }
 
+.app-toolbar {
+  display: contents;
+}
+
 /* Virtualized thumbnail grid (TASK-01-013) */
 .grid-shell {
   display: flex;
@@ -812,6 +816,16 @@ main {
   font-size: 0.8rem;
 }
 
+.viewer-close {
+  background: none;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  padding: 0.1rem 0.6rem;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
 .viewer-info-toggle:hover {
   border-color: #4a9eff;
   color: #fff;
@@ -951,4 +965,218 @@ main {
   padding: 0 0.3rem;
   line-height: 1.1;
   border-radius: 0 6px 0 6px;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --fb-tray-h: 0px;
+  }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    text-align: left;
+  }
+
+  .app-toolbar {
+    box-sizing: border-box;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: 100%;
+    overflow-x: auto;
+    padding: max(env(safe-area-inset-top), 0.25rem) 0.5rem 0.25rem;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app-toolbar h1,
+  .app-toolbar p {
+    display: none;
+  }
+
+  .app-toolbar button {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 0.4rem 0.6rem;
+  }
+
+  .library {
+    flex: 1;
+    flex-direction: column;
+    gap: 0;
+    min-height: 0;
+  }
+
+  .sidebar {
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    flex-direction: row;
+    gap: 0.5rem;
+    width: 100%;
+    max-height: 24dvh;
+    padding: 0.25rem 0.5rem;
+    overflow: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--fb-border-soft);
+  }
+
+  .sidebar .folder-tree {
+    flex: 0 0 70vw;
+    max-height: 22dvh;
+    overflow: auto;
+    border-right: 1px solid var(--fb-border-soft);
+    padding-right: 0.5rem;
+  }
+
+  .sidebar .folder-tree button,
+  .sidebar .folder-options button {
+    min-height: 40px;
+  }
+
+  .sidebar .album-list {
+    flex: 0 0 70vw;
+    margin-top: 0;
+    border-top: 0;
+    border-left: 1px solid var(--fb-border-soft);
+    padding: 0 0.5rem;
+  }
+
+  .sidebar .album-list button {
+    min-height: 40px;
+  }
+
+  .grid-area {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .grid-toolbar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .grid-toolbar input[type="range"] {
+    flex: 1 1 8rem;
+    min-height: 40px;
+  }
+
+  .grid-shell {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+
+  .grid-scroll {
+    min-height: 0;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .photo-tray {
+    display: none;
+  }
+
+  .viewer-stage {
+    overflow: hidden;
+    touch-action: none;
+    overscroll-behavior: contain;
+  }
+
+  .viewer-main {
+    user-select: none;
+    -webkit-user-drag: none;
+    touch-action: none;
+  }
+
+  .viewer-status {
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding: 0.5rem max(0.5rem, env(safe-area-inset-left));
+    white-space: nowrap;
+  }
+
+  .viewer-status button {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .viewer-display-mode {
+    padding: 0.4rem;
+  }
+
+  .filmstrip {
+    flex: 0 0 auto;
+    padding: 0.5rem max(0.5rem, env(safe-area-inset-left))
+      max(0.5rem, env(safe-area-inset-bottom));
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .filmstrip-thumb {
+    width: 56px;
+    height: 56px;
+  }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .app-toolbar button {
+    min-height: 36px;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .sidebar {
+    max-height: 12dvh;
+  }
+
+  .sidebar .folder-tree {
+    max-height: 10dvh;
+  }
+
+  .sidebar .folder-tree button,
+  .sidebar .folder-options button,
+  .sidebar .album-list button {
+    min-height: 32px;
+  }
+
+  .search-bar {
+    padding: 0.1rem 0.5rem;
+  }
+
+  .filter-bar {
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+    overflow-x: auto;
+    padding: 0 0.5rem;
+  }
+
+  .filter-bar button {
+    flex: 0 0 auto;
+    min-height: 32px;
+    padding: 0.15rem 0.4rem;
+  }
+
+  .grid-toolbar {
+    gap: 0.25rem;
+    padding: 0.2rem 0.5rem;
+  }
+
+  .grid-toolbar input[type="range"] {
+    min-height: 32px;
+  }
 }

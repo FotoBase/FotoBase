@@ -10,7 +10,7 @@
   S toggles the star (TASK-03-005); with ratings enabled 0–5 rate.
 -->
 <script lang="ts">
-  import { thumbUri, type GridItem } from "./grid";
+  import { hasCoarsePointer, thumbUri, type GridItem } from "./grid";
   import { gridState } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
   import { hasStackBadge } from "./stacks";
@@ -64,6 +64,11 @@
   let index = $state(Math.max(0, Math.min(startIndex, items.length - 1)));
   let slideshowRunning = $state(startSlideshow);
   let fullscreen = $state(false);
+  let zoomScale = $state(1);
+  let activeTouches = new Map<number, { x: number; y: number }>();
+  let swipeStart: { x: number; y: number } | null = null;
+  let pinchStart: { distance: number; scale: number } | null = null;
+  let touchGestureWasPinch = false;
   // Info pane (TASK-01-020, PLAN §2 View menu "Show image properties"). The
   // menu bar itself arrives with the file-menu work (01-021); until then the
   // toggle lives in the viewer's status bar and on the `i` key.
@@ -75,6 +80,68 @@
 
   const current = $derived(items[index] ?? null);
   const mainUri = $derived(previewUri(current?.hash ?? null));
+
+  function showIndex(next: number): void {
+    index = next;
+    zoomScale = 1;
+    activeTouches.clear();
+    swipeStart = null;
+    pinchStart = null;
+    touchGestureWasPinch = false;
+  }
+
+  function touchDistance(): number {
+    const [a, b] = [...activeTouches.values()];
+    if (!a || !b) return 0;
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  }
+
+  function onStagePointerDown(e: PointerEvent): void {
+    if (e.pointerType !== "touch" || isVideo) return;
+    if (e.target instanceof Element && e.target.closest("button, video")) return;
+    e.preventDefault();
+    const stage = e.currentTarget as HTMLElement;
+    if (typeof stage.setPointerCapture === "function") {
+      stage.setPointerCapture(e.pointerId);
+    }
+    activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activeTouches.size === 1) {
+      swipeStart = { x: e.clientX, y: e.clientY };
+      touchGestureWasPinch = false;
+    } else if (activeTouches.size === 2) {
+      touchGestureWasPinch = true;
+      swipeStart = null;
+      pinchStart = { distance: Math.max(touchDistance(), 1), scale: zoomScale };
+    }
+  }
+
+  function onStagePointerMove(e: PointerEvent): void {
+    if (e.pointerType !== "touch" || !activeTouches.has(e.pointerId)) return;
+    activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activeTouches.size < 2 || !pinchStart) return;
+    e.preventDefault();
+    zoomScale = Math.min(4, Math.max(1, pinchStart.scale * touchDistance() / pinchStart.distance));
+  }
+
+  function onStagePointerEnd(e: PointerEvent, cancelled = false): void {
+    if (e.pointerType !== "touch" || !activeTouches.has(e.pointerId)) return;
+    const wasPinch = touchGestureWasPinch;
+    activeTouches.delete(e.pointerId);
+    if (activeTouches.size === 1) pinchStart = null;
+    if (activeTouches.size !== 0) return;
+
+    if (!cancelled && !wasPinch && swipeStart && zoomScale === 1) {
+      const dx = e.clientX - swipeStart.x;
+      const dy = e.clientY - swipeStart.y;
+      if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+        slideshowRunning = false;
+        showIndex(dx < 0 ? nextIndex(index, items.length) : prevIndex(index, items.length));
+      }
+    }
+    swipeStart = null;
+    pinchStart = null;
+    touchGestureWasPinch = false;
+  }
 
   // --- Star / rating (TASK-03-005) -------------------------------------------
   // The backend writes the sidecar first; the UI reflects a rating only once
@@ -88,7 +155,7 @@
 
   async function rate(value: number): Promise<void> {
     const item = current;
-    if (item === null) return;
+    if (item === null || hasCoarsePointer()) return;
     ratingError = null;
     try {
       const saved = await setRating(item.id, value);
@@ -178,7 +245,7 @@
   $effect(() => {
     if (!slideshowRunning) return;
     const timer = setInterval(() => {
-      index = nextIndex(index, items.length);
+      showIndex(nextIndex(index, items.length));
     }, slideshowMs);
     return () => clearInterval(timer);
   });
@@ -211,11 +278,11 @@
         break;
       case "ArrowRight":
         slideshowRunning = false; // pauses on interaction
-        index = nextIndex(index, items.length);
+        showIndex(nextIndex(index, items.length));
         break;
       case "ArrowLeft":
         slideshowRunning = false;
-        index = prevIndex(index, items.length);
+        showIndex(prevIndex(index, items.length));
         break;
       case "Escape":
         onclose();
@@ -249,7 +316,12 @@
   <div
     class="viewer-stage"
     data-testid="viewer-stage"
+    data-zoom={zoomScale}
     style:filter={displayMode === "normal" ? null : stageFilter}
+    onpointerdown={onStagePointerDown}
+    onpointermove={onStagePointerMove}
+    onpointerup={(e) => onStagePointerEnd(e)}
+    onpointercancel={(e) => onStagePointerEnd(e, true)}
   >
     {#if isVideo && videoInfo}
       <VideoPlayer
@@ -261,7 +333,14 @@
         support={videoSupport}
       />
     {:else if mainUri}
-      <img class="viewer-main" data-testid="viewer-main" src={mainUri} alt={current?.filename ?? ""} draggable="false" />
+      <img
+        class="viewer-main"
+        data-testid="viewer-main"
+        src={mainUri}
+        alt={current?.filename ?? ""}
+        draggable="false"
+        style:transform={`scale(${zoomScale})`}
+      />
     {:else}
       <div class="viewer-placeholder" data-testid="viewer-placeholder"></div>
     {/if}
@@ -270,6 +349,15 @@
     {/if}
   </div>
   <div class="viewer-status">
+    <button
+      type="button"
+      class="viewer-close"
+      data-testid="viewer-close"
+      aria-label={t("viewer.close")}
+      onclick={onclose}
+    >
+      ×
+    </button>
     <span data-testid="viewer-count">{index + 1}/{items.length}</span>
     {#if current && hasStackBadge(current)}
       <span class="viewer-stack" data-testid="viewer-stack-badge">
@@ -284,32 +372,34 @@
     {#if slideshowRunning}
       <span data-testid="slideshow-running">{t("viewer.slideshowRunning")}</span>
     {/if}
-    {#if ratingsEnabled}
-      <span class="viewer-rating" data-testid="rating-buttons">
-        {#each [1, 2, 3, 4, 5] as n (n)}
-          <button
-            type="button"
-            class="viewer-star{n <= currentRating ? ' on' : ''}"
-            data-testid={`rating-${n}`}
-            aria-pressed={n === currentRating}
-            title={t("viewer.rating", { n })}
-            onclick={() => rateOrClear(n)}
-          >
-            {n <= currentRating ? "★" : "☆"}
-          </button>
-        {/each}
-      </span>
-    {:else}
-      <button
-        type="button"
-        class="viewer-star{currentRating > 0 ? ' on' : ''}"
-        data-testid="star-toggle"
-        aria-pressed={currentRating > 0}
-        title={t("viewer.star")}
-        onclick={() => void rate(toggleStar(currentRating))}
-      >
-        {currentRating > 0 ? "★" : "☆"}
-      </button>
+    {#if !hasCoarsePointer()}
+      {#if ratingsEnabled}
+        <span class="viewer-rating" data-testid="rating-buttons">
+          {#each [1, 2, 3, 4, 5] as n (n)}
+            <button
+              type="button"
+              class="viewer-star{n <= currentRating ? ' on' : ''}"
+              data-testid={`rating-${n}`}
+              aria-pressed={n === currentRating}
+              title={t("viewer.rating", { n })}
+              onclick={() => rateOrClear(n)}
+            >
+              {n <= currentRating ? "★" : "☆"}
+            </button>
+          {/each}
+        </span>
+      {:else}
+        <button
+          type="button"
+          class="viewer-star{currentRating > 0 ? ' on' : ''}"
+          data-testid="star-toggle"
+          aria-pressed={currentRating > 0}
+          title={t("viewer.star")}
+          onclick={() => void rate(toggleStar(currentRating))}
+        >
+          {currentRating > 0 ? "★" : "☆"}
+        </button>
+      {/if}
     {/if}
     {#if ratingError}
       <span class="viewer-rating-error" data-testid="rating-error" role="alert">{ratingError}</span>
@@ -336,7 +426,7 @@
     >
       {t("viewer.info")}
     </button>
-    {#if current && !isVideo}
+    {#if current && !isVideo && !hasCoarsePointer()}
       <button
         type="button"
         class="viewer-edit-toggle"
@@ -359,7 +449,7 @@
         draggable="false"
         onclick={() => {
           slideshowRunning = false;
-          index = i;
+          showIndex(i);
         }}
       />
     {/each}

@@ -34,6 +34,13 @@ export interface GridItem {
 /// Grid gap in px, both between cells and between rows.
 export const GRID_GAP = 8;
 
+/// Whether taps should open photos directly instead of selecting them.
+export function hasCoarsePointer(): boolean {
+  return typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches;
+}
+
 /// Full columns that fit `containerWidth` px at `thumbSize` px cells with
 /// `gap` px gutters: at least one, only whole columns (no clipped cells).
 export function columnCount(
