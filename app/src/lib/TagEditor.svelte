@@ -25,9 +25,12 @@
     photoId?: number | null;
     /// Fired when tags changed, so the shell can refresh the grid.
     onchanged?: () => void;
+    /// Touch viewer (TASK-09-004): only add/remove on the photo; the
+    /// library-wide rename and the AI suggestions stay on the desktop pane.
+    compact?: boolean;
   }
 
-  let { photoId = null, onchanged = () => {} }: Props = $props();
+  let { photoId = null, onchanged = () => {}, compact = false }: Props = $props();
 
   let tags = $state<string[]>([]);
   let rawSuggestions = $state<string[]>([]);
@@ -51,6 +54,7 @@
       }
       // Suggestions are derived catalog rows; absence (no model, no
       // embedding yet) leaves the pane without a suggestion section.
+      if (compact) return;
       try {
         const loaded = id === null ? [] : await getTagSuggestions(id);
         if (seq === requestSeq) rawSuggestions = Array.isArray(loaded) ? loaded : [];
@@ -163,6 +167,7 @@
       </span>
     {/each}
   </div>
+  {#if !compact}
   <div class="tag-suggestions" data-testid="tag-suggestions">
     {#if suggestions.length > 0}
       <div class="suggestion-header">
@@ -211,6 +216,7 @@
       {t("tags.suggest")}
     </button>
   </div>
+  {/if}
   <input
     type="text"
     class="tag-input"
@@ -221,6 +227,7 @@
       if (e.key === "Enter") void add();
     }}
   />
+  {#if !compact}
   <div class="tag-rename">
     <input
       type="text"
@@ -240,6 +247,7 @@
       {t("tags.rename")}
     </button>
   </div>
+  {/if}
   {#if error}
     <span class="tag-error" data-testid="tag-error" role="alert">{error}</span>
   {/if}

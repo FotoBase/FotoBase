@@ -30,6 +30,8 @@
     revealScrollTop,
     rowItems,
     hasCoarsePointer,
+    inStarBadge,
+    STAR_BADGE,
     thumbUri,
     visibleHashes,
     type GridItem,
@@ -60,6 +62,8 @@
     /// Called when a stack badge is clicked (TASK-03-021): the shell opens
     /// the stack picker at the pointer.
     onopenstack?: (e: { stackId: string; x: number; y: number }) => void;
+    /// Called when a touch user taps a cell's star button (TASK-09-004).
+    onstar?: (item: GridItem) => void;
   }
 
   let {
@@ -71,7 +75,11 @@
     onopen = () => {},
     singleClickEdit = false,
     onopenstack = () => {},
+    onstar = () => {},
   }: Props = $props();
+
+  // Touch devices have no hover or keyboard shortcut to star from the grid.
+  const touchStar = hasCoarsePointer();
 
   const REPORT_DEBOUNCE_MS = 100;
 
@@ -297,6 +305,26 @@
             }
           }
 
+          if (touchStar) {
+            const { size: badge, margin } = STAR_BADGE;
+            const starred = (item.rating ?? 0) > 0;
+            ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+            ctx.fillRect(x + margin, y + size - margin - badge, badge, badge);
+            ctx.fillStyle = starred ? paletteVar("--fb-accent", "#4a9eff") : "#fff";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = "20px sans-serif";
+            ctx.fillText(
+              starred ? "★" : "☆",
+              x + margin + badge / 2,
+              y + size - margin - badge / 2,
+            );
+            ctx.textAlign = "start";
+            if (strip > 0) {
+              ctx.font = `${Math.round(strip * 0.65)}px sans-serif`;
+            }
+          }
+
           if (strip > 0) {
             const text = ellipsize(
               captionText(item, mode),
@@ -353,6 +381,16 @@
       const localY = e.offsetY + scrollEl.scrollTop - Math.floor(index / columns) * rowStep;
       if (inStackBadge(localX, localY, gridState.thumbSize)) {
         onopenstack({ stackId: item.stack_id, x: e.clientX, y: e.clientY });
+        return;
+      }
+    }
+    if (touchStar) {
+      const step = gridState.thumbSize + GRID_GAP;
+      const rowStep = step + captionH;
+      const localX = e.offsetX - (index % columns) * step;
+      const localY = e.offsetY + scrollEl.scrollTop - Math.floor(index / columns) * rowStep;
+      if (inStarBadge(localX, localY, gridState.thumbSize)) {
+        onstar(item);
         return;
       }
     }

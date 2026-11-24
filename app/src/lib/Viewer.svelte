@@ -15,6 +15,7 @@
   import { t } from "./i18n.svelte.js";
   import { hasStackBadge } from "./stacks";
   import InfoPane from "./InfoPane.svelte";
+  import TagEditor from "./TagEditor.svelte";
   import VideoPlayer from "./VideoPlayer.svelte";
   import LivePhotoPlayer from "./LivePhotoPlayer.svelte";
   import { hasLiveBadge, liveBadgeKey } from "./live";
@@ -73,6 +74,9 @@
   // menu bar itself arrives with the file-menu work (01-021); until then the
   // toggle lives in the viewer's status bar and on the `i` key.
   let infoOpen = $state(false);
+  // Touch viewer (TASK-09-004): a compact tag panel instead of the full
+  // info pane's editors.
+  let tagsOpen = $state(false);
   // Sepia / B&W view modes (TASK-03-018): a CSS filter on the stage only —
   // transient, never persisted, never an edit.
   let displayMode = $state<DisplayMode>("normal");
@@ -155,7 +159,7 @@
 
   async function rate(value: number): Promise<void> {
     const item = current;
-    if (item === null || hasCoarsePointer()) return;
+    if (item === null) return;
     ratingError = null;
     try {
       const saved = await setRating(item.id, value);
@@ -312,6 +316,11 @@
   {#if infoOpen}
     <InfoPane photo={current} {onalbumschanged} />
   {/if}
+  {#if tagsOpen && hasCoarsePointer()}
+    <div class="viewer-tags" data-testid="viewer-tags">
+      <TagEditor photoId={current?.id ?? null} compact />
+    </div>
+  {/if}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
     class="viewer-stage"
@@ -372,34 +381,32 @@
     {#if slideshowRunning}
       <span data-testid="slideshow-running">{t("viewer.slideshowRunning")}</span>
     {/if}
-    {#if !hasCoarsePointer()}
-      {#if ratingsEnabled}
-        <span class="viewer-rating" data-testid="rating-buttons">
-          {#each [1, 2, 3, 4, 5] as n (n)}
-            <button
-              type="button"
-              class="viewer-star{n <= currentRating ? ' on' : ''}"
-              data-testid={`rating-${n}`}
-              aria-pressed={n === currentRating}
-              title={t("viewer.rating", { n })}
-              onclick={() => rateOrClear(n)}
-            >
-              {n <= currentRating ? "★" : "☆"}
-            </button>
-          {/each}
-        </span>
-      {:else}
-        <button
-          type="button"
-          class="viewer-star{currentRating > 0 ? ' on' : ''}"
-          data-testid="star-toggle"
-          aria-pressed={currentRating > 0}
-          title={t("viewer.star")}
-          onclick={() => void rate(toggleStar(currentRating))}
-        >
-          {currentRating > 0 ? "★" : "☆"}
-        </button>
-      {/if}
+    {#if ratingsEnabled}
+      <span class="viewer-rating" data-testid="rating-buttons">
+        {#each [1, 2, 3, 4, 5] as n (n)}
+          <button
+            type="button"
+            class="viewer-star{n <= currentRating ? ' on' : ''}"
+            data-testid={`rating-${n}`}
+            aria-pressed={n === currentRating}
+            title={t("viewer.rating", { n })}
+            onclick={() => rateOrClear(n)}
+          >
+            {n <= currentRating ? "★" : "☆"}
+          </button>
+        {/each}
+      </span>
+    {:else}
+      <button
+        type="button"
+        class="viewer-star{currentRating > 0 ? ' on' : ''}"
+        data-testid="star-toggle"
+        aria-pressed={currentRating > 0}
+        title={t("viewer.star")}
+        onclick={() => void rate(toggleStar(currentRating))}
+      >
+        {currentRating > 0 ? "★" : "☆"}
+      </button>
     {/if}
     {#if ratingError}
       <span class="viewer-rating-error" data-testid="rating-error" role="alert">{ratingError}</span>
@@ -417,6 +424,17 @@
         </button>
       {/each}
     </span>
+    {#if hasCoarsePointer()}
+      <button
+        type="button"
+        class="viewer-info-toggle"
+        data-testid="tags-toggle"
+        aria-pressed={tagsOpen}
+        onclick={() => (tagsOpen = !tagsOpen)}
+      >
+        {t("tags.title")}
+      </button>
+    {/if}
     <button
       type="button"
       class="viewer-info-toggle"

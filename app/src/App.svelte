@@ -58,6 +58,7 @@
   import { gridState, pickRenderer } from "./lib/grid-state.svelte.js";
   import { setLocale, t } from "./lib/i18n.svelte.js";
   import { loadPhotoInfo } from "./lib/info-pane";
+  import { setRating, toggleStar } from "./lib/rating";
   import { resetFaces } from "./lib/people";
   import { queryLibraryItems, queryLibraryItemsSemantic, semanticContributed, type LibraryView } from "./lib/search";
   import {
@@ -211,6 +212,21 @@
   function openEdit(item: GridItem): void {
     const index = (memoryItems ?? photos).findIndex((p) => p.id === item.id);
     edit = { open: true, index: index < 0 ? 0 : index };
+  }
+
+  // Touch star from the grid (TASK-09-004): same sidecar-first write as the
+  // viewer; the grid only reflects a rating the backend confirmed, and a
+  // refused write (read-only or unreachable source) surfaces its error.
+  let gridStarError = $state<string | null>(null);
+  async function starFromGrid(item: GridItem): Promise<void> {
+    gridStarError = null;
+    try {
+      const rating = await setRating(item.id, toggleStar(item.rating ?? 0));
+      photos = photos.map((p) => (p.id === item.id ? { ...p, rating } : p));
+      if (gridState.starredOnly) void refreshView();
+    } catch (e) {
+      gridStarError = t("viewer.ratingFailed", { error: String(e) });
+    }
   }
 
   function openViewer(item: GridItem, slideshow = false): void {
@@ -1184,6 +1200,7 @@
           singleClickEdit={settings?.single_click_edit ?? false}
           oncontextmenu={openPhotoMenu}
           onopenstack={openStackPicker}
+          onstar={(item) => void starFromGrid(item)}
         />
       {:else}
         <ThumbnailGrid
@@ -1193,7 +1210,13 @@
           singleClickEdit={settings?.single_click_edit ?? false}
           oncontextmenu={openPhotoMenu}
           onopenstack={openStackPicker}
+          onstar={(item) => void starFromGrid(item)}
         />
+      {/if}
+      {#if gridStarError}
+        <span class="grid-star-error" data-testid="grid-star-error" role="alert">
+          {gridStarError}
+        </span>
       {/if}
     </div>
   </div>

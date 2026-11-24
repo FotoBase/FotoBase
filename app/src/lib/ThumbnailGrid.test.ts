@@ -420,6 +420,48 @@ describe("ThumbnailGrid touch browsing (TASK-09-003)", () => {
   });
 });
 
+describe("ThumbnailGrid touch star (TASK-09-004)", () => {
+  const stubCoarse = (coarse: boolean): void => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: coarse && query === "(pointer: coarse)",
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+  };
+
+  it("a touch device shows a star per cell; tapping it stars without opening", () => {
+    stubCoarse(true);
+    const onopen = vi.fn();
+    const onstar = vi.fn();
+    const items = makeItems(10).map((it, i) => (i === 1 ? { ...it, rating: 5 } : it));
+    render(ThumbnailGrid, { items, onopen, onstar });
+
+    const stars = screen.getAllByTestId("grid-star");
+    expect(stars[0].getAttribute("aria-pressed")).toBe("false");
+    expect(stars[1].getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(stars[0]);
+    flushSync();
+    expect(onstar).toHaveBeenCalledWith(items[0]);
+    expect(onopen).not.toHaveBeenCalled();
+    expect(gridState.selection.size).toBe(0);
+  });
+
+  it("a mouse device has no grid star", () => {
+    stubCoarse(false);
+    render(ThumbnailGrid, { items: makeItems(10) });
+    expect(screen.queryByTestId("grid-star")).toBeNull();
+  });
+});
+
 describe("ThumbnailGrid stack badge (TASK-03-021)", () => {
   const stacked = (): GridItem[] => [
     { id: 1, filename: "a.jpg", hash: HASH(1), stack_id: "s1", stack_count: 3 },

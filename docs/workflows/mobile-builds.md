@@ -44,3 +44,12 @@ Verified once on PR #299 (an unresolved `tauri_plugin_updater` import turned bot
 - Open and scan only read the source; the app writes its own catalog cache. Every write *into* the source goes through `CatalogSource::authorize_write`, which refuses `WriteIntent::Background` and allows only `WriteIntent::UserAction`.
 - Both scanners re-stat each file right before indexing it. A file whose size/mtime changed (or that vanished) is not indexed; it lands in `requeued`, keeps its last consistent catalog row, and is picked up by a later pass. `scan_settled` repeats passes until nothing is requeued.
 - A network source that drops mid-scan returns `SourceError::Unreachable`; nothing is deleted, so offline browsing of the cached catalog keeps working.
+
+## Search, star and tag editing on device
+
+**Task:** TASK-09-004. The mobile UI reuses the desktop paths — no separate mobile implementation.
+
+- Search is the desktop `search_files` FTS query (same ranking), driven by the shared search bar.
+- Star: a star button on every grid cell (touch only, DOM and canvas renderers) and the viewer's star/rating controls. Tags: the viewer's **Tags** button opens a compact tag editor (add/remove; library-wide rename and AI suggestions stay desktop-only).
+- Every edit is the desktop write-through: read-modify-write of the photo's XMP sidecar (unknown nodes preserved), then the catalog mirror. The sidecar is re-read on each edit, so content an external sync client delivered in between is merged, not overwritten.
+- A source that cannot be written (read-only mount, no permission) makes the sidecar write fail; the catalog is not touched and the UI shows the error. Covered by `crates/scanner/tests/mobile_edits.rs`.
