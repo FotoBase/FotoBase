@@ -1,6 +1,6 @@
 # task: build static html gallery generator
 
-**Feature:** [FEAT-10-01-f1-sync-web-albums](FEAT-10-01-f1-sync-web-albums.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in progress (2026-11-24)
+**Feature:** [FEAT-10-01-f1-sync-web-albums](FEAT-10-01-f1-sync-web-albums.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in review (2026-11-24)
 
 ## Description
 Static HTML gallery generator for an album: resized images plus a tiny JS viewer that works offline from a file server (PLAN §7 F1 layer 1; also the project's best shareable demo artifact — ship early). Depends on EPIC-08 export targets for upload (task 02).
