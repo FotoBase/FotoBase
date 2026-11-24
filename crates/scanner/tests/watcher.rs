@@ -273,3 +273,46 @@ fn scan_burst_never_duplicates_rows() {
         assert_eq!(row_count_for(&fx, &format!("s{i}.jpg")), 1, "file s{i}.jpg");
     }
 }
+
+/// TASK-09-006: a platform change notification (camera roll) enters the same
+/// debounced pipeline as a filesystem event. While paused, a scan request plus
+/// the notify event for the same write coalesce into exactly one incremental
+/// scan of the root, and the file is cataloged.
+#[test]
+fn scan_request_runs_one_debounced_incremental_scan() {
+    let fx = fixture(&[("a.jpg", 10)]);
+
+    fx.handle.pause();
+    write_jpg(&fx._lib.path().join("shot.jpg"), 77);
+    fx.handle.request_scan(fx._lib.path()).unwrap();
+    fx.handle.request_scan(fx._lib.path()).unwrap();
+    std::thread::sleep(SETTLE);
+    assert_eq!(fx.scans(), 0, "paused: requests are queued, not dropped");
+    fx.handle.resume();
+
+    assert!(wait_for(|| row_count_for(&fx, "shot.jpg") == 1, Duration::from_secs(5)));
+    std::thread::sleep(SETTLE);
+    assert_eq!(fx.scans(), 1, "requests and the filesystem event coalesce");
+    assert_eq!(count_files(&fx), 2);
+}
+
+/// A request is never a way to scan a folder nobody watches.
+#[test]
+fn scan_request_for_unwatched_root_does_nothing() {
+    let fx = fixture(&[("a.jpg", 10)]);
+    let other = tempfile::tempdir().unwrap();
+    write_jpg(&other.path().join("x.jpg"), 5);
+
+    fx.handle.request_scan(other.path()).unwrap();
+    std::thread::sleep(SETTLE);
+    assert_eq!(fx.scans(), 0);
+    assert_eq!(row_count_for(&fx, "x.jpg"), 0);
+}
+
+/// Nothing polls: with no events and no requests the worker never scans.
+#[test]
+fn idle_watcher_never_scans() {
+    let fx = fixture(&[("a.jpg", 10)]);
+    std::thread::sleep(SETTLE * 2);
+    assert_eq!(fx.scans(), 0);
+}

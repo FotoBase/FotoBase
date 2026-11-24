@@ -1,0 +1,21 @@
+[package]
+name = "tauri-plugin-camera-roll"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Camera roll change observation for iOS and Android (TASK-09-006)"
+links = "tauri-plugin-camera-roll"
+
+[dependencies]
+tauri = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror.workspace = true
+tracing.workspace = true
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[lints]
+workspace = true

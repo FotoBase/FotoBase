@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <!-- Camera roll (TASK-09-006): the permission prompt for reading the
+         photo library. The library is only read, never changed. -->
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Fotobase shows the photos in your camera roll alongside your library. Your photos are only read and never leave this device.</string>
+  </dict>
+</plist>

@@ -1705,6 +1705,7 @@ dependencies = [
  "sha2 0.11.1",
  "tauri",
  "tauri-build",
+ "tauri-plugin-camera-roll",
  "tauri-plugin-dialog",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
@@ -6275,6 +6276,18 @@ dependencies = [
  "serde_json",
  "tauri-utils",
  "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-camera-roll"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.21",
+ "tracing",
 ]
 
 [[package]]
