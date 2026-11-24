@@ -215,7 +215,8 @@ fn open_and_scan_never_write_to_the_source() {
         let mut stack = vec![root.to_path_buf()];
         while let Some(dir) = stack.pop() {
             for entry in fs::read_dir(&dir).unwrap().flatten() {
-                let meta = entry.metadata().unwrap();
+                // Windows directory entries can carry stale metadata from enumeration.
+                let meta = fs::symlink_metadata(entry.path()).unwrap();
                 out.insert(
                     entry.path().to_string_lossy().into_owned(),
                     (meta.len(), meta.modified().unwrap()),
