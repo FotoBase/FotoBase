@@ -10,7 +10,7 @@
 
 ## F1.1 Publish web album (after EPIC-08; earliest of the futures, best demo artifact — ship early)
 
-- [ ] `F1-001` (M) Static HTML gallery generator (resized images + tiny JS viewer) for an album.
+- [x] `F1-001` (M) Static HTML gallery generator (resized images + tiny JS viewer) for an album.
 - [ ] `F1-002` (M) Upload to any export target under unguessable URL; incremental re-publish (= "Sync to Web").
 
 ## F1.2 Device sync (after stable XMP model, EPIC-03; before/with EPIC-09 usefulness)
@@ -24,7 +24,7 @@ axum + SQLite + S3 always-on peer, private albums with login.
 
 ## Tasks
 
-- [ ] [TASK-10-01-01-gallery-generator.md](TASK-10-01-01-gallery-generator.md) — build static html gallery generator
+- [x] [TASK-10-01-01-gallery-generator.md](TASK-10-01-01-gallery-generator.md) — build static html gallery generator
 - [ ] [TASK-10-01-02-publish-upload.md](TASK-10-01-02-publish-upload.md) — publish web album with incremental re-upload
 - [ ] [TASK-10-01-03-crdt-metadata.md](TASK-10-01-03-crdt-metadata.md) — implement metadata crdt document
 - [ ] [TASK-10-01-04-iroh-sync-transport.md](TASK-10-01-04-iroh-sync-transport.md) — add iroh sync transport and qr pairing

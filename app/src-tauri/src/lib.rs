@@ -13,6 +13,7 @@ use tauri::{Emitter, Manager};
 #[cfg(desktop)]
 use tauri_plugin_updater::UpdaterExt;
 
+pub mod album_gallery;
 pub mod associations;
 pub mod backup;
 pub mod basemap;
@@ -107,6 +108,7 @@ const RESTORE_QUEUE_CAPACITY: usize = 1;
 /// Capacity of the photo-export queue (TASK-04-015): one batch at a time,
 /// the single worker serializes them (PLAN §3 rule 4).
 const PHOTO_EXPORT_QUEUE_CAPACITY: usize = 1;
+const GALLERY_QUEUE_CAPACITY: usize = 1;
 /// Capacity of upload batches (TASK-08-013): one network batch at a time.
 const UPLOAD_QUEUE_CAPACITY: usize = 1;
 /// Capacity of the print-pages queue (TASK-08-004): one print job at a
@@ -206,6 +208,8 @@ struct AppState {
     /// Bounded queue for export-dialog batches (TASK-04-015); one batch at
     /// a time, per-photo progress emitted as `photo-export-progress`.
     photo_exports: fotobase_jobs::Queue<export_dialog::ExportBatch>,
+    /// Bounded queue for album web-gallery publishes (TASK-10-01-01).
+    gallery_exports: fotobase_jobs::Queue<album_gallery::AlbumGalleryOutput>,
     /// Bounded queue for upload batches (TASK-08-013); background priority
     /// so visible work stays ahead of network transfers and resize renders.
     uploads: fotobase_jobs::Queue<upload_dialog::UploadBatchResult>,
@@ -1887,6 +1891,54 @@ async fn export_photos(
     match handle.result().await.as_ref() {
         fotobase_jobs::Outcome::Done(batch) => Ok(batch.clone()),
         fotobase_jobs::Outcome::Cancelled => Err("export cancelled".into()),
+        fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
+    }
+}
+
+/// Publish album `album_id` as a static web gallery (resized images + tiny
+/// offline viewer) into `dest` (TASK-10-01-01). Re-running rewrites only
+/// what changed.
+#[tauri::command]
+async fn export_album_gallery(
+    album_id: i64,
+    dest: String,
+    request: album_gallery::AlbumGalleryRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<album_gallery::AlbumGalleryOutput, String> {
+    let queue = state.gallery_exports.clone();
+    let catalog_path = state.catalog_path();
+    let seq = EXPORT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let handle = queue
+        .try_enqueue(
+            format!("album-gallery-{seq}"),
+            fotobase_jobs::Priority::Background,
+            fotobase_jobs::job(move |_ctx| {
+                let (dest, catalog_path, request) =
+                    (dest.clone(), catalog_path.clone(), request.clone());
+                async move {
+                    let joined = tauri::async_runtime::spawn_blocking(move || {
+                        let cat = Catalog::open(&catalog_path).map_err(|e| e.to_string())?;
+                        album_gallery::export_album_gallery(
+                            &cat,
+                            album_id,
+                            std::path::Path::new(&dest),
+                            &request,
+                        )
+                        .map_err(|e| e.to_string())
+                    })
+                    .await;
+                    match joined {
+                        Ok(Ok(out)) => fotobase_jobs::Outcome::Done(out),
+                        Ok(Err(e)) => fotobase_jobs::Outcome::Failed(e),
+                        Err(e) => fotobase_jobs::Outcome::Failed(format!("gallery task: {e}")),
+                    }
+                }
+            }),
+        )
+        .map_err(|e| format!("enqueue gallery: {e}"))?;
+    match handle.result().await.as_ref() {
+        fotobase_jobs::Outcome::Done(out) => Ok(out.clone()),
+        fotobase_jobs::Outcome::Cancelled => Err("gallery export cancelled".into()),
         fotobase_jobs::Outcome::Failed(e) => Err(e.clone()),
     }
 }
@@ -4570,6 +4622,9 @@ pub fn run() {
             let photo_exports = tauri::async_runtime::block_on(async {
                 fotobase_jobs::Queue::new(PHOTO_EXPORT_QUEUE_CAPACITY)
             });
+            let gallery_exports = tauri::async_runtime::block_on(async {
+                fotobase_jobs::Queue::new(GALLERY_QUEUE_CAPACITY)
+            });
             // Upload preparation and transfers yield to visible work and
             // pause on battery through the shared admission hook.
             let uploads = tauri::async_runtime::block_on(async {
@@ -4681,6 +4736,7 @@ pub fn run() {
                 datetime_jobs,
                 exports,
                 photo_exports,
+                gallery_exports,
                 uploads,
                 upload_cancel: Mutex::new(std::collections::HashMap::new()),
                 prints,
@@ -4938,6 +4994,7 @@ pub fn run() {
             list_backup_sets,
             restore_backup,
             export_photos,
+            export_album_gallery,
             list_upload_targets,
             list_upload_albums,
             google_photos_signed_in,
