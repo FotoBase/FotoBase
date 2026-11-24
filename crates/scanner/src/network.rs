@@ -52,6 +52,12 @@ pub trait FsOps: Send + Sync {
     /// Cheap liveness probe for the share (a statfs-class operation, not a
     /// directory walk). `false` means the root is unreachable.
     fn probe(&self, root: &Path) -> bool;
+    /// Fresh metadata for one file, used to confirm it is still unchanged
+    /// right before it is indexed (TASK-09-002). `Ok(None)` means the
+    /// implementation cannot re-stat, so the listing is trusted as-is.
+    fn stat(&self, _path: &Path) -> io::Result<Option<EntryMeta>> {
+        Ok(None)
+    }
 }
 
 /// The real filesystem: one `read_dir` + per-entry metadata, and a
@@ -89,6 +95,16 @@ impl FsOps for RealFs {
 
     fn probe(&self, root: &Path) -> bool {
         std::fs::metadata(root).is_ok()
+    }
+
+    fn stat(&self, path: &Path) -> io::Result<Option<EntryMeta>> {
+        let meta = std::fs::metadata(path)?;
+        Ok(Some(EntryMeta {
+            path: path.to_path_buf(),
+            is_dir: meta.is_dir(),
+            size: meta.len(),
+            mtime: crate::mtime_secs(&meta),
+        }))
     }
 }
 
@@ -149,6 +165,9 @@ pub struct NetworkScanReport {
     /// Byte-identical candidates that could not be told apart — surfaced,
     /// never silently resolved (00-010 §4.4). The file is added as new.
     pub ambiguous: usize,
+    /// Files that changed (or vanished) between the listing and the index
+    /// step; not indexed this pass (TASK-09-002).
+    pub requeued: Vec<String>,
     /// Aggregated IO error count (not per-file error details).
     pub errors: usize,
     /// Directory paths committed so far (carried-over + this pass). Pass
@@ -285,7 +304,8 @@ pub fn scan_network_folder(
         progress(ScanProgress { dirs_seen, files_seen });
 
         catalog.begin_uncommitted_batch()?;
-        let outcome = process_directory(catalog, &dir, &entries, &mut report, &mut limiter);
+        let outcome =
+            process_directory(catalog, &dir, &entries, &mut report, &mut limiter, &*options.fs);
         match outcome {
             Ok(()) => {
                 catalog.commit_batch()?;
@@ -376,6 +396,7 @@ fn process_directory(
     entries: &[EntryMeta],
     report: &mut NetworkScanReport,
     limiter: &mut RateLimiter,
+    fs: &dyn FsOps,
 ) -> fotobase_catalog::Result<()> {
     let dir_str = dir.to_string_lossy().into_owned();
     let folder_id = catalog.seed_folder(&dir_str)?;
@@ -420,6 +441,16 @@ fn process_directory(
         limiter.acquire();
         let path_str = entry.path.to_string_lossy().into_owned();
         let Some(media) = media_type(&entry.path) else { continue };
+        // A file matching its catalog row needs no IO at all; anything that
+        // would be indexed is first re-checked against a fresh stat so a
+        // file a NAS writer is still changing is never indexed half-written.
+        let unchanged = existing
+            .get(&path_str)
+            .is_some_and(|(size, mtime)| *size == entry.size as i64 && *mtime == entry.mtime);
+        if !unchanged && !still_stable(fs, limiter, entry) {
+            report.requeued.push(path_str);
+            continue;
+        }
         match existing.get(&path_str) {
             Some((size, mtime)) if *size == entry.size as i64 && *mtime == entry.mtime => {
                 report.skipped += 1;
@@ -454,6 +485,18 @@ fn process_directory(
     }
 
     Ok(())
+}
+
+/// Fresh stat matches the listing? `Ok(None)` (no re-stat support) trusts
+/// the listing; a stat error means the file vanished or the share hiccuped,
+/// so it is not stable.
+fn still_stable(fs: &dyn FsOps, limiter: &mut RateLimiter, entry: &EntryMeta) -> bool {
+    limiter.acquire();
+    match fs.stat(&entry.path) {
+        Ok(Some(now)) => now.size == entry.size && now.mtime == entry.mtime,
+        Ok(None) => true,
+        Err(_) => false,
+    }
 }
 
 fn upsert(

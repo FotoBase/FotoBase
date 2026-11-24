@@ -36,3 +36,11 @@ Smoke = the app installs, launches, and the process is still alive after 30 s wi
 ## Breaking-the-lane check
 
 Verified once on PR #299 (an unresolved `tauri_plugin_updater` import turned both lanes red; reverted). A PR that breaks the mobile build must fail the mobile lane. To verify, push a throwaway commit that adds a desktop-only call (e.g. `trash::delete("x")`) outside `#[cfg(desktop)]` and confirm both lanes go red; drop the commit afterwards.
+
+## Catalog source (read-only-safe)
+
+**Task:** TASK-09-002. The mobile app browses one catalog source — a NAS mount or a Syncthing/iCloud-synced folder — through `fotobase_scanner::CatalogSource`.
+
+- Open and scan only read the source; the app writes its own catalog cache. Every write *into* the source goes through `CatalogSource::authorize_write`, which refuses `WriteIntent::Background` and allows only `WriteIntent::UserAction`.
+- Both scanners re-stat each file right before indexing it. A file whose size/mtime changed (or that vanished) is not indexed; it lands in `requeued`, keeps its last consistent catalog row, and is picked up by a later pass. `scan_settled` repeats passes until nothing is requeued.
+- A network source that drops mid-scan returns `SourceError::Unreachable`; nothing is deleted, so offline browsing of the cached catalog keeps working.

@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fotobase_catalog::{Catalog, ScanMode};
-use fotobase_scanner::{scan_folder, ScanHook, ScanReport, Watcher};
+use fotobase_scanner::{CatalogSource, ScanHook, ScanReport, Watcher};
 
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase-folder-manager";
@@ -99,9 +99,18 @@ impl FolderManager {
     /// regardless of its mode.
     pub fn scan_now(&self, path: &str) -> Result<ScanReport, String> {
         let mut cat = self.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
-        let report =
-            scan_folder(&mut cat, Path::new(path), &std::sync::atomic::AtomicBool::new(false))
-                .map_err(|e| format!("scan {path}: {e}"))?;
+        // The read-only-safe source path: network-aware, defers files a sync
+        // client is still writing (TASK-09-002).
+        let report = CatalogSource::open(Path::new(path))
+            .and_then(|source| {
+                source.scan_settled(
+                    &mut cat,
+                    &std::sync::atomic::AtomicBool::new(false),
+                    3,
+                    &|_| {},
+                )
+            })
+            .map_err(|e| format!("scan {path}: {e}"))?;
         if report.changed() || !report.folder_ini_offered.is_empty() {
             if let Some(hook) = &self.on_change {
                 hook(&report);

@@ -22,10 +22,12 @@ use fotobase_video::VideoMeta as ProbeMeta;
 pub mod batch;
 mod polling;
 pub mod reassoc;
+mod source;
 pub use polling::{
     is_network_path, AdaptiveInterval, PollConfig, Poller, DEFAULT_FAST_THRESHOLD,
     DEFAULT_POLL_MAX, DEFAULT_POLL_MIN, DEFAULT_SLOW_THRESHOLD,
 };
+pub use source::{CatalogSource, SourceError, SourceKind, WriteIntent};
 
 mod network;
 pub use network::{
@@ -66,6 +68,12 @@ pub struct ScanReport {
     /// Byte-identical candidates that could not be told apart — surfaced,
     /// never silently resolved (00-010 §4.4). The file is added as new.
     pub ambiguous: usize,
+    /// Files that changed size/mtime (or vanished) between the walk and the
+    /// index step — a sync client or NAS writer was still at work
+    /// (TASK-09-002). They are not indexed at a partial state and an
+    /// existing row keeps its last consistent values; a later scan picks
+    /// them up once they settle.
+    pub requeued: Vec<String>,
     /// True if the cancel flag stopped the walk early.
     pub cancelled: bool,
     /// Folders whose ini this scan met for the first time: the
@@ -81,6 +89,12 @@ impl ScanReport {
     /// event only fires for real changes.
     pub fn changed(&self) -> bool {
         self.added + self.updated + self.removed + self.reassociated > 0
+    }
+
+    /// Were files deferred because they were still changing? The caller
+    /// should scan again once the writer is done.
+    pub fn needs_rescan(&self) -> bool {
+        !self.requeued.is_empty()
     }
 }
 
@@ -276,6 +290,12 @@ fn scan_inner(
     }
 
     for f in files {
+        // Re-stat right before indexing: a file a sync client or NAS writer
+        // touched since the walk is deferred, never indexed half-written.
+        if !is_stable(f) {
+            report.requeued.push(f.path.clone());
+            continue;
+        }
         match existing.get(f.path.as_str()) {
             Some((size, mtime)) if !full && *size == f.size && *mtime == f.mtime => {
                 report.skipped += 1
@@ -320,6 +340,19 @@ fn scan_inner(
         [&root_str],
     )?;
     Ok(report)
+}
+
+/// Does `f` still have the (size, mtime) the walk recorded? A vanished or
+/// unreadable file is not stable either.
+fn is_stable(f: &WalkedFile) -> bool {
+    std::fs::metadata(&f.path).is_ok_and(|m| m.len() as i64 == f.size && mtime_secs(&m) == f.mtime)
+}
+
+fn mtime_secs(meta: &std::fs::Metadata) -> f64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0.0, |d| d.as_secs_f64())
 }
 
 /// Record the folders whose ini this scan met (TASK-03-022). Only
@@ -393,11 +426,7 @@ fn walk_dir(
         }
         let Some(media) = media_type(&path) else { continue };
         let Ok(meta) = entry.metadata() else { continue };
-        let mtime = meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map_or(0.0, |d| d.as_secs_f64());
+        let mtime = mtime_secs(&meta);
         files.push(WalkedFile {
             path: path.to_string_lossy().into_owned(),
             dir: dir.to_string_lossy().into_owned(),
