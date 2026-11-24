@@ -16,7 +16,6 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
-tauri-plugin-updater = "2"
 # Save as… (TASK-04-017): the OS save dialog that picks the destination.
 tauri-plugin-dialog = "2"
 # Direct dep: tauri::generate_context! expands to `::serde_json` paths.
@@ -41,8 +40,6 @@ fotobase-video = { path = "../../crates/video" }
 # Locate on disk (TASK-01-021): reveal in the OS file manager, called from
 # Rust — no capability surface needed.
 tauri-plugin-opener = "2"
-# Delete from disk (TASK-01-021): OS trash, never a permanent delete.
-trash = "5"
 # Rebuild acceptance harness (TASK-03-026): sidecar content hashing.
 sha2 = "0.11"
 # Harness snapshot queries run against the catalog's own SQLite handle.
@@ -62,8 +59,18 @@ tokio = { version = "1", features = ["rt", "time"] }
 pmtiles = { version = "0.28", default-features = false, features = ["mmap-async-tokio"] }
 # Gzip decode of scheme-served tiles (module-level, no tokio dep needed).
 flate2 = "1"
-tauri-plugin-global-shortcut = "2"
 jiff = "1"
+
+# Desktop-only plugins/crates (TASK-09-001): the Tauri updater and global
+# shortcuts have no mobile implementation (stores update mobile apps), and
+# `trash` has no Android/iOS backend.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+# Signed updater (TASK-01-003).
+tauri-plugin-updater = "2"
+# Delete from disk (TASK-01-021): OS trash, never a permanent delete.
+trash = "5"
+# Screen capture hotkey (TASK-08-019).
+tauri-plugin-global-shortcut = "2"
 
 # File associations (TASK-01-025): HKCU\Software\Classes registration.
 [target.'cfg(windows)'.dependencies]

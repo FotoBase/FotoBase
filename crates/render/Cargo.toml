@@ -9,7 +9,8 @@ description = "Decode, recipe ops, thumbnail pipeline"
 [features]
 # HEIC/AVIF via libheif-rs (PLAN §4). Default-on; on Windows the dependency
 # is target-gated out until a vcpkg-based CI/packaging leg lands (recorded in
-# TASK-01-012) — the dispatch table then reports HEIC/AVIF as unsupported.
+# TASK-01-012), and on Android/iOS (TASK-09-001) — the dispatch table then
+# reports HEIC/AVIF as unsupported.
 default = ["heif", "raw", "jxl"]
 heif = ["dep:libheif-rs"]
 # TASK-04-013: RAW decode via LibRaw (own FFI bindings in src/raw.rs). The
@@ -53,7 +54,7 @@ pdf-writer = "0.15.0"
 # libheif-rs builds an embedded libheif (static) on non-Windows targets, so
 # decode needs no system libheif — only the codec plugins it links against
 # (libde265 for HEIC/HEVC, dav1d/aom for AVIF) must be installed.
-[target.'cfg(not(target_os = "windows"))'.dependencies]
+[target.'cfg(not(any(target_os = "windows", target_os = "android", target_os = "ios")))'.dependencies]
 libheif-rs = { version = "3", default-features = false, features = ["embedded-libheif", "v1_17"], optional = true }
 
 [dev-dependencies]

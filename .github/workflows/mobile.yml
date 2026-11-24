@@ -1,0 +1,128 @@
+name: mobile
+
+# TASK-09-001: iOS and Android lanes (PLAN §6 Phase 5). Both build the same
+# Rust core as desktop through the Tauri v2 mobile targets, then launch the
+# app on a simulator/emulator as a smoke test.
+#
+# Allowed-to-fail initially (backlog TASK-09-001: mobile lanes may be flaky
+# while the toolchains settle). Promote a lane to blocking by removing its
+# `continue-on-error` and adding it to the required checks.
+#
+# The generated native projects (`app/src-tauri/gen/{android,apple}`) are not
+# committed: each lane runs `tauri <platform> init` first.
+
+"on":
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  APP_ID: io.github.fotobase.app
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    continue-on-error: true
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # The ubuntu runner image ships the Android SDK ($ANDROID_HOME);
+      # android-actions/setup-android fails against its cmdline-tools.
+      - name: Install Android NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;${NDK_VERSION}"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+
+      - name: npm ci
+        working-directory: app
+        run: npm ci
+
+      - name: Generate the Android project
+        working-directory: app
+        run: npx tauri android init --ci
+
+      # aarch64 = real devices, x86_64 = the CI emulator. Same Rust core as
+      # desktop; the HEIC/RAW codecs are cfg-gated off on mobile.
+      - name: Build debug APK (aarch64 + x86_64)
+        working-directory: app
+        run: npx tauri android build --debug --apk --target aarch64 --target x86_64
+
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Launch smoke test on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          script: bash tools/mobile_smoke_android.sh
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ios
+
+      - name: npm ci
+        working-directory: app
+        run: npm ci
+
+      - name: Generate the Xcode project
+        working-directory: app
+        run: npx tauri ios init --ci
+
+      # Simulator build: no signing identity needed. Same Rust core as
+      # desktop; the HEIC/RAW codecs are cfg-gated off on mobile.
+      - name: Build debug app for the simulator
+        working-directory: app
+        run: npx tauri ios build --debug --ci --target aarch64-sim
+
+      - name: Launch smoke test on a simulator
+        run: bash tools/mobile_smoke_ios.sh

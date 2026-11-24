@@ -22,13 +22,13 @@ pub const CRATE_NAME: &str = "fotobase-render";
 
 /// Whether the libheif-backed HEIC/AVIF decode path is compiled in.
 /// False when the `heif` feature is off or on platforms without the
-/// libheif-rs dependency (Windows, until a vcpkg packaging leg lands).
-pub const HEIF_AVAILABLE: bool = cfg!(all(feature = "heif", not(target_os = "windows")));
+/// libheif-rs dependency (Windows until a vcpkg packaging leg lands; Android/iOS).
+pub const HEIF_AVAILABLE: bool = cfg!(all(feature = "heif", fb_native_codecs));
 
 /// Whether the LibRaw-backed RAW decode path is compiled in (TASK-04-013).
 /// False when the `raw` feature is off or on platforms without the LibRaw
-/// link (Windows, until a CI/packaging leg lands).
-pub const RAW_AVAILABLE: bool = cfg!(all(feature = "raw", not(target_os = "windows")));
+/// link (Windows until a CI/packaging leg lands; Android/iOS).
+pub const RAW_AVAILABLE: bool = cfg!(all(feature = "raw", fb_native_codecs));
 
 /// Whether the jxl-oxide-backed JPEG XL decode path is compiled in
 /// (TASK-04-014). Pure Rust, so this is true wherever the `jxl` feature is
@@ -47,7 +47,7 @@ const JXL_EXTS: &[&str] = &["jxl"];
 /// TIFF magic, and CR3 shares the ISOBMFF `ftyp` with HEIC, so the extension
 /// is the only cheap discriminator; RAF carries its own `FUJIFILM` magic but
 /// is included here for uniformity. Mirrors the scanner's IMAGE_EXTS.
-#[cfg(all(feature = "raw", not(target_os = "windows")))]
+#[cfg(all(feature = "raw", fb_native_codecs))]
 const RAW_EXTS: &[&str] = &["cr2", "cr3", "nef", "arw", "raf", "orf", "rw2", "dng"];
 
 use std::path::{Path, PathBuf};
@@ -68,7 +68,7 @@ pub mod phash;
 pub mod print;
 /// LibRaw FFI (TASK-04-013) — isolated crate boundary for the LGPL/CDDL
 /// library, per the task spec ("own bindings", "isolated crate boundary").
-#[cfg(all(feature = "raw", not(target_os = "windows")))]
+#[cfg(all(feature = "raw", fb_native_codecs))]
 pub mod raw;
 
 pub use color::{
@@ -288,7 +288,7 @@ fn decode(bytes: &[u8], src: &Path) -> Result<(Vec<u8>, u32, u32), RenderError> 
     // HEIC. On LibRaw failure the embedded JPEG preview is extracted from
     // the container (fallback path) — never a hard failure for unsupported
     // or corrupt bodies.
-    #[cfg(all(feature = "raw", not(target_os = "windows")))]
+    #[cfg(all(feature = "raw", fb_native_codecs))]
     {
         let ext =
             src.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
@@ -350,7 +350,7 @@ fn decode(bytes: &[u8], src: &Path) -> Result<(Vec<u8>, u32, u32), RenderError> 
 /// fallback): scan for the first JPEG SOI marker and its matching EOI, then
 /// decode through the normal JPEG path. Best-effort by design — the caller
 /// treats `None` as "no fallback available".
-#[cfg(all(feature = "raw", not(target_os = "windows")))]
+#[cfg(all(feature = "raw", fb_native_codecs))]
 fn decode_embedded_jpeg(bytes: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     const SOI: [u8; 3] = [0xFF, 0xD8, 0xFF];
     const EOI: [u8; 2] = [0xFF, 0xD9];
@@ -391,7 +391,7 @@ fn zune_jpeg_decode(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
 }
 
 /// HEIC/AVIF decode through libheif-rs (PLAN §4).
-#[cfg(all(feature = "heif", not(target_os = "windows")))]
+#[cfg(all(feature = "heif", fb_native_codecs))]
 mod heif {
     use libheif_rs::{ColorSpace, HeifContext, LibHeif, RgbChroma};
 
@@ -435,7 +435,7 @@ mod heif {
 /// Stub for targets without the libheif dependency (Windows for now): the
 /// sniff table still recognizes the container and reports it as unsupported
 /// instead of misreading it as corrupt.
-#[cfg(any(not(feature = "heif"), target_os = "windows"))]
+#[cfg(any(not(feature = "heif"), not(fb_native_codecs)))]
 mod heif {
     pub(super) fn decode_heif(_bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
         Err("HEIC/AVIF support is not compiled in for this platform".into())
@@ -878,6 +878,6 @@ mod tests {
 
     #[test]
     fn heif_availability_flag_matches_cfg() {
-        assert_eq!(HEIF_AVAILABLE, cfg!(all(feature = "heif", not(target_os = "windows"))));
+        assert_eq!(HEIF_AVAILABLE, cfg!(all(feature = "heif", fb_native_codecs)));
     }
 }

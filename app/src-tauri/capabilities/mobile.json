@@ -1,0 +1,8 @@
+{
+  "$schema": "https://schema.tauri.app/capabilities/2",
+  "identifier": "mobile",
+  "description": "Default capability for the main window (iOS/Android): no updater, the stores update the app",
+  "windows": ["main"],
+  "platforms": ["iOS", "android"],
+  "permissions": ["core:default", "dialog:default"]
+}

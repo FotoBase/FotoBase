@@ -138,7 +138,7 @@ fn decompress_zlib(zlib: &[u8]) -> Option<Vec<u8>> {
 /// libheif color-profile read: the primary handle carries either an ICC
 /// (`rICC` reduced or `prof` full profile) or an NCLX profile; only the ICC
 /// variants are usable here.
-#[cfg(all(feature = "heif", not(target_os = "windows")))]
+#[cfg(all(feature = "heif", fb_native_codecs))]
 pub fn extract_from_heif(bytes: &[u8]) -> Option<Vec<u8>> {
     use libheif_rs::{
         color_profile_types::{PROF, R_ICC},
@@ -151,7 +151,7 @@ pub fn extract_from_heif(bytes: &[u8]) -> Option<Vec<u8>> {
     is_icc.then_some(profile.data).filter(|d| !d.is_empty())
 }
 
-#[cfg(any(not(feature = "heif"), target_os = "windows"))]
+#[cfg(any(not(feature = "heif"), not(fb_native_codecs)))]
 pub fn extract_from_heif(_bytes: &[u8]) -> Option<Vec<u8>> {
     None
 }
