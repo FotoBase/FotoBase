@@ -85,7 +85,7 @@
   }
 
   function onCellClick(e: MouseEvent, item: GridItem): void {
-    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || gridState.selectMode) {
       gridState.toggleSelection(item.id);
     } else if (singleClickEdit || hasCoarsePointer()) {
       onopen(item);

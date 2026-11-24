@@ -396,7 +396,7 @@
     }
     if (
       (singleClickEdit || hasCoarsePointer()) &&
-      !(e.ctrlKey || e.metaKey || e.shiftKey)
+      !(e.ctrlKey || e.metaKey || e.shiftKey || gridState.selectMode)
     ) {
       onopen(items[index]);
       return;

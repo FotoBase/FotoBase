@@ -169,6 +169,32 @@ main {
   padding: 0.25rem 0.5rem;
 }
 
+/* Touch multi-select + share (TASK-09-005). */
+.share-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+}
+
+.share-bar button {
+  min-height: 36px;
+  padding: 0.3rem 0.9rem;
+  border: 1px solid var(--fb-border);
+  border-radius: 6px;
+  background: var(--fb-input-bg);
+  color: inherit;
+}
+
+.share-bar button:disabled {
+  opacity: 0.5;
+}
+
+.share-error {
+  color: #ff8a80;
+  font-size: 0.8rem;
+}
+
 .grid-star.on {
   color: var(--fb-accent);
 }

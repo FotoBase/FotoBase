@@ -11,6 +11,7 @@ members = [
     "crates/video",
     "crates/export",
     "crates/sqlite-vec-loader",
+    "crates/share-sheet",
     "app/src-tauri",
 ]
 
