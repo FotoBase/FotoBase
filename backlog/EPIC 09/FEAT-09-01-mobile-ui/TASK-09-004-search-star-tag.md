@@ -1,6 +1,6 @@
 # task: add on-device search and star/tag editing
 
-**Feature:** [FEAT-09-01-mobile-ui](FEAT-09-01-mobile-ui.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** in progress (2026-11-24)
+**Feature:** [FEAT-09-01-mobile-ui](FEAT-09-01-mobile-ui.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** in review (2026-11-24)
 
 ## Description
 Bring search (FTS) and star/tag editing to the mobile app (PLAN §6 Phase 5: "browse, search, view, star, tag"). Runs on the shared Rust core catalog; writes must respect the read-only-safe catalog source from FEAT-09-02.
