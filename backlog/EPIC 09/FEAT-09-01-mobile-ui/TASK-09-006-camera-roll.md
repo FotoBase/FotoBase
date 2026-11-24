@@ -1,6 +1,6 @@
 # task: add camera roll as watched-folder equivalent
 
-**Feature:** [FEAT-09-01-mobile-ui](FEAT-09-01-mobile-ui.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** in progress (2026-11-24)
+**Feature:** [FEAT-09-01-mobile-ui](FEAT-09-01-mobile-ui.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** in review (2026-11-24)
 
 ## Description
 Expose the device camera roll as a catalog source via platform photo APIs (PLAN §6 Phase 5: camera roll as a "watched-folder" equivalent). Reuses the EPIC-01 catalog scanning model; observation must be battery-friendly.
