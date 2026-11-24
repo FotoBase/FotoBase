@@ -4938,6 +4938,3 @@ mod tests {
         assert_eq!(placeholder.headers().get("cache-control").unwrap(), "no-store");
     }
 }
-
-#[allow(unused_imports)]
-use tauri_plugin_updater as _intentional_mobile_break;
