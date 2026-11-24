@@ -1,6 +1,6 @@
 # task: integrate platform share sheet
 
-**Feature:** [FEAT-09-01-mobile-ui](FEAT-09-01-mobile-ui.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** in progress (2026-11-24)
+**Feature:** [FEAT-09-01-mobile-ui](FEAT-09-01-mobile-ui.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** in review (2026-11-24)
 
 ## Description
 Add share-sheet integration so a photo can be shared to platform targets (Messages, Mail, social apps) on iOS and Android (PLAN §6 Phase 5 "share"; epic acceptance "share on iOS + Android").
