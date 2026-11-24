@@ -18,6 +18,8 @@ use std::time::Duration;
 use fotobase_catalog::{Catalog, ScanMode};
 use fotobase_scanner::{CatalogSource, ScanHook, ScanReport, Watcher};
 
+use crate::camera_roll;
+
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase-folder-manager";
 
@@ -117,6 +119,36 @@ impl FolderManager {
             }
         }
         Ok(report)
+    }
+
+    /// A camera roll change notification (TASK-09-006): `folders` hold media
+    /// that may have changed. Changes inside a watched root are queued on the
+    /// watcher's own debounced pipeline; an unknown folder becomes a watched
+    /// root (persisted, so a relaunch resumes it). Every folder is tried; the
+    /// first failure is returned after the rest ran.
+    pub fn camera_roll_changed(&self, folders: &[PathBuf]) -> Result<(), String> {
+        let watched = {
+            let cat = self.catalog.lock().map_err(|e| format!("catalog mutex poisoned: {e}"))?;
+            top_level_roots(&cat)
+        };
+        let mut first_err = None;
+        for request in camera_roll::plan_scans(&watched, folders) {
+            let outcome = match &request {
+                camera_roll::ScanRequest::Watch(path) => match path.to_str() {
+                    Some(path) => self.set_mode(path, ScanMode::Always),
+                    None => {
+                        Err(format!("camera roll folder is not valid UTF-8: {}", path.display()))
+                    }
+                },
+                camera_roll::ScanRequest::Rescan(root) => {
+                    self.watcher.request_scan(root).map_err(|e| e.to_string())
+                }
+            };
+            if let Err(e) = outcome {
+                first_err.get_or_insert(e);
+            }
+        }
+        first_err.map_or(Ok(()), Err)
     }
 
     /// Unlink a folder: remove it from the catalog (with its nested folder

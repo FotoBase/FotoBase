@@ -63,3 +63,14 @@ Verified once on PR #299 (an unresolved `tauri_plugin_updater` import turned bot
 - No third-party plugin: the available Tauri share plugins share a single file, so `crates/share-sheet` (`tauri-plugin-share-sheet`) is a small in-repo plugin with Kotlin and Swift sources. It exposes no JS commands, so no capability entry is needed. On desktop its call reports "only available on iOS and Android".
 - Android: the plugin manifest declares its own `FileProvider` subclass (`${applicationId}.fotobase.share`, cache dir only) and grants read access to the attached URIs via `ClipData`.
 - Unit coverage: `app/src-tauri/tests/share_sheet.rs` (the file list handed to the share API) and `app/src/lib/share.test.ts`. The sheet itself is only verifiable on a device or emulator.
+
+## Camera roll
+
+**Task:** TASK-09-006. The device photo library is a catalog source, the mobile equivalent of a "Scan Always" folder. Photos show up without a manual import, and new ones without a relaunch.
+
+- `crates/camera-roll` (`tauri-plugin-camera-roll`) is a small in-repo plugin with Kotlin and Swift sources. It only *observes* the library; it never writes to it. It exposes no JS commands, so no capability entry is needed. On desktop its calls report "only available on iOS and Android".
+- Observation is event-driven: `ContentObserver` on the MediaStore image/video collections (Android), `PHPhotoLibraryChangeObserver` (iOS). There is no timer and no polling loop; Android coalesces a burst of notifications in a 500 ms window.
+- Android: the folders under `DCIM` and `Pictures` that hold indexed media are scanned in place (`READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO`, `READ_EXTERNAL_STORAGE` up to API 32). Hidden folders are skipped.
+- iOS: a `PHAsset` has no file path, so the plugin keeps an app-owned mirror folder (`Application Support/camera-roll`, excluded from backup) in step with the library: new and edited assets are copied, removed ones deleted. The mirror costs extra storage. Assets that exist only in iCloud are skipped, never downloaded in the background. `Info.ios.plist` carries `NSPhotoLibraryUsageDescription`.
+- The app asks for access at startup (`start_camera_roll`); denied access leaves the library unchanged. The plugin reports folders; `camera_roll::plan_scans` maps them onto the existing watcher: a change inside a watched root is `Watcher::request_scan` (the same debounced queue and serial worker as a filesystem event), an unknown folder becomes a persisted Scan Always root, so a relaunch resumes it. There is no second scanner.
+- Unit coverage: `app/src-tauri/tests/camera_roll.rs` and `crates/scanner/tests/watcher.rs` (`scan_request_*`). The observers themselves are only verifiable on a device or emulator; the emulator check is: add a photo to the camera roll and see it in the grid.

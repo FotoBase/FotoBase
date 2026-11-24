@@ -19,6 +19,7 @@ pub mod basemap;
 pub mod batch_commands;
 pub mod batch_edit;
 pub mod burst_jobs;
+pub mod camera_roll;
 pub mod catalog_registry;
 pub mod clip_jobs;
 pub mod codec;
@@ -401,6 +402,46 @@ fn with_folder_manager<T>(
         *guard = Some(fm);
     }
     f(guard.as_ref().expect("folder manager just inserted"))
+}
+
+/// Camera roll as a watched-folder equivalent (TASK-09-006): ask for photo
+/// library access, then let the platform change observers feed folders to the
+/// Folder Manager's watcher (see [`camera_roll`]). The prompt blocks until the
+/// user answers, so this runs off the setup thread. Denied access leaves the
+/// library as it was.
+#[cfg(mobile)]
+fn start_camera_roll(app: tauri::AppHandle) {
+    use tauri_plugin_camera_roll::CameraRollExt as _;
+
+    fn apply(app: &tauri::AppHandle, folders: &[PathBuf]) {
+        let Some(state) = app.try_state::<AppState>() else { return };
+        if let Err(e) = with_folder_manager(&state, |fm| fm.camera_roll_changed(folders)) {
+            tracing::warn!("camera roll: {e}");
+        }
+    }
+
+    std::thread::spawn(move || {
+        let roll = app.camera_roll();
+        match roll.request_access() {
+            Ok(access) if access.is_readable() => {}
+            Ok(_) => {
+                tracing::info!("camera roll: photo library access denied");
+                return;
+            }
+            Err(e) => {
+                tracing::warn!("camera roll: {e}");
+                return;
+            }
+        }
+        let on_change = {
+            let app = app.clone();
+            move |change: tauri_plugin_camera_roll::Change| apply(&app, &change.folders)
+        };
+        match roll.start_observing(on_change) {
+            Ok(folders) => apply(&app, &folders),
+            Err(e) => tracing::warn!("camera roll: {e}"),
+        }
+    });
 }
 
 /// Lazy content-hash backfill driver (PLAN §10 "hash lazily"; perf decision
@@ -4380,6 +4421,7 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_share_sheet::init())
+        .plugin(tauri_plugin_camera_roll::init())
         .register_uri_scheme_protocol(THUMB_PROTOCOL, |ctx, request| {
             let state = ctx.app_handle().state::<AppState>();
             // `?s=2` selects the HiDPI (1024px) cache entry (TASK-01-024).
@@ -4745,6 +4787,8 @@ pub fn run() {
             // harness armed the app through the environment. Cold start with
             // an empty catalog + cache is guaranteed by the harness pointing
             // the app's data dir at a fresh directory.
+            #[cfg(mobile)]
+            start_camera_roll(app.handle().clone());
             if let Some(cfg) = perf_probe::arm_from_env() {
                 perf_probe::begin(cfg.expected);
                 let fixture = cfg.fixture.to_string_lossy().into_owned();

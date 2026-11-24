@@ -548,6 +548,20 @@ impl Watcher {
         }
     }
 
+    /// Ask for an incremental scan of an already watched `root` (TASK-09-006).
+    ///
+    /// For change sources that are not filesystem events — the mobile camera
+    /// roll's platform change observers. The request joins the same debounce
+    /// window and serial worker as a `notify` event, so it coalesces with one
+    /// and is dropped for a root that is not (or no longer) watched.
+    pub fn request_scan(&self, root: &Path) -> Result<(), WatcherError> {
+        self.event_tx
+            .as_ref()
+            .ok_or(WatcherError::Stopped)?
+            .send((root.to_path_buf(), Instant::now()))
+            .map_err(|_| WatcherError::Stopped)
+    }
+
     /// Shut down and wait for all watcher threads to exit.
     pub fn stop(mut self) {
         self.cancel.store(true, Ordering::Relaxed);
