@@ -973,81 +973,83 @@
 </script>
 
 <main use:shortcuts={globalShortcuts}>
-  <h1>{t("app.title")}</h1>
-  <p>{t("app.tagline")}</p>
-  <button
-    type="button"
-    onclick={ping}
-    title={settings?.show_tooltips ? t("app.ping.tooltip") : undefined}
-  >
-    {t("app.ping")}
-  </button>
-  {#if pong}
-    <p>{t("app.backendSays")} <code>{pong}</code></p>
-  {/if}
-  <button type="button" onclick={() => (optionsOpen = true)} data-testid="open-options">
-    {t("app.options")}
-  </button>
-  <button
-    type="button"
-    onclick={() => (folderManagerOpen = true)}
-    data-testid="open-folder-manager"
-  >
-    {t("app.folderManager")}
-  </button>
-  <button type="button" onclick={() => (importOpen = true)} data-testid="open-import">
-    {t("app.import")}
-  </button>
-  <button type="button" onclick={() => (trashOpen = true)} data-testid="open-trash">
-    {t("app.trash")}
-  </button>
-  <button
-    type="button"
-    onclick={() => (stackSuggestionsOpen = true)}
-    data-testid="open-stack-suggestions"
-  >
-    {t("app.stacks")}
-  </button>
-  <button
-    type="button"
-    onclick={() => (duplicateFinderOpen = true)}
-    data-testid="open-duplicate-finder"
-  >
-    {t("app.duplicates")}
-  </button>
-  <button
-    type="button"
-    onclick={() => (peopleOpen = true)}
-    data-testid="open-people"
-  >
-    {t("app.people")}
-  </button>
-  <button
-    type="button"
-    onclick={() => (peopleManagerOpen = true)}
-    data-testid="open-people-manager"
-  >
-    {t("app.peopleManager")}
-  </button>
-  <!-- Offline map panel (TASK-06-001): the bundled world basemap through
-       the basemap:// scheme — tiles never touch the network. -->
-  <button type="button" onclick={() => (mapOpen = true)} data-testid="open-map">
-    {t("app.map")}
-  </button>
-  <button type="button" onclick={() => (backupOpen = true)} data-testid="open-backup">
-    {t("app.backup")}
-  </button>
-  <button type="button" onclick={openUploadDialog} data-testid="open-upload">
-    {t("app.upload")}
-  </button>
-  <!-- "On this day" (TASK-07-008): read-only resurfacing of this date's
-       photos from past years. -->
-  <button type="button" onclick={() => (memoriesOpen = true)} data-testid="open-memories">
-    {t("app.memories")}
-  </button>
-  <button type="button" onclick={() => (timelineOpen = true)} data-testid="open-timeline">
-    {t("app.timeline")}
-  </button>
+  <div class="app-toolbar">
+    <h1>{t("app.title")}</h1>
+    <p>{t("app.tagline")}</p>
+    <button
+      type="button"
+      onclick={ping}
+      title={settings?.show_tooltips ? t("app.ping.tooltip") : undefined}
+    >
+      {t("app.ping")}
+    </button>
+    {#if pong}
+      <p>{t("app.backendSays")} <code>{pong}</code></p>
+    {/if}
+    <button type="button" onclick={() => (optionsOpen = true)} data-testid="open-options">
+      {t("app.options")}
+    </button>
+    <button
+      type="button"
+      onclick={() => (folderManagerOpen = true)}
+      data-testid="open-folder-manager"
+    >
+      {t("app.folderManager")}
+    </button>
+    <button type="button" onclick={() => (importOpen = true)} data-testid="open-import">
+      {t("app.import")}
+    </button>
+    <button type="button" onclick={() => (trashOpen = true)} data-testid="open-trash">
+      {t("app.trash")}
+    </button>
+    <button
+      type="button"
+      onclick={() => (stackSuggestionsOpen = true)}
+      data-testid="open-stack-suggestions"
+    >
+      {t("app.stacks")}
+    </button>
+    <button
+      type="button"
+      onclick={() => (duplicateFinderOpen = true)}
+      data-testid="open-duplicate-finder"
+    >
+      {t("app.duplicates")}
+    </button>
+    <button
+      type="button"
+      onclick={() => (peopleOpen = true)}
+      data-testid="open-people"
+    >
+      {t("app.people")}
+    </button>
+    <button
+      type="button"
+      onclick={() => (peopleManagerOpen = true)}
+      data-testid="open-people-manager"
+    >
+      {t("app.peopleManager")}
+    </button>
+    <!-- Offline map panel (TASK-06-001): the bundled world basemap through
+         the basemap:// scheme — tiles never touch the network. -->
+    <button type="button" onclick={() => (mapOpen = true)} data-testid="open-map">
+      {t("app.map")}
+    </button>
+    <button type="button" onclick={() => (backupOpen = true)} data-testid="open-backup">
+      {t("app.backup")}
+    </button>
+    <button type="button" onclick={openUploadDialog} data-testid="open-upload">
+      {t("app.upload")}
+    </button>
+    <!-- "On this day" (TASK-07-008): read-only resurfacing of this date's
+         photos from past years. -->
+    <button type="button" onclick={() => (memoriesOpen = true)} data-testid="open-memories">
+      {t("app.memories")}
+    </button>
+    <button type="button" onclick={() => (timelineOpen = true)} data-testid="open-timeline">
+      {t("app.timeline")}
+    </button>
+  </div>
   {#if settings}
     <OptionsDialog
       bind:open={optionsOpen}

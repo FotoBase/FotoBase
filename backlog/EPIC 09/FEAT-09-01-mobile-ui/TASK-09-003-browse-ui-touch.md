@@ -1,6 +1,6 @@
 # task: build touch-adapted browse, grid, and viewer ui
 
-**Feature:** [FEAT-09-01-mobile-ui](FEAT-09-01-mobile-ui.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** todo
+**Feature:** [FEAT-09-01-mobile-ui](FEAT-09-01-mobile-ui.md) · **Epic:** [EPIC-09 — Mobile](../EPIC-09.md) · **Status:** in review (2026-11-24)
 
 ## Description
 Adapt the existing Svelte browse/grid/viewer UI for touch on iOS and Android (PLAN §6 Phase 5: read-mostly first). Reuses desktop components from EPIC-01/EPIC-07 rather than a separate mobile app UI. Depends on FEAT-09-02 (Tauri mobile targets) to run.
@@ -21,6 +21,6 @@ Adapt the existing Svelte browse/grid/viewer UI for touch on iOS and Android (PL
 - unit: grid layout produces expected column counts at defined viewport breakpoints.
 
 ## Acceptance criteria
-- [ ] 09-003: Browse, grid, and viewer work on-device with touch gestures (tap, swipe, pinch).
-- [ ] Grid and viewer render correctly in phone portrait and landscape.
-- [ ] UI reuses the existing Svelte component set (no separate mobile component tree).
+- [x] 09-003: Browse, grid, and viewer work on-device with touch gestures (tap, swipe, pinch).
+- [x] Grid and viewer render correctly in phone portrait and landscape.
+- [x] UI reuses the existing Svelte component set (no separate mobile component tree).

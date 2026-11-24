@@ -19,7 +19,7 @@
   import { untrack } from "svelte";
   import CaptionModeSelect from "./CaptionModeSelect.svelte";
   import { captionStripHeight, captionText } from "./captions";
-  import { columnCount, debounce, GRID_GAP, nextCell, revealScrollTop, rowItems, thumbSrcset, thumbUri, visibleHashes, type GridItem } from "./grid";
+  import { columnCount, debounce, GRID_GAP, hasCoarsePointer, nextCell, revealScrollTop, rowItems, thumbSrcset, thumbUri, visibleHashes, type GridItem } from "./grid";
   import { gridState, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./grid-state.svelte.js";
   import { t } from "./i18n.svelte.js";
   import { badgeText, hasStackBadge } from "./stacks";
@@ -80,7 +80,7 @@
   function onCellClick(e: MouseEvent, item: GridItem): void {
     if (e.ctrlKey || e.metaKey || e.shiftKey) {
       gridState.toggleSelection(item.id);
-    } else if (singleClickEdit) {
+    } else if (singleClickEdit || hasCoarsePointer()) {
       onopen(item);
     } else {
       gridState.selection = new Set([item.id]);
@@ -93,8 +93,25 @@
   let virtualRows = $state<VirtualItem[]>([]);
   let totalSize = $state(0);
   let columns = $state(1);
+  let measuredWidth = $state(0);
 
   const reportVisible = debounce((hashes: string[]) => onvisible(hashes), REPORT_DEBOUNCE_MS);
+
+  $effect(() => {
+    const el = scrollEl;
+    if (!el) return;
+    const updateWidth = (): void => {
+      measuredWidth = el.clientWidth;
+    };
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(el);
+    window.addEventListener("resize", updateWidth);
+    updateWidth();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateWidth);
+    };
+  });
 
   // Resume where the last renderer (or session) left off. Mount-only: the
   // store's scrollTop is read untracked — the virtualizer writes it on every
@@ -138,7 +155,7 @@
     const strip = captionStripHeight(gridState.captionMode, size);
     void items.length;
 
-    const cols = columnCount(el.clientWidth, size, GRID_GAP);
+    const cols = columnCount(measuredWidth || el.clientWidth, size, GRID_GAP);
     columns = cols;
     const rowCount = Math.ceil(items.length / cols);
 
@@ -215,6 +232,7 @@
               ondblclick={() => onopen(item)}
               oncontextmenu={(e) => {
                 e.preventDefault();
+                if (hasCoarsePointer()) return;
                 oncontextmenu({ x: e.clientX, y: e.clientY, item });
               }}
               onkeydown={(e) => onCellKeydown(e, row.index * columns + localIdx, item)}

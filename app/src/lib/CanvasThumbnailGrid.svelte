@@ -29,6 +29,7 @@
     GRID_GAP,
     revealScrollTop,
     rowItems,
+    hasCoarsePointer,
     thumbUri,
     visibleHashes,
     type GridItem,
@@ -81,8 +82,25 @@
   let virtualRows = $state<VirtualItem[]>([]);
   let totalSize = $state(0);
   let columns = $state(1);
+  let measuredWidth = $state(0);
 
   const reportVisible = debounce((hashes: string[]) => onvisible(hashes), REPORT_DEBOUNCE_MS);
+
+  $effect(() => {
+    const el = scrollEl;
+    if (!el) return;
+    const updateWidth = (): void => {
+      measuredWidth = el.clientWidth;
+    };
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(el);
+    window.addEventListener("resize", updateWidth);
+    updateWidth();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateWidth);
+    };
+  });
 
   // Resume where the last renderer (or session) left off. Mount-only and
   // untracked — the virtualizer writes the store on every scroll, and a
@@ -124,7 +142,7 @@
     const strip = captionH;
     void items.length;
 
-    const cols = columnCount(el.clientWidth, size, GRID_GAP);
+    const cols = columnCount(measuredWidth || el.clientWidth, size, GRID_GAP);
     columns = cols;
     const rowCount = Math.ceil(items.length / cols);
 
@@ -338,7 +356,10 @@
         return;
       }
     }
-    if (singleClickEdit && !(e.ctrlKey || e.metaKey || e.shiftKey)) {
+    if (
+      (singleClickEdit || hasCoarsePointer()) &&
+      !(e.ctrlKey || e.metaKey || e.shiftKey)
+    ) {
       onopen(items[index]);
       return;
     }
@@ -346,8 +367,9 @@
   }
 
   function onContextMenu(e: MouseEvent): void {
-    if (!scrollEl) return;
     e.preventDefault();
+    if (hasCoarsePointer()) return;
+    if (!scrollEl) return;
     const index = cellAt(
       e.offsetX,
       e.offsetY,

@@ -67,7 +67,10 @@ beforeEach(() => {
     .mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  cleanup();
+});
 
 // Fake decoder: resolves synchronously-ish with a stand-in image that
 // remembers which URI it stands for (so tests can check what was fetched).
@@ -342,6 +345,48 @@ describe("CanvasThumbnailGrid single-click-to-edit (TASK-03-017)", () => {
     clickAt(10, 10, { metaKey: true });
     expect(gridState.selection.has(0)).toBe(false);
     expect(onopen).not.toHaveBeenCalled();
+  });
+});
+
+describe("CanvasThumbnailGrid touch browsing (TASK-09-003)", () => {
+  it("opens a photo on one tap when the primary pointer is coarse", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: query === "(pointer: coarse)",
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    const onopen = vi.fn();
+    const oncontextmenu = vi.fn();
+    render(CanvasThumbnailGrid, {
+      items: makeItems(100),
+      loadImage: fakeLoadImage,
+      onopen,
+      oncontextmenu,
+    });
+    await settle();
+
+    const canvas = screen.getByTestId("grid-canvas");
+    const event = new MouseEvent("click", { bubbles: true });
+    Object.defineProperty(event, "offsetX", { value: 200 });
+    Object.defineProperty(event, "offsetY", { value: 10 });
+    canvas.dispatchEvent(event);
+    const contextMenu = new MouseEvent("contextmenu", { bubbles: true });
+    Object.defineProperty(contextMenu, "offsetX", { value: 10 });
+    Object.defineProperty(contextMenu, "offsetY", { value: 10 });
+    canvas.dispatchEvent(contextMenu);
+    flushSync();
+
+    expect(onopen).toHaveBeenCalledWith(makeItems(100)[1]);
+    expect(oncontextmenu).not.toHaveBeenCalled();
+    expect(gridState.selection.size).toBe(0);
   });
 });
 

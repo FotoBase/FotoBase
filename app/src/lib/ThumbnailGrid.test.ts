@@ -32,6 +32,7 @@ function scrollBy(delta: number): void {
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   resetGridState();
   cleanup();
 });
@@ -366,6 +367,56 @@ describe("ThumbnailGrid single-click-to-edit (TASK-03-017)", () => {
     click({ shiftKey: true });
     expect([...gridState.selection]).toEqual([0]);
     expect(onopen).not.toHaveBeenCalled();
+  });
+});
+
+describe("ThumbnailGrid touch browsing (TASK-09-003)", () => {
+  it("opens a photo on one tap when the primary pointer is coarse", () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: query === "(pointer: coarse)",
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    const onopen = vi.fn();
+    const oncontextmenu = vi.fn();
+    render(ThumbnailGrid, { items: makeItems(10), onopen, oncontextmenu });
+
+    const cell = screen.getAllByTestId("grid-cell")[1];
+    fireEvent.click(cell);
+    fireEvent.contextMenu(cell);
+    flushSync();
+
+    expect(onopen).toHaveBeenCalledWith(makeItems(10)[1]);
+    expect(oncontextmenu).not.toHaveBeenCalled();
+    expect(gridState.selection.size).toBe(0);
+  });
+
+  it("fits phone portrait and landscape widths using the shared column math", () => {
+    const { container } = render(ThumbnailGrid, { items: makeItems(100) });
+    const scroll = screen.getByTestId("grid-scroll") as HTMLElement & {
+      __clientWidth: number;
+    };
+    const row = () => container.querySelector<HTMLElement>(".grid-row");
+
+    scroll.__clientWidth = 390;
+    window.dispatchEvent(new Event("resize"));
+    flushSync();
+    flushSync();
+    expect(row()?.style.gridTemplateColumns).toBe("repeat(2, var(--thumb-size))");
+
+    scroll.__clientWidth = 844;
+    window.dispatchEvent(new Event("resize"));
+    flushSync();
+    flushSync();
+    expect(row()?.style.gridTemplateColumns).toBe("repeat(5, var(--thumb-size))");
   });
 });
 
