@@ -1,6 +1,6 @@
 # task: add external editor round-trip
 
-**Feature:** [FEAT-10-02-f2-advanced-editor](FEAT-10-02-f2-advanced-editor.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in progress (2026-11-25)
+**Feature:** [FEAT-10-02-f2-advanced-editor](FEAT-10-02-f2-advanced-editor.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in review (2026-11-25)
 
 ## Description
 "Edit in GIMP / Photoshop / Affinity / darktable": launch the external editor with the photo, and auto-import the saved result as a stacked version, original untouched (PLAN §7 F2 item 1). Depends on the EPIC-04 recipe engine and the EPIC-03 stacking model.
