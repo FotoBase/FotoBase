@@ -1,6 +1,6 @@
 # task: publish web album with incremental re-upload
 
-**Feature:** [FEAT-10-01-f1-sync-web-albums](FEAT-10-01-f1-sync-web-albums.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in progress (2026-11-25)
+**Feature:** [FEAT-10-01-f1-sync-web-albums](FEAT-10-01-f1-sync-web-albums.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in review (2026-11-25)
 
 ## Description
 Publish the generated gallery (task 01) to static-hosting targets under an unguessable URL, with incremental re-publish so it behaves like "Sync to Web" (PLAN §7 F1 layer 1). This task supports local folder, S3-compatible storage (including R2), and WebDAV/Nextcloud.
