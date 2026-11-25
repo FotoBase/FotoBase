@@ -123,6 +123,10 @@ impl Default for RetryPolicy {
     }
 }
 
+pub(crate) fn retry_delay(policy: RetryPolicy, attempt: u32) -> Duration {
+    policy.base_delay.saturating_mul(1u32 << (attempt - 1).min(16))
+}
+
 /// A batch upload. Re-running a job with the same `id` and files resumes it.
 #[derive(Debug, Clone)]
 pub struct UploadJob {

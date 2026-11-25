@@ -36,6 +36,7 @@ pub mod google_photos;
 pub mod immich;
 pub mod local_folder;
 pub mod mock;
+pub mod publish;
 mod registry;
 pub mod s3;
 mod types;
@@ -46,12 +47,18 @@ pub use registry::Registry;
 pub use types::*;
 
 use async_trait::async_trait;
+use publish::StaticSiteTarget;
 
 /// One upload target.
 #[async_trait]
 pub trait ExportPlugin: Send {
     /// Static identity and capabilities.
     fn info(&self) -> PluginInfo;
+
+    /// Static-site operations, when this target can host public files.
+    fn static_site_target(&mut self) -> Option<&mut dyn StaticSiteTarget> {
+        None
+    }
 
     /// Albums that already exist on the target. Plugins without album
     /// support keep the default (empty).

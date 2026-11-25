@@ -20,7 +20,7 @@ macro_rules! with_retry {
             match $call.await {
                 Err(ExportError::Transient(error)) if attempt < max_attempts => {
                     $progress.emit(ProgressEvent::Retrying { name: $name, attempt, error });
-                    let delay = policy.base_delay.saturating_mul(1u32 << (attempt - 1).min(16));
+                    let delay = crate::types::retry_delay(policy, attempt);
                     if !delay.is_zero() {
                         tokio::time::sleep(delay).await;
                     }

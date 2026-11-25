@@ -7,13 +7,15 @@ use std::path::Path;
 use std::time::Duration;
 
 use fotobase_export::{
-    AlbumTarget, CancelToken, ExportError, ExportPlugin, FileStatus, NoProgress, RetryPolicy,
-    UploadFile, UploadJob, UploadOptions,
+    AlbumTarget, CancelToken, ExportError, ExportPlugin, FileStatus, NoProgress, Registry,
+    RetryPolicy, UploadFile, UploadJob, UploadOptions,
 };
 
 use fotobase_export::contract::ContractFixture;
+use fotobase_export::publish::PublishToken;
 
 use super::{Endpoint, S3Fixture, PREFIX};
+use url::Url;
 
 const MIB: u64 = 1024 * 1024;
 
@@ -50,6 +52,36 @@ pub fn job(
 
 fn parts_sent(fx: &S3Fixture) -> Vec<u16> {
     std::mem::take(&mut fx.faults.0.lock().unwrap().parts_sent)
+}
+
+pub async fn static_site_publish_replaces_and_prunes_exact_paths(endpoint: &Endpoint) {
+    let fx = S3Fixture::new(endpoint, false);
+    let source = tempfile::tempdir().unwrap();
+    let token = PublishToken::parse("abcdef0123456789abcdef0123456789").unwrap();
+    let base_url = Url::parse("https://photos.example/").unwrap();
+    fs::create_dir_all(source.path().join("images")).unwrap();
+    fs::write(source.path().join("index.html"), b"v1").unwrap();
+    fs::write(source.path().join("images/old.jpg"), b"old").unwrap();
+    fs::write(source.path().join("images/unchanged.jpg"), b"same").unwrap();
+    let mut registry = Registry::new();
+    registry.register(Box::new(fx.plugin())).unwrap();
+
+    registry.publish_directory("s3", source.path(), &base_url, &token).await.unwrap();
+    let prefix = format!("{PREFIX}/{}/", token.as_str());
+    assert_eq!(fx.admin.get(&format!("{prefix}images/old.jpg")), b"old");
+
+    fs::write(source.path().join("index.html"), b"v2").unwrap();
+    fs::remove_file(source.path().join("images/old.jpg")).unwrap();
+    fs::write(source.path().join("images/new.jpg"), b"new").unwrap();
+    let report = registry.publish_directory("s3", source.path(), &base_url, &token).await.unwrap();
+
+    assert_eq!((report.uploaded, report.unchanged, report.removed), (2, 1, 1));
+    let keys: Vec<_> = fx.admin.objects().into_iter().map(|(key, _)| key).collect();
+    assert!(keys.contains(&format!("{prefix}index.html")));
+    assert!(keys.contains(&format!("{prefix}images/new.jpg")));
+    assert!(keys.contains(&format!("{prefix}images/unchanged.jpg")));
+    assert!(!keys.contains(&format!("{prefix}images/old.jpg")));
+    assert_eq!(fx.admin.get(&format!("{prefix}index.html")), b"v2");
 }
 
 /// Kill mid-multipart → resume from a fresh plugin: only the missing part is

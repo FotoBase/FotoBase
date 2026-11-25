@@ -348,6 +348,10 @@ fn route(state: &mut State, request: &Request) -> (Reply, Option<usize>) {
             Some(data) => (Reply { status: 200, headers: Vec::new(), body: data.clone() }, None),
             None => (Reply::error(404, "NoSuchKey", "missing"), None),
         },
+        ("DELETE", false, None) => {
+            state.buckets.get_mut(bucket).unwrap().remove(key);
+            (Reply::empty(204), None)
+        }
         _ => (Reply::error(400, "NotImplemented", "mock does not implement this"), None),
     }
 }

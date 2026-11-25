@@ -61,4 +61,5 @@ async fn rustfs_passes_the_contract_suite_and_resumes_multipart_uploads() {
     scenarios::multipart_fatal_failure_aborts(&endpoint).await;
     scenarios::key_layout_and_read_back(&endpoint).await;
     scenarios::retry_overwrites_the_same_key(&endpoint).await;
+    scenarios::static_site_publish_replaces_and_prunes_exact_paths(&endpoint).await;
 }

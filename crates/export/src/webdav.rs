@@ -44,6 +44,7 @@ use reqwest::{redirect, Client, Method, RequestBuilder, Response, StatusCode};
 use tokio_util::io::ReaderStream;
 use url::{Host, Url};
 
+use crate::publish::{validate_site_path, StaticSiteTarget};
 use crate::s3::{blocking, content_type_of, parse_object_name, verify_source};
 use crate::{
     AlbumRef, ContentKey, ExportError, ExportPlugin, FileOutcome, FileStatus, FileUpload,
@@ -698,6 +699,10 @@ impl ExportPlugin for WebDavPlugin {
         }
     }
 
+    fn static_site_target(&mut self) -> Option<&mut dyn StaticSiteTarget> {
+        Some(self)
+    }
+
     async fn list_albums(&mut self) -> Result<Vec<AlbumRef>, ExportError> {
         let (dirs, _) = self.walk(&self.config.folder, true).await?;
         Ok(dirs.iter().map(|d| self.album_ref(&d.rel)).collect())
@@ -796,6 +801,89 @@ impl ExportPlugin for WebDavPlugin {
         self.faults.reached(FaultPoint::AfterCommit)?;
         Ok(FileOutcome { remote_id, status: FileStatus::Uploaded })
     }
+}
+
+#[async_trait]
+impl StaticSiteTarget for WebDavPlugin {
+    async fn read_site_file(&mut self, path: &str) -> Result<Option<Vec<u8>>, ExportError> {
+        let rel = site_rel(&self.config.folder, path)?;
+        let response =
+            self.send(&Method::GET, &self.url_for(&rel, false), &[], &Body::Empty).await?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !response.status().is_success() {
+            return Err(self.failure(&response));
+        }
+        response
+            .bytes()
+            .await
+            .map(|bytes| Some(bytes.to_vec()))
+            .map_err(|error| self.unreachable(error))
+    }
+
+    async fn write_site_file(
+        &mut self,
+        path: &str,
+        source: &Path,
+        content_key: &ContentKey,
+    ) -> Result<(), ExportError> {
+        let rel = site_rel(&self.config.folder, path)?;
+        let source = source.to_path_buf();
+        let size_path = source.clone();
+        let size = blocking(move || Ok(std::fs::metadata(&size_path)?.len())).await?;
+        let expected = content_key.clone();
+        blocking({
+            let source = source.clone();
+            move || verify_source(&source, &expected)
+        })
+        .await?;
+        let parent = &rel[..rel.len() - 1];
+        let name = rel.last().expect("validated site path has a file name");
+
+        self.ensure_dirs(parent).await?;
+        self.faults.reached(FaultPoint::BeforeCommit)?;
+        if self.move_supported.load(Ordering::SeqCst) {
+            let mut staging = rel.clone();
+            staging.last_mut().expect("site path has a file name").push_str(STAGING_SUFFIX);
+            if let Err(error) = self.put(&staging, name, &source, size).await {
+                self.remove(&staging).await;
+                return Err(error);
+            }
+            self.faults.reached(FaultPoint::BeforeMove)?;
+            match self.rename(&staging, &rel).await {
+                Ok(Rename::Done) => {}
+                Ok(Rename::Unsupported) => {
+                    self.move_supported.store(false, Ordering::SeqCst);
+                    self.remove(&staging).await;
+                    self.put_in_place(&rel, name, &source, size).await?;
+                }
+                Err(error) => {
+                    self.remove(&staging).await;
+                    return Err(error);
+                }
+            }
+        } else {
+            self.put_in_place(&rel, name, &source, size).await?;
+        }
+        self.faults.reached(FaultPoint::AfterCommit)
+    }
+
+    async fn delete_site_file(&mut self, path: &str) -> Result<(), ExportError> {
+        let rel = site_rel(&self.config.folder, path)?;
+        let response =
+            self.send(&Method::DELETE, &self.url_for(&rel, false), &[], &Body::Empty).await?;
+        if response.status().is_success() || response.status() == StatusCode::NOT_FOUND {
+            Ok(())
+        } else {
+            Err(self.failure(&response))
+        }
+    }
+}
+
+fn site_rel(folder: &[String], path: &str) -> Result<Vec<String>, ExportError> {
+    validate_site_path(path)?;
+    Ok(folder.iter().cloned().chain(path.split('/').map(str::to_owned)).collect())
 }
 
 // ------------------------------------------------------------- multistatus
