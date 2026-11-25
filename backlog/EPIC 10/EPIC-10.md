@@ -9,7 +9,7 @@
   - [x] `F1-002` (M) Publish to static-hosting targets (local folder, S3/R2, WebDAV) under unguessable URL; incremental re-publish.
 - **F1.2 Device sync** (after stable XMP model, EPIC-03; before/with EPIC-09 usefulness):
   - [x] `F1-003` (XL) Metadata as CRDT document (Loro/Automerge); only confirmed face names sync.
-  - [ ] `F1-004` (L) iroh transport (QUIC, relay fallback), QR pairing; originals not synced by default.
+  - [x] `F1-004` (L) iroh transport (QUIC, relay fallback), QR pairing; originals not synced by default.
 - **F1.3 Self-hosted server** (only on demand): axum + SQLite + S3 always-on peer, private albums with login.
 
 ## F2 — Advanced editor (after EPIC-04 recipe engine)
