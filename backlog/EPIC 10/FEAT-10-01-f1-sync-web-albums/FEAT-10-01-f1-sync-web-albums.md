@@ -15,7 +15,7 @@
 
 ## F1.2 Device sync (after stable XMP model, EPIC-03; before/with EPIC-09 usefulness)
 
-- [ ] `F1-003` (XL) Metadata as CRDT document (Loro/Automerge); only confirmed face names sync.
+- [x] `F1-003` (XL) Metadata as CRDT document (Loro/Automerge); only confirmed face names sync.
 - [ ] `F1-004` (L) iroh transport (QUIC, relay fallback), QR pairing; originals not synced by default.
 
 ## F1.3 Self-hosted server (only on demand)
@@ -26,5 +26,5 @@ axum + SQLite + S3 always-on peer, private albums with login.
 
 - [x] [TASK-10-01-01-gallery-generator.md](TASK-10-01-01-gallery-generator.md) — build static html gallery generator
 - [x] [TASK-10-01-02-publish-upload.md](TASK-10-01-02-publish-upload.md) — publish web album with incremental re-upload
-- [ ] [TASK-10-01-03-crdt-metadata.md](TASK-10-01-03-crdt-metadata.md) — implement metadata crdt document
+- [x] [TASK-10-01-03-crdt-metadata.md](TASK-10-01-03-crdt-metadata.md) — implement metadata crdt document
 - [ ] [TASK-10-01-04-iroh-sync-transport.md](TASK-10-01-04-iroh-sync-transport.md) — add iroh sync transport and qr pairing

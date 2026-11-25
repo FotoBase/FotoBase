@@ -13,6 +13,7 @@ members = [
     "crates/sqlite-vec-loader",
     "crates/share-sheet",
     "crates/camera-roll",
+    "crates/sync",
     "app/src-tauri",
 ]
 

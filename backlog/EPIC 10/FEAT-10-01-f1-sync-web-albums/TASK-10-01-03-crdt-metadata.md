@@ -1,6 +1,6 @@
 # task: implement metadata crdt document
 
-**Feature:** [FEAT-10-01-f1-sync-web-albums](FEAT-10-01-f1-sync-web-albums.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** planned (deferred)
+**Feature:** [FEAT-10-01-f1-sync-web-albums](FEAT-10-01-f1-sync-web-albums.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in review (2026-11-25)
 
 ## Description
 Represent metadata (stars, tags, captions, albums, named faces, recipes) as a CRDT document (Loro or Automerge) so concurrent edits from multiple devices merge without loss (PLAN §7 F1 layer 2). Depends on the stable XMP model from EPIC-03; only confirmed face names sync — unnamed clusters are recomputed per device.
@@ -20,4 +20,4 @@ Represent metadata (stars, tags, captions, albums, named faces, recipes) as a CR
 - integration: confirmed face name syncs; unconfirmed cluster edits do not.
 
 ## Acceptance criteria
-- [ ] F1-003: Metadata CRDT merges concurrent edits from two devices without loss; only confirmed face names sync; originals not synced by default.
+- [x] F1-003: Metadata CRDT merges concurrent edits from two devices without loss; only confirmed face names sync; originals not synced by default.

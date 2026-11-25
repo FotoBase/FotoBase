@@ -8,7 +8,7 @@
   - [x] `F1-001` (M) Static HTML gallery generator (resized images + tiny JS viewer) for an album.
   - [x] `F1-002` (M) Publish to static-hosting targets (local folder, S3/R2, WebDAV) under unguessable URL; incremental re-publish.
 - **F1.2 Device sync** (after stable XMP model, EPIC-03; before/with EPIC-09 usefulness):
-  - [ ] `F1-003` (XL) Metadata as CRDT document (Loro/Automerge); only confirmed face names sync.
+  - [x] `F1-003` (XL) Metadata as CRDT document (Loro/Automerge); only confirmed face names sync.
   - [ ] `F1-004` (L) iroh transport (QUIC, relay fallback), QR pairing; originals not synced by default.
 - **F1.3 Self-hosted server** (only on demand): axum + SQLite + S3 always-on peer, private albums with login.
 

@@ -1,0 +1,19 @@
+[package]
+name = "fotobase-sync"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Device sync: user metadata as a Loro CRDT document (PLAN §7 F1 layer 2)"
+
+[dependencies]
+thiserror.workspace = true
+fotobase-metadata = { path = "../metadata" }
+loro = "=1.19.1"
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
