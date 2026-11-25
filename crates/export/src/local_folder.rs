@@ -26,6 +26,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::publish::{validate_site_path, StaticSiteTarget};
 use crate::{
     AlbumRef, ContentKey, ExportError, ExportPlugin, FileOutcome, FileStatus, FileUpload,
     PluginCapabilities, PluginInfo,
@@ -92,6 +93,10 @@ impl ExportPlugin for LocalFolderPlugin {
         }
     }
 
+    fn static_site_target(&mut self) -> Option<&mut dyn StaticSiteTarget> {
+        Some(self)
+    }
+
     async fn list_albums(&mut self) -> Result<Vec<AlbumRef>, ExportError> {
         let root = self.root.clone();
         run_blocking(move || {
@@ -134,12 +139,155 @@ impl ExportPlugin for LocalFolderPlugin {
     }
 }
 
+#[async_trait]
+impl StaticSiteTarget for LocalFolderPlugin {
+    async fn read_site_file(&mut self, path: &str) -> Result<Option<Vec<u8>>, ExportError> {
+        validate_site_path(path)?;
+        let root = self.root.clone();
+        let path = path.to_owned();
+        run_blocking(move || {
+            let file = site_path(&root, &path)?;
+            if !existing_site_parents(&root, &path)? {
+                return Ok(None);
+            }
+            match fs::symlink_metadata(&file) {
+                Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => {
+                    Ok(Some(fs::read(file)?))
+                }
+                Ok(_) => Err(ExportError::Fatal(format!(
+                    "static-site path `{path}` is not a regular file"
+                ))),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+                Err(error) => Err(error.into()),
+            }
+        })
+        .await
+    }
+
+    async fn write_site_file(
+        &mut self,
+        path: &str,
+        source: &Path,
+        content_key: &ContentKey,
+    ) -> Result<(), ExportError> {
+        validate_site_path(path)?;
+        let root = self.root.clone();
+        let path = path.to_owned();
+        let source_path = source.to_path_buf();
+        let key = content_key.clone();
+        run_blocking(move || {
+            let destination = site_path(&root, &path)?;
+            create_site_parents(&root, &path)?;
+            if ContentKey::from_reader(fs::File::open(&source_path)?)? != key {
+                return Err(ExportError::Fatal(format!(
+                    "static-site file `{path}` changed after it was hashed"
+                )));
+            }
+            match fs::symlink_metadata(&destination) {
+                Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                    return Err(ExportError::Fatal(format!(
+                        "static-site path `{path}` is not a regular file"
+                    )))
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+            let parent = destination
+                .parent()
+                .ok_or_else(|| ExportError::Fatal("static-site path has no parent".into()))?;
+            let mut staged = tempfile::NamedTempFile::new_in(parent)?;
+            io::copy(&mut fs::File::open(&source_path)?, &mut staged)?;
+            staged.as_file().sync_all()?;
+            staged.persist(&destination).map_err(|error| ExportError::Io(error.error))?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn delete_site_file(&mut self, path: &str) -> Result<(), ExportError> {
+        validate_site_path(path)?;
+        let root = self.root.clone();
+        let path = path.to_owned();
+        run_blocking(move || {
+            let file = site_path(&root, &path)?;
+            if !existing_site_parents(&root, &path)? {
+                return Ok(());
+            }
+            match fs::symlink_metadata(&file) {
+                Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => {
+                    fs::remove_file(file)?;
+                    Ok(())
+                }
+                Ok(_) => Err(ExportError::Fatal(format!(
+                    "static-site path `{path}` is not a regular file"
+                ))),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error.into()),
+            }
+        })
+        .await
+    }
+}
+
 async fn run_blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, ExportError> + Send + 'static,
 ) -> Result<T, ExportError> {
     tokio::task::spawn_blocking(work)
         .await
         .map_err(|e| ExportError::Fatal(format!("export worker failed: {e}")))?
+}
+
+fn site_path(root: &Path, path: &str) -> Result<PathBuf, ExportError> {
+    validate_site_path(path)?;
+    Ok(root.join(path))
+}
+
+fn create_site_parents(root: &Path, path: &str) -> Result<(), ExportError> {
+    fs::create_dir_all(root)?;
+    let parts: Vec<_> = path.split('/').collect();
+    let mut parent = root.to_path_buf();
+    for part in &parts[..parts.len() - 1] {
+        parent.push(part);
+        match fs::symlink_metadata(&parent) {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+            Ok(_) => {
+                return Err(ExportError::Fatal(format!(
+                    "static-site parent `{}` is not a directory",
+                    parent.display()
+                )))
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => fs::create_dir(&parent)?,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
+fn existing_site_parents(root: &Path, path: &str) -> Result<bool, ExportError> {
+    let parts: Vec<_> = path.split('/').collect();
+    let mut parent = root.to_path_buf();
+    match fs::metadata(&parent) {
+        Ok(metadata) if metadata.is_dir() => {}
+        Ok(_) => return Err(ExportError::Fatal("static-site root is not a directory".into())),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    }
+    for part in &parts[..parts.len() - 1] {
+        parent.push(part);
+        match fs::symlink_metadata(&parent) {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+            Ok(_) => {
+                return Err(ExportError::Fatal(format!(
+                    "static-site parent `{}` is not a directory",
+                    parent.display()
+                )))
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(true)
 }
 
 struct Write {

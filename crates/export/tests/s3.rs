@@ -72,6 +72,12 @@ async fn retry_replaces_a_stale_object_under_the_same_key() {
 }
 
 #[tokio::test]
+async fn static_site_publish_replaces_and_prunes_exact_paths() {
+    let mock = MockS3::start();
+    scenarios::static_site_publish_replaces_and_prunes_exact_paths(&endpoint(&mock)).await;
+}
+
+#[tokio::test]
 async fn listings_follow_continuation_tokens() {
     let mock = MockS3::start();
     let fx = S3Fixture::new(&endpoint(&mock), false);

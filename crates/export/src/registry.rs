@@ -1,8 +1,11 @@
 use std::collections::BTreeMap;
 
+use crate::publish::{publish_directory, PublishError, PublishReport, PublishToken};
 use crate::{
     CancelToken, ExportError, ExportPlugin, PluginInfo, ProgressSink, UploadJob, UploadReport,
 };
+use std::path::Path;
+use url::Url;
 
 /// Upload targets keyed by plugin id; the one place the UI lists targets from.
 #[derive(Default)]
@@ -42,5 +45,19 @@ impl Registry {
     ) -> Result<UploadReport, ExportError> {
         let plugin = self.get_mut(id).ok_or_else(|| ExportError::UnknownPlugin(id.to_owned()))?;
         plugin.upload(job, progress, cancel).await
+    }
+
+    pub async fn publish_directory(
+        &mut self,
+        id: &str,
+        source: &Path,
+        public_base_url: &Url,
+        token: &PublishToken,
+    ) -> Result<PublishReport, PublishError> {
+        let plugin = self
+            .get_mut(id)
+            .ok_or_else(|| PublishError::Export(ExportError::UnknownPlugin(id.to_owned())))?;
+        let target = plugin.static_site_target().ok_or(PublishError::UnsupportedTarget)?;
+        publish_directory(target, source, public_base_url, token).await
     }
 }

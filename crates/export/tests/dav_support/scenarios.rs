@@ -12,9 +12,12 @@ use fotobase_export::{
 };
 
 use fotobase_export::contract::ContractFixture;
+use fotobase_export::publish::PublishToken;
 use fotobase_export::webdav::{WebDavConfig, WebDavPlugin};
 
 use super::{DavFixture, Endpoint};
+use fotobase_export::Registry;
+use url::Url;
 
 pub fn file(dir: &Path, name: &str, content: &str) -> UploadFile {
     let path = dir.join(name);
@@ -35,6 +38,37 @@ pub fn job(
         options: UploadOptions::default(),
         retry: RetryPolicy { max_attempts: attempts, base_delay: Duration::ZERO },
     }
+}
+
+pub async fn static_site_publish_replaces_and_prunes_exact_paths(endpoint: &Endpoint) {
+    let fx = DavFixture::new(endpoint);
+    let source = tempfile::tempdir().unwrap();
+    let token = PublishToken::parse("abcdef0123456789abcdef0123456789").unwrap();
+    let base_url = Url::parse("https://photos.example/").unwrap();
+    fs::create_dir_all(source.path().join("images")).unwrap();
+    fs::write(source.path().join("index.html"), b"v1").unwrap();
+    fs::write(source.path().join("images/old.jpg"), b"old").unwrap();
+    fs::write(source.path().join("images/unchanged.jpg"), b"same").unwrap();
+    let mut registry = Registry::new();
+    registry.register(Box::new(fx.plugin())).unwrap();
+
+    registry.publish_directory("webdav", source.path(), &base_url, &token).await.unwrap();
+    let prefix = token.as_str();
+    assert_eq!(fx.admin.get(&format!("{prefix}/images/old.jpg")), b"old");
+
+    fs::write(source.path().join("index.html"), b"v2").unwrap();
+    fs::remove_file(source.path().join("images/old.jpg")).unwrap();
+    fs::write(source.path().join("images/new.jpg"), b"new").unwrap();
+    let report =
+        registry.publish_directory("webdav", source.path(), &base_url, &token).await.unwrap();
+
+    assert_eq!((report.uploaded, report.unchanged, report.removed), (2, 1, 1));
+    let files = fx.admin.files();
+    assert!(files.contains(&format!("{prefix}/index.html")));
+    assert!(files.contains(&format!("{prefix}/images/new.jpg")));
+    assert!(files.contains(&format!("{prefix}/images/unchanged.jpg")));
+    assert!(!files.contains(&format!("{prefix}/images/old.jpg")));
+    assert_eq!(fx.admin.get(&format!("{prefix}/index.html")), b"v2");
 }
 
 /// Killed between the data transfer and the rename: only a staging file

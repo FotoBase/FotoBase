@@ -50,6 +50,7 @@ use rusty_s3::actions::{
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use url::Url;
 
+use crate::publish::{validate_site_path, StaticSiteTarget};
 use crate::{
     AlbumRef, ContentKey, ExportError, ExportPlugin, FileOutcome, FileStatus, FileUpload,
     PluginCapabilities, PluginInfo, RemoteFile,
@@ -844,6 +845,10 @@ impl ExportPlugin for S3Plugin {
         }
     }
 
+    fn static_site_target(&mut self) -> Option<&mut dyn StaticSiteTarget> {
+        Some(self)
+    }
+
     async fn list_albums(&mut self) -> Result<Vec<AlbumRef>, ExportError> {
         let base = self.base_prefix();
         let mut names = BTreeSet::new();
@@ -923,6 +928,75 @@ impl ExportPlugin for S3Plugin {
         }
         self.faults.reached(FaultPoint::AfterCommit)?;
         Ok(FileOutcome { remote_id: key, status: FileStatus::Uploaded })
+    }
+}
+
+#[async_trait]
+impl StaticSiteTarget for S3Plugin {
+    async fn read_site_file(&mut self, path: &str) -> Result<Option<Vec<u8>>, ExportError> {
+        validate_site_path(path)?;
+        let key = join_key(&self.config.prefix, path);
+        let url = self.bucket.get_object(Some(&self.credentials), &key).sign(SIGN_TTL);
+        let response =
+            self.client.get(url).send().await.map_err(|error| self.unreachable(error))?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !response.status().is_success() {
+            return Err(self.failure(response.status(), "", ""));
+        }
+        response
+            .bytes()
+            .await
+            .map(|bytes| Some(bytes.to_vec()))
+            .map_err(|error| self.unreachable(error))
+    }
+
+    async fn write_site_file(
+        &mut self,
+        path: &str,
+        source: &Path,
+        content_key: &ContentKey,
+    ) -> Result<(), ExportError> {
+        validate_site_path(path)?;
+        let key = join_key(&self.config.prefix, path);
+        if key.len() > MAX_KEY_BYTES {
+            return Err(ExportError::Fatal(format!(
+                "the static-site object key would exceed {MAX_KEY_BYTES} bytes"
+            )));
+        }
+        let name = path.rsplit('/').next().unwrap_or(path).to_owned();
+        let source = source.to_path_buf();
+        let size_path = source.clone();
+        let expected = content_key.clone();
+        let size = blocking(move || Ok(std::fs::metadata(&size_path)?.len())).await?;
+        blocking({
+            let source = source.clone();
+            move || verify_source(&source, &expected)
+        })
+        .await?;
+
+        self.faults.reached(FaultPoint::BeforeCommit)?;
+        if size > 0 && size > self.config.multipart_threshold {
+            self.upload_multipart(&key, &name, source.as_path(), size).await?;
+        } else {
+            let body = read_range(&source, 0, size).await?;
+            self.put(&key, &name, body).await?;
+        }
+        self.faults.reached(FaultPoint::AfterCommit)
+    }
+
+    async fn delete_site_file(&mut self, path: &str) -> Result<(), ExportError> {
+        validate_site_path(path)?;
+        let key = join_key(&self.config.prefix, path);
+        let url = self.bucket.delete_object(Some(&self.credentials), &key).sign(SIGN_TTL);
+        let response =
+            self.client.delete(url).send().await.map_err(|error| self.unreachable(error))?;
+        if response.status().is_success() || response.status() == StatusCode::NOT_FOUND {
+            Ok(())
+        } else {
+            Err(self.failure(response.status(), "", ""))
+        }
     }
 }
 

@@ -73,6 +73,13 @@ async fn kill_before_the_rename_then_resume_leaves_one_file() {
 }
 
 #[tokio::test]
+async fn static_site_publish_replaces_and_prunes_exact_paths_without_move() {
+    let mock = MockDav::start(AuthMode::Basic);
+    mock.state().move_supported = false;
+    scenarios::static_site_publish_replaces_and_prunes_exact_paths(&endpoint(&mock)).await;
+}
+
+#[tokio::test]
 async fn a_transfer_killed_midway_never_leaves_a_partial_file() {
     let mock = MockDav::start(AuthMode::Basic);
     let fx = DavFixture::new(&endpoint(&mock));

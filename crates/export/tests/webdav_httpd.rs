@@ -61,6 +61,7 @@ async fn apache_mod_dav_passes_the_contract_suite() {
     scenarios::stale_remote_file_is_replaced(&endpoint).await;
     scenarios::album_directories_and_read_back(&endpoint).await;
     scenarios::existing_album_ids_are_confined(&endpoint).await;
+    scenarios::static_site_publish_replaces_and_prunes_exact_paths(&endpoint).await;
 }
 
 #[tokio::test]
