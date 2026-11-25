@@ -197,10 +197,12 @@ async fn oversized_frames_are_refused_before_authentication() {
         rogue.connect(host.pairing_ticket().endpoint_addr().clone(), SYNC_ALPN).await.unwrap();
     let (mut send, mut recv) = conn.open_bi().await.unwrap();
     // Announce a 1 GiB first frame — the size of a photo, not of metadata.
+    // Send no body: rejection must happen as soon as the length arrives.
     send.write_all(&(1u32 << 30).to_be_bytes()).await.unwrap();
-    send.write_all(&[0u8; 1024]).await.unwrap();
-    let reply = tokio::time::timeout(Duration::from_secs(10), recv.read_to_end(1024)).await;
-    assert!(!matches!(reply, Ok(Ok(ref bytes)) if !bytes.is_empty()), "host answered: {reply:?}");
+    let reply = tokio::time::timeout(Duration::from_secs(10), recv.read_to_end(1024))
+        .await
+        .expect("host did not reject the oversized frame before waiting for its body");
+    assert!(!matches!(reply, Ok(ref bytes) if !bytes.is_empty()), "host answered: {reply:?}");
     assert!(host.paired_devices().is_empty());
 }
 
