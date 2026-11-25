@@ -52,6 +52,8 @@ export interface Settings {
   /// "View with Fotobase" / "Upload with Fotobase" entries in the OS file
   /// manager (TASK-08-020). Registered by default; off removes them.
   context_menu_enabled: boolean;
+  /// Optional configured external editor executable (TASK-10-02-01).
+  external_editor_path: string | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -75,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
   screen_capture_enabled: false,
   screen_capture_display: "all",
   context_menu_enabled: true,
+  external_editor_path: null,
 };
 
 // Image types the file-association option (TASK-01-025, PLAN §2M) can

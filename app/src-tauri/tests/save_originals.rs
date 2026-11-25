@@ -295,3 +295,48 @@ fn a_rescan_keeps_the_archived_original_cataloged() {
         .unwrap();
     assert_eq!(saved, 1);
 }
+
+#[test]
+fn fake_external_editor_save_imports_a_stacked_result_without_touching_original() {
+    let tmp = tempfile::tempdir().unwrap();
+    let src = gen_jpeg(&tmp.path().join("photos"), "roundtrip.jpg");
+    let original_bytes = std::fs::read(&src).unwrap();
+    let (mut cat, id) = catalog_with_photo(tmp.path(), &src);
+
+    let session =
+        fotobase_lib::save::prepare_external_editor(&cat, id, &tmp.path().join("external-work"))
+            .unwrap();
+    let temp_before = std::fs::read(&session.temp_path).unwrap();
+
+    let script = tmp.path().join("fake-editor.py");
+    std::fs::write(
+        &script,
+        "import pathlib, sys\np = pathlib.Path(sys.argv[1])\np.write_bytes(p.read_bytes() + b'edited-by-fake-editor')\n",
+    )
+    .unwrap();
+    fotobase_lib::save::launch_external_editor(script.to_str().unwrap(), &session.temp_path)
+        .unwrap();
+
+    let temp_after = std::fs::read(&session.temp_path).unwrap();
+    assert_ne!(temp_before, temp_after);
+    let imported =
+        fotobase_lib::save::import_external_editor_result(&mut cat, id, &session.temp_path)
+            .unwrap();
+
+    assert_eq!(std::fs::read(&src).unwrap(), original_bytes);
+    assert!(imported.path.exists());
+    assert_ne!(std::fs::read(&imported.path).unwrap(), original_bytes);
+
+    let role: (Option<String>, Option<String>) = cat
+        .conn()
+        .query_row("SELECT stack_id, stack_role FROM files WHERE id = ?1", [id], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
+    assert!(role.0.is_some());
+    assert_eq!(role.1.as_deref(), Some("top"));
+
+    let members = cat.stack_members(role.0.as_deref().unwrap()).unwrap();
+    assert_eq!(members.len(), 2);
+    assert!(members.iter().any(|member| member.id == imported.file_id));
+}

@@ -277,6 +277,110 @@ pub struct SavedCopy {
     pub path: PathBuf,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ExternalEditorSession {
+    pub temp_path: PathBuf,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ExternalEditorError {
+    #[error("external editor result is unchanged")]
+    Unchanged,
+    #[error("external editor launch failed: {0}")]
+    Launch(String),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Save(#[from] SaveError),
+}
+
+fn external_temp_destination(work_dir: &Path, file_id: i64, photo: &Path) -> PathBuf {
+    let stem = photo.file_stem().unwrap_or_default().to_string_lossy();
+    let ext = photo.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let name = if ext.is_empty() {
+        format!("{stem}-external-edit")
+    } else {
+        format!("{stem}-external-edit.{ext}")
+    };
+    work_dir.join(file_id.to_string()).join(name)
+}
+
+pub fn prepare_external_editor(
+    cat: &Catalog,
+    file_id: i64,
+    work_dir: &Path,
+) -> Result<ExternalEditorSession, ExternalEditorError> {
+    let photo = file_path(cat, file_id)?;
+    let temp_path = external_temp_destination(work_dir, file_id, &photo);
+    if let Some(parent) = temp_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::copy(&photo, &temp_path)?;
+    Ok(ExternalEditorSession { temp_path })
+}
+
+pub fn launch_external_editor(
+    editor_path: &str,
+    temp_path: &Path,
+) -> Result<(), ExternalEditorError> {
+    let mut command = if editor_path.to_ascii_lowercase().ends_with(".py") {
+        let mut command = std::process::Command::new("python3");
+        command.arg(editor_path);
+        command
+    } else {
+        std::process::Command::new(editor_path)
+    };
+    let status =
+        command.arg(temp_path).status().map_err(|e| ExternalEditorError::Launch(e.to_string()))?;
+    if !status.success() {
+        return Err(ExternalEditorError::Launch(format!("editor exited with {status}")));
+    }
+    Ok(())
+}
+
+fn external_result_destination(photo: &Path) -> PathBuf {
+    let stem = photo.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+    let ext = photo.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let first = if ext.is_empty() {
+        photo.with_file_name(format!("{stem} (external)"))
+    } else {
+        photo.with_file_name(format!("{stem} (external).{ext}"))
+    };
+    if !first.exists() {
+        return first;
+    }
+    for n in 2u32.. {
+        let candidate = if ext.is_empty() {
+            photo.with_file_name(format!("{stem} (external {n})"))
+        } else {
+            photo.with_file_name(format!("{stem} (external {n}).{ext}"))
+        };
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!("an infinitely large disk has a free name")
+}
+
+pub fn import_external_editor_result(
+    cat: &mut Catalog,
+    file_id: i64,
+    temp_path: &Path,
+) -> Result<SavedCopy, ExternalEditorError> {
+    let photo = file_path(cat, file_id)?;
+    let original = std::fs::read(&photo)?;
+    let edited = std::fs::read(temp_path)?;
+    if original == edited {
+        return Err(ExternalEditorError::Unchanged);
+    }
+
+    let dest = external_result_destination(&photo);
+    std::fs::copy(temp_path, &dest)?;
+    let new_id = cat.register_file(&dest, "image").map_err(SaveError::from)?;
+    cat.stack_photos(&[file_id, new_id]).map_err(SaveError::from)?;
+    Ok(SavedCopy { file_id: new_id, path: dest })
+}
+
 /// `path` if free, else the first free `stem (2).ext`, `stem (3).ext`, …
 /// in the same folder. Never returns an existing path.
 fn unique_destination(path: &Path) -> PathBuf {
