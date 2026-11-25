@@ -63,12 +63,12 @@ pub async fn static_site_publish_replaces_and_prunes_exact_paths(endpoint: &Endp
         registry.publish_directory("webdav", source.path(), &base_url, &token).await.unwrap();
 
     assert_eq!((report.uploaded, report.unchanged, report.removed), (2, 1, 1));
-    let files = fx.admin.files();
-    assert!(files.contains(&format!("{prefix}/index.html")));
-    assert!(files.contains(&format!("{prefix}/images/new.jpg")));
-    assert!(files.contains(&format!("{prefix}/images/unchanged.jpg")));
-    assert!(!files.contains(&format!("{prefix}/images/old.jpg")));
+    // Apache's DirectoryIndex handler can reject collection PROPFIND once index.html exists.
+    // Inspect the published resources directly instead of walking the collection.
     assert_eq!(fx.admin.get(&format!("{prefix}/index.html")), b"v2");
+    assert_eq!(fx.admin.get(&format!("{prefix}/images/new.jpg")), b"new");
+    assert_eq!(fx.admin.get(&format!("{prefix}/images/unchanged.jpg")), b"same");
+    fx.admin.assert_missing(&format!("{prefix}/images/old.jpg"));
 }
 
 /// Killed between the data transfer and the rename: only a staging file

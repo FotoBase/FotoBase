@@ -152,6 +152,11 @@ impl Admin {
         body
     }
 
+    pub fn assert_missing(&self, rel: &str) {
+        let (status, _) = self.call("GET", self.url(rel, false), None, Vec::new());
+        assert_eq!(status, 404, "GET {rel}");
+    }
+
     pub fn put(&self, rel: &str, body: Vec<u8>) {
         let (status, _) = self.call("PUT", self.url(rel, false), None, body);
         assert!((200..300).contains(&status), "PUT {rel}: {status}");
