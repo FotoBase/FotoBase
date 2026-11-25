@@ -5,7 +5,7 @@
 ## F1 — Sync & web albums
 
 - **F1.1 Publish web album** (after EPIC-08; earliest of the futures, best demo artifact — ship early):
-  - [ ] `F1-001` (M) Static HTML gallery generator (resized images + tiny JS viewer) for an album.
+  - [x] `F1-001` (M) Static HTML gallery generator (resized images + tiny JS viewer) for an album.
   - [ ] `F1-002` (M) Upload to any export target under unguessable URL; incremental re-publish (= "Sync to Web").
 - **F1.2 Device sync** (after stable XMP model, EPIC-03; before/with EPIC-09 usefulness):
   - [ ] `F1-003` (XL) Metadata as CRDT document (Loro/Automerge); only confirmed face names sync.
