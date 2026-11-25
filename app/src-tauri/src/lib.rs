@@ -3723,6 +3723,95 @@ fn save_copy_photo(
     Ok(saved)
 }
 
+/// Edit in an external editor (TASK-10-02-01): copy the photo to a temp
+/// file, launch the configured executable or OS default application, and
+/// watch the temp file for a saved edit. The result is copied into the
+/// library and stacked under the untouched original.
+#[tauri::command]
+fn open_external_editor(
+    file_id: i64,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::save::ExternalEditorSession, String> {
+    let work_dir = app
+        .path()
+        .app_cache_dir()
+        .unwrap_or_else(|_| std::env::temp_dir())
+        .join("fotobase-external-editor");
+    let session = with_catalog_sync(&state, |cat| {
+        crate::save::prepare_external_editor(cat, file_id, &work_dir).map_err(|e| {
+            fotobase_catalog::SyncError::Catalog(fotobase_catalog::CatalogError::Corrupted(
+                e.to_string(),
+            ))
+        })
+    })?;
+
+    let configured = state
+        .settings
+        .lock()
+        .ok()
+        .and_then(|settings| settings.external_editor_path.clone())
+        .filter(|path| !path.trim().is_empty());
+    let initial = std::fs::read(&session.temp_path).map_err(|e| e.to_string())?;
+    let temp_path = session.temp_path.clone();
+
+    if let Some(editor) = configured {
+        let app_for_thread = app.clone();
+        std::thread::spawn(move || {
+            if crate::save::launch_external_editor(&editor, &temp_path).is_err() {
+                return;
+            }
+            let changed = std::fs::read(&temp_path).ok();
+            if changed.as_deref() == Some(initial.as_slice()) {
+                return;
+            }
+            let state = app_for_thread.state::<AppState>();
+            let result = with_catalog_sync(&state, |cat| {
+                crate::save::import_external_editor_result(cat, file_id, &temp_path).map_err(|e| {
+                    fotobase_catalog::SyncError::Catalog(fotobase_catalog::CatalogError::Corrupted(
+                        e.to_string(),
+                    ))
+                })
+            });
+            if result.is_ok() {
+                let _ = app_for_thread.emit("library-changed", ());
+            }
+        });
+    } else {
+        tauri_plugin_opener::open_path(temp_path.to_string_lossy().as_ref(), None::<&str>)
+            .map_err(|e| format!("open external editor: {e}"))?;
+        let app_for_thread = app.clone();
+        std::thread::spawn(move || {
+            for _ in 0..7200 {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                let changed = match std::fs::read(&temp_path) {
+                    Ok(bytes) => bytes,
+                    Err(_) => continue,
+                };
+                if changed == initial {
+                    continue;
+                }
+                let state = app_for_thread.state::<AppState>();
+                let result = with_catalog_sync(&state, |cat| {
+                    crate::save::import_external_editor_result(cat, file_id, &temp_path).map_err(
+                        |e| {
+                            fotobase_catalog::SyncError::Catalog(
+                                fotobase_catalog::CatalogError::Corrupted(e.to_string()),
+                            )
+                        },
+                    )
+                });
+                if result.is_ok() {
+                    let _ = app_for_thread.emit("library-changed", ());
+                }
+                break;
+            }
+        });
+    }
+
+    Ok(session)
+}
+
 /// Revert (TASK-04-016): restore the archived original byte-identical,
 /// clear the recipe and the save's stack record.
 #[tauri::command]
@@ -4918,6 +5007,7 @@ pub fn run() {
             save_as_photo,
             save_copy_photo,
             revert_photo,
+            open_external_editor,
             render_edit_preview,
             quit_from_tray,
             close_main_window,

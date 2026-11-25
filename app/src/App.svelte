@@ -678,6 +678,7 @@
     { id: "geotag", label: t("menu.geotag") },
     { id: "reset-faces", label: t("menu.resetFaces") },
     { id: "batch-edit", label: t("menu.batchEdit") },
+    { id: "edit-external", label: t("menu.editExternal") },
     { id: "export", label: t("menu.export") },
     { id: "print", label: t("menu.print") },
     { id: "email", label: t("menu.email") },
@@ -765,6 +766,13 @@
       geotagDialog = { open: true, ids: targetIds(item.id, gridState.selection) };
     } else if (id === "batch-edit") {
       batchEditDialog = { open: true, ids: targetIds(item.id, gridState.selection) };
+    } else if (id === "edit-external") {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("open_external_editor", { fileId: item.id });
+      } catch (error) {
+        console.error("External editor failed:", error);
+      }
     } else if (id === "export") {
       // TASK-04-015: the batch exports in the current grid sort order, so
       // the numbered file names preserve what the user sees.

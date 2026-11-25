@@ -176,6 +176,10 @@ pub struct Settings {
     /// them; off removes them.
     #[serde(default = "default_context_menu_enabled")]
     pub context_menu_enabled: bool,
+    /// Optional executable for external photo editing (TASK-10-02-01).
+    /// Empty or missing means use the OS default application association.
+    #[serde(default)]
+    pub external_editor_path: Option<String>,
 }
 
 fn default_context_menu_enabled() -> bool {
@@ -217,6 +221,7 @@ impl Default for Settings {
             screen_capture_enabled: false,
             screen_capture_display: CaptureDisplay::default(),
             context_menu_enabled: default_context_menu_enabled(),
+            external_editor_path: None,
         }
     }
 }
