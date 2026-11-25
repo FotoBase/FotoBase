@@ -1,6 +1,6 @@
 # task: add iroh sync transport and qr pairing
 
-**Feature:** [FEAT-10-01-f1-sync-web-albums](FEAT-10-01-f1-sync-web-albums.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** planned (deferred)
+**Feature:** [FEAT-10-01-f1-sync-web-albums](FEAT-10-01-f1-sync-web-albums.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in review (2026-11-25)
 
 ## Description
 Transport for device sync: iroh (Rust P2P QUIC with relay fallback), device pairing via QR code, no account required (PLAN §7 F1 layer 2). Carries the CRDT document from task 03; makes EPIC-09 multi-device use convenient.
@@ -19,4 +19,4 @@ Transport for device sync: iroh (Rust P2P QUIC with relay fallback), device pair
 - integration: relay-path pairing completes when direct connection is blocked.
 
 ## Acceptance criteria
-- [ ] F1-004: QR pairing completes without an account; CRDT metadata syncs over iroh with relay fallback; originals not synced by default.
+- [x] F1-004: QR pairing completes without an account; CRDT metadata syncs over iroh with relay fallback; originals not synced by default.

@@ -19,10 +19,24 @@
 //! by Lamport time then peer id — deterministic on every replica. Tags,
 //! albums and faces are add/remove sets keyed per member, so concurrent
 //! additions on different devices all survive.
+//!
+//! Transport: [`SyncNode`] carries the document between paired devices over
+//! iroh QUIC with relay fallback; [`PairingTicket`] is what the pairing QR
+//! code encodes. No accounts, and only metadata ever crosses the wire.
 
 use std::collections::BTreeSet;
 
 use fotobase_metadata::{FaceRegion, Sidecar};
+
+mod pairing;
+mod peers;
+mod transport;
+
+pub use pairing::PairingTicket;
+pub use peers::PairedDevices;
+pub use transport::{
+    AlwaysSync, BackgroundConfig, BackgroundSync, SyncNode, SyncPolicy, SYNC_ALPN,
+};
 
 /// Crate identity, used by the workspace smoke test.
 pub const CRATE_NAME: &str = "fotobase-sync";
@@ -36,6 +50,14 @@ pub enum SyncError {
     Encode(String),
     #[error("could not import sync data: {0}")]
     Import(String),
+    #[error("not a Fotobase pairing ticket: {0}")]
+    Ticket(String),
+    #[error("the other device refused: not paired, or the pairing ticket was used up or expired")]
+    Unauthorized,
+    #[error("sync transport failed: {0}")]
+    Transport(String),
+    #[error("paired-device store failed: {0}")]
+    Store(String),
 }
 
 /// The syncable metadata of one photo (PLAN §7 F1): everything else in a
@@ -372,6 +394,19 @@ impl MetadataDoc {
     /// The whole document, for a first sync or persistence.
     pub fn export_snapshot(&self) -> Result<Vec<u8>, SyncError> {
         self.doc.export(loro::ExportMode::Snapshot).map_err(loro_err)
+    }
+
+    /// This replica's version, to tell another replica what it already has.
+    pub fn version(&self) -> Vec<u8> {
+        self.doc.oplog_vv().encode()
+    }
+
+    /// Only what a replica at `version` (from [`MetadataDoc::version`]) is
+    /// missing: a small delta instead of the whole document.
+    pub fn export_updates_since(&self, version: &[u8]) -> Result<Vec<u8>, SyncError> {
+        let vv =
+            loro::VersionVector::decode(version).map_err(|e| SyncError::Import(e.to_string()))?;
+        self.doc.export(loro::ExportMode::updates(&vv)).map_err(loro_err)
     }
 
     /// Merge a snapshot or update blob from another replica.

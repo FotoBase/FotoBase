@@ -18,6 +18,7 @@ PLAN §10 names specific drift risks. This doc is the mechanism. Deliberately ma
 | sqlite-vec / rusqlite | catalog layer          | rebuildable cache by design (§3)                                                                      | breaking schema/API changes                                       |
 | ort (ONNX runtime)    | pre-release pin        | pinned to 2.0.0-rc.x; no stable 2.0 exists yet                                                        | 2.0 stable release → bump in same PR as a `cargo test` gate        |
 | libayatana-appindicator | deprecation          | system-tray integration (03-002)                                                                      | deprecation/removal from Ubuntu 24.04+ repos, replacement API      |
+| iroh (+ relays)       | transport maturity, relay dependence | `crates/sync` uses iroh as pure QUIC transport behind `SyncNode`; relays configurable per endpoint; metadata-only wire protocol | iroh 1.x API/protocol changes, n0 public-relay terms, security advisories |
 | Pillow (tools/)       | tooling drift          | pinned in `tools/requirements.txt` (`>=11.3,<12`)                                                     | new major releases; fixture determinism after a bump               |
 
 ## Cadence
