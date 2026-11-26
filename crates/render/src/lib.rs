@@ -56,6 +56,9 @@ use fotobase_jobs::{job, Job, Outcome};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+/// AI editing recipe-op backend (TASK-10-02-04): `ai_erase` (LaMa) and
+/// `ai_denoise` (SCUNet) behind the `OpBackend` seam.
+pub mod ai;
 pub mod color;
 /// Full-resolution color-managed export (TASK-04-018).
 pub mod export;

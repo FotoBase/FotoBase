@@ -2480,6 +2480,7 @@ version = "0.1.0"
 dependencies = [
  "fast_image_resize",
  "fontdb",
+ "fotobase-ai",
  "fotobase-core",
  "fotobase-jobs",
  "fotobase-video",

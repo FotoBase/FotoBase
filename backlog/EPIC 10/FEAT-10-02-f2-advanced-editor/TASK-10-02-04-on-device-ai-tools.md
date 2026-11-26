@@ -1,6 +1,6 @@
 # task: add on-device ai editing tools
 
-**Feature:** [FEAT-10-02-f2-advanced-editor](FEAT-10-02-f2-advanced-editor.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** planned (deferred)
+**Feature:** [FEAT-10-02-f2-advanced-editor](FEAT-10-02-f2-advanced-editor.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in review (2026-11-26)
 
 ## Description
 On-device AI tools: subject/sky masks (MobileSAM / EfficientSAM via ONNX) for local adjustments, magic erase (LaMa inpainting), AI denoise (PLAN §7 F2 item 4). All models must be permissively licensed per PLAN §1 (Apache-2.0-class weights, license manifest).
@@ -20,4 +20,4 @@ On-device AI tools: subject/sky masks (MobileSAM / EfficientSAM via ONNX) for lo
 - CI: license manifest check fails on a non-permissive model.
 
 ## Acceptance criteria
-- [ ] F2-004: Masks, magic erase, and AI denoise run on-device with permissive-licensed models.
+- [x] F2-004: Masks, magic erase, and AI denoise run on-device with permissive-licensed models.

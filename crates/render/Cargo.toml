@@ -31,6 +31,9 @@ jxl = ["dep:jxl-oxide"]
 [dependencies]
 fotobase-jobs = { path = "../jobs" }
 fotobase-core = { path = "../core" }
+# TASK-10-02-04: the AI editing runtimes (EfficientSAM / LaMa / SCUNet)
+# behind the `ai_erase` / `ai_denoise` recipe-op backend.
+fotobase-ai = { path = "../ai" }
 fotobase-video = { path = "../video" }
 tracing.workspace = true
 thiserror.workspace = true
