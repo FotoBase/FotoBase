@@ -1,6 +1,6 @@
 # task: build pro tab recipe ops
 
-**Feature:** [FEAT-10-02-f2-advanced-editor](FEAT-10-02-f2-advanced-editor.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in progress (2026-11-25)
+**Feature:** [FEAT-10-02-f2-advanced-editor](FEAT-10-02-f2-advanced-editor.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in review (2026-11-25)
 
 ## Description
 Pro tab on the recipe engine: curves, levels, HSL, exposure, vibrance, perspective/keystone, Lensfun lens correction, noise reduction (PLAN §7 F2 item 2). Every tool is just another recipe op — non-destructive, same engine as EPIC-04.
