@@ -41,7 +41,12 @@ const TOLERANCES: &[(&str, f64)] = &[
     ("exposure", 1.0),
     ("vibrance", 1.0),
     ("keystone", 2.0),
-    ("lens_correction", 2.0),
+    // Lensfun's x86 build takes SSE fast paths (approximate reciprocals);
+    // arm64 runs scalar code. Measured gap on this profile: ≤ 0.054 px
+    // (mean 0.005) at both resolutions. Across the fixture's sharpest edge
+    // (0.85 channel step) that is ≤ 0.85·255·0.054 ≈ 11.8, +1 for 8-bit
+    // quantization.
+    ("lens_correction", 13.0),
     ("noise_reduction", 2.0),
     ("auto_rotate", 2.0),
     ("border", 2.0),

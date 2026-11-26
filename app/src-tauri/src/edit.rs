@@ -241,6 +241,7 @@ mod tests {
     }
 
     /// A JPEG whose EXIF says what a Canon body writes for this lens.
+    #[cfg(not(any(windows, target_os = "android", target_os = "ios")))]
     fn canon_jpeg(path: &std::path::Path, lens_model: &str) {
         use exif::{Field, In, Rational, Tag, Value};
         let ascii = |tag, s: &str| Field {
