@@ -112,7 +112,7 @@ pub fn apply_recipe(
     #[cfg(all(feature = "lensfun", fb_native_codecs))]
     return fotobase_core::apply::apply_recipe_with(input, recipe, &lensfun::LensfunBackend);
     #[cfg(not(all(feature = "lensfun", fb_native_codecs)))]
-    crate::apply_recipe(input, recipe)
+    fotobase_core::apply::apply_recipe(input, recipe)
 }
 
 pub use color::{
