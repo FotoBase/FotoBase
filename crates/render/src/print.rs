@@ -471,7 +471,7 @@ pub fn edited_dimensions(width: u32, height: u32, recipe_json: &str) -> (u32, u3
     }
     match fotobase_core::recipe::parse(recipe_json) {
         Ok((recipe, _)) if !recipe.ops.is_empty() => {
-            let out = fotobase_core::apply::apply_recipe(&LinearImage::new(pw, ph), &recipe);
+            let out = crate::apply_recipe(&LinearImage::new(pw, ph), &recipe);
             (out.width, out.height)
         }
         _ => (pw, ph),
@@ -588,7 +588,7 @@ fn load_photo(src: &PrintPhotoSource, max_edge: u32, srgb: &[u8]) -> Result<Load
     let (mut rgb, width, height) = if recipe.ops.is_empty() {
         (rgb, dw, dh)
     } else {
-        let out = fotobase_core::apply::apply_recipe(&rgb_to_linear(&rgb, dw, dh), &recipe);
+        let out = crate::apply_recipe(&rgb_to_linear(&rgb, dw, dh), &recipe);
         (to_srgb8(&out.data), out.width, out.height)
     };
     crate::color::transform_rgb(&mut rgb, profile.as_deref(), srgb)?;

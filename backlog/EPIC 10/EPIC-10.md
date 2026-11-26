@@ -15,7 +15,7 @@
 ## F2 — Advanced editor (after EPIC-04 recipe engine)
 
 - [x] `F2-001` (M) External editor round-trip (GIMP/Photoshop/Affinity/darktable); result auto-imports as stacked version.
-- [ ] `F2-002` (L) Pro tab: curves, levels, HSL, exposure, vibrance, perspective/keystone, Lensfun lens correction, noise reduction.
+- [x] `F2-002` (L) Pro tab: curves, levels, HSL, exposure, vibrance, perspective/keystone, Lensfun lens correction, noise reduction.
 - [ ] `F2-003` (XL) GPU pipeline: recipe ops ported to `wgpu` shaders, real-time full-res editing.
 - [ ] `F2-004` (XL) On-device AI tools: MobileSAM/EfficientSAM masks, LaMa magic erase, AI denoise.
 

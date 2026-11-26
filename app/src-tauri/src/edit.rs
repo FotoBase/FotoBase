@@ -47,6 +47,23 @@ pub fn apply_recipe_to_photo(
     cat.set_recipe(file_id, trimmed).map_err(|e| e.to_string())
 }
 
+/// `lens_correction` params for a photo (TASK-10-02-02): its EXIF picks the
+/// profile in the Lensfun database; the result is stored in the recipe so
+/// later renders never depend on the installed database. The original is
+/// only read.
+pub fn lens_profile_for_path(path: &std::path::Path) -> Result<serde_json::Value, String> {
+    let exif = fotobase_metadata::read_lens_exif(path)?;
+    fotobase_render::lens_profile(&fotobase_render::LensQuery {
+        camera_maker: exif.camera_maker,
+        camera_model: exif.camera_model,
+        lens_maker: exif.lens_maker,
+        lens_model: exif.lens_model,
+        focal: exif.focal,
+        aperture: exif.aperture,
+        distance: exif.distance,
+    })
+}
+
 /// The `preview://` URI for an edited preview: the file's content hash plus
 /// the recipe id as the `r` query. The scheme handler resolves it to the
 /// edited cache entry; no image bytes ever cross IPC.
@@ -221,5 +238,69 @@ mod tests {
             r#"{"spec":"fotobase.recipe","version":1,"ops":[{"type":"future_op","params":{}}]}"#
         )
         .is_ok());
+    }
+
+    /// A JPEG whose EXIF says what a Canon body writes for this lens.
+    fn canon_jpeg(path: &std::path::Path, lens_model: &str) {
+        use exif::{Field, In, Rational, Tag, Value};
+        let ascii = |tag, s: &str| Field {
+            tag,
+            ifd_num: In::PRIMARY,
+            value: Value::Ascii(vec![s.as_bytes().to_vec()]),
+        };
+        let ratio = |tag, num, denom| Field {
+            tag,
+            ifd_num: In::PRIMARY,
+            value: Value::Rational(vec![Rational { num, denom }]),
+        };
+        let fields = [
+            ascii(Tag::Make, "Canon"),
+            ascii(Tag::Model, "Canon EOS 5D Mark II"),
+            ascii(Tag::LensModel, lens_model),
+            ratio(Tag::FocalLength, 50, 1),
+            ratio(Tag::FNumber, 28, 10),
+        ];
+        let mut tiff = std::io::Cursor::new(Vec::new());
+        let mut writer = exif::experimental::Writer::new();
+        fields.iter().for_each(|f| writer.push_field(f));
+        writer.write(&mut tiff, false).unwrap();
+        let tiff = tiff.into_inner();
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut jpeg)
+            .encode(&[100u8; 8 * 8 * 3], 8, 8, image::ExtendedColorType::Rgb8)
+            .unwrap();
+        let mut out = jpeg[..2].to_vec();
+        out.extend([0xFF, 0xE1]);
+        out.extend(((tiff.len() + 8) as u16).to_be_bytes());
+        out.extend(b"Exif\0\0");
+        out.extend(&tiff);
+        out.extend(&jpeg[2..]);
+        std::fs::write(path, out).unwrap();
+    }
+
+    /// TASK-10-02-02 acceptance: the lens profile comes from the photo's
+    /// EXIF via the installed Lensfun database, ready to store as a recipe op.
+    #[cfg(not(any(windows, target_os = "android", target_os = "ios")))]
+    #[test]
+    fn lens_profile_is_picked_from_exif_via_the_lensfun_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let photo = dir.path().join("IMG_0001.jpg");
+        canon_jpeg(&photo, "EF50mm f/1.8 II");
+        let before = std::fs::read(&photo).unwrap();
+
+        let params = lens_profile_for_path(&photo).expect("profile from EXIF");
+        assert!(params["lens"].as_str().unwrap().contains("50mm f/1.8"), "{params}");
+        assert_eq!(params["crop"], 1.0);
+        assert_eq!(params["focal"], 50.0);
+        assert_eq!(params["aperture"], 2.8);
+        let recipe = serde_json::json!({ "spec": "fotobase.recipe", "version": 1,
+            "ops": [{ "type": "lens_correction", "params": params }] });
+        assert!(validate_recipe(&recipe.to_string()).is_ok());
+        assert_eq!(std::fs::read(&photo).unwrap(), before, "original untouched");
+
+        let unknown = dir.path().join("IMG_0002.jpg");
+        canon_jpeg(&unknown, "Nonexistent 13mm f/0.7");
+        let err = lens_profile_for_path(&unknown).unwrap_err();
+        assert!(err.contains("Nonexistent 13mm f/0.7"), "{err}");
     }
 }

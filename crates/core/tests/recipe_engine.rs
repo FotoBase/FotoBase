@@ -171,6 +171,151 @@ fn bw_op_is_known_and_validates_strength() {
     );
 }
 
+#[test]
+fn negative_vibrance_reduces_color_without_rejecting_the_recipe() {
+    let input = LinearImage::from_fn(1, 1, |_, _| [0.5, 0.3, 0.2]);
+    let recipe = recipe_from_ops(json!([{ "type": "vibrance", "params": { "amount": -0.5 } }]));
+    let output = apply_recipe(&input, &recipe).get(0, 0);
+    assert!(output[0] - output[2] < 0.3, "negative vibrance must reduce chroma: {output:?}");
+}
+
+#[test]
+fn keystone_horizontal_and_vertical_controls_affect_different_axes() {
+    let input = LinearImage::from_fn(21, 21, |x, y| [x as f32 / 20.0, y as f32 / 20.0, 0.0]);
+    let left = recipe_from_ops(json!([{ "type": "keystone", "params": { "left": 0.5 } }]));
+    let top = recipe_from_ops(json!([{ "type": "keystone", "params": { "top": 0.5 } }]));
+    let left_output = apply_recipe(&input, &left);
+    let top_output = apply_recipe(&input, &top);
+    assert!(left_output != top_output, "horizontal and vertical corrections must differ");
+    assert_ne!(
+        left_output.get(0, 5)[1],
+        input.get(0, 5)[1],
+        "left correction must move vertically"
+    );
+}
+
+#[test]
+fn noise_reduction_radius_scales_between_preview_and_export() {
+    let scene = |size| {
+        LinearImage::from_fn(size, size, |x, _| if x < size / 2 { [0.0; 3] } else { [1.0; 3] })
+    };
+    let recipe = recipe_from_ops(json!([
+        { "type": "noise_reduction", "params": { "amount": 1.0, "radius": 0.1 } }
+    ]));
+    let preview = apply_recipe(&scene(128), &recipe);
+    let export = apply_recipe(&scene(512), &recipe);
+    let delta = (preview.get(67, 64)[0] - export.get(270, 258)[0]).abs();
+    assert!(delta < 0.03, "normalized noise radius differs by {delta}");
+}
+
+#[test]
+fn noise_reduction_rejects_radius_outside_normalized_range() {
+    for radius in [-0.1, 1.1] {
+        let packet = json!({
+            "spec": "fotobase.recipe",
+            "version": 1,
+            "ops": [{ "type": "noise_reduction", "params": { "amount": 1.0, "radius": radius } }]
+        });
+        assert!(Recipe::parse(&packet.to_string()).is_err(), "accepted radius {radius}");
+    }
+}
+
+#[test]
+fn pro_tab_ops_are_known_validated_and_apply_nondestructively() {
+    let img = gradient(32, 24);
+    let ops = json!([
+        { "type": "curves", "params": { "points": [[0.0, 0.0], [0.5, 0.7], [1.0, 1.0]] } },
+        { "type": "levels", "params": { "black": 0.1, "white": 0.9, "gamma": 1.1 } },
+        { "type": "hsl", "params": { "hue": 0.2, "saturation": 0.3, "luminance": -0.1 } },
+        { "type": "exposure", "params": { "ev": 0.5 } },
+        { "type": "vibrance", "params": { "amount": 0.4 } },
+        { "type": "keystone", "params": { "top": 0.1, "bottom": 0.0, "left": 0.0, "right": 0.0 } },
+        { "type": "noise_reduction", "params": { "amount": 0.6, "radius": 0.01 } }
+    ]);
+    let recipe = recipe_from_ops(ops);
+    let out = apply_recipe(&img, &recipe);
+    assert_ne!(out.data, img.data);
+    assert!(out.data.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)));
+    assert_eq!(img.width, 32);
+    assert_eq!(img.height, 24);
+
+    let bad = json!({ "spec": "fotobase.recipe", "version": 1,
+        "ops": [{ "type": "exposure", "params": { "ev": 99.0 } }] });
+    assert!(Recipe::parse(&serde_json::to_string(&bad).unwrap()).is_err());
+}
+
+fn lens_op(params: Value) -> Result<(Recipe, Vec<String>), fotobase_core::recipe::RecipeError> {
+    Recipe::parse(
+        &json!({ "spec": "fotobase.recipe", "version": 1,
+                 "ops": [{ "type": "lens_correction", "params": params }] })
+        .to_string(),
+    )
+}
+
+#[test]
+fn lens_correction_requires_a_resolved_lensfun_profile() {
+    let good = json!({ "profile": "<lensdatabase/>", "crop": 1.5, "focal": 35.0,
+                       "aperture": 4.0, "distance": 1000.0,
+                       "distortion": true, "vignetting": false, "tca": true });
+    let (_, warnings) = lens_op(good.clone()).expect("resolved profile parses");
+    assert!(warnings.is_empty(), "documented params only: {warnings:?}");
+
+    assert!(lens_op(json!({ "crop": 1.0, "focal": 35.0 })).is_err(), "profile is required");
+    for (key, bad) in [
+        ("profile", json!("")),
+        ("crop", json!(0.0)),
+        ("focal", json!(-1.0)),
+        ("aperture", json!(0.0)),
+        ("distance", json!(0.0)),
+        ("tca", json!(1)),
+    ] {
+        let mut params = good.clone();
+        params[key] = bad.clone();
+        assert!(lens_op(params).is_err(), "accepted {key} = {bad}");
+    }
+    for alias in ["lensfun", "perspective", "denoise"] {
+        let packet = json!({ "spec": "fotobase.recipe", "version": 1,
+                             "ops": [{ "type": alias, "params": {} }] });
+        let (recipe, warnings) = Recipe::parse(&packet.to_string()).unwrap();
+        assert!(recipe.ops.is_empty() && !warnings.is_empty(), "{alias} is not a v1 op");
+    }
+}
+
+/// The engine owns op order; native corrections come from a backend so the
+/// core stays free of C libraries. Without one, the op is skipped, never faked.
+#[test]
+fn lens_correction_pixels_come_from_the_backend_in_recipe_order() {
+    struct Invert;
+    impl fotobase_core::apply::OpBackend for Invert {
+        fn apply(&self, img: &LinearImage, op: &fotobase_core::recipe::Op) -> Option<LinearImage> {
+            (op.op_type == "lens_correction").then(|| {
+                let mut out = img.clone();
+                out.data.iter_mut().for_each(|v| *v = 1.0 - *v);
+                out
+            })
+        }
+    }
+    let img = gradient(8, 8);
+    let (recipe, _) = Recipe::parse(
+        &json!({ "spec": "fotobase.recipe", "version": 1, "ops": [
+            { "type": "exposure", "params": { "ev": 1.0 } },
+            { "type": "lens_correction", "params": { "profile": "<lensdatabase/>",
+              "crop": 1.0, "focal": 50.0 } }
+        ] })
+        .to_string(),
+    )
+    .unwrap();
+    let with = fotobase_core::apply::apply_recipe_with(&img, &recipe, &Invert);
+    let exposed = apply_recipe(
+        &img,
+        &recipe_from_ops(json!([
+            { "type": "exposure", "params": { "ev": 1.0 } }
+        ])),
+    );
+    assert_eq!(with.get(3, 3)[0], 1.0 - exposed.get(3, 3)[0]);
+    assert_eq!(apply_recipe(&img, &recipe), exposed, "no backend: op skipped, not faked");
+}
+
 // ---------------------------------------------------------------------------
 // Round-trip
 // ---------------------------------------------------------------------------

@@ -47,6 +47,14 @@ pub const V1_OP_TYPES: &[&str] = &[
     "border",
     "drop_shadow",
     "undo_all",
+    "curves",
+    "levels",
+    "hsl",
+    "exposure",
+    "vibrance",
+    "keystone",
+    "lens_correction",
+    "noise_reduction",
 ];
 
 /// A parsed, validated edit recipe.
@@ -138,6 +146,11 @@ pub fn parse_value(value: &Value) -> Result<(Recipe, Vec<String>), RecipeError> 
         // concrete number, never defaulted (TASK-07-007).
         if op_type == "auto_rotate" && params.is_none() {
             return err(format!("ops[{i}] auto_rotate.angle_deg is required"));
+        }
+        // Lens correction is only meaningful with the Lensfun profile that
+        // was resolved from EXIF when the op was added (never guessed).
+        if op_type == "lens_correction" && params.is_none() {
+            return err(format!("ops[{i}] lens_correction.profile is required"));
         }
         let extra = validate_extra_params(op_type, &params, i)?;
         warnings.extend(extra);
@@ -253,6 +266,71 @@ fn validate_params(op_type: &str, params: &Value, idx: usize) -> Result<(), Reci
             color_param(p, op_type, idx)?;
         }
         "warmify" | "soft_focus" | "vignette" => unit("amount", 0.0, 1.0)?,
+        "curves" => {
+            if let Some(points) = p.get("points") {
+                let points = points.as_array().ok_or_else(|| {
+                    RecipeError(format!("ops[{idx}] curves.points must be an array"))
+                })?;
+                for (j, point) in points.iter().enumerate() {
+                    let point = point.as_array().ok_or_else(|| {
+                        RecipeError(format!("ops[{idx}] curves.points[{j}] must be [x, y]"))
+                    })?;
+                    if point.len() != 2
+                        || point.iter().any(|v| {
+                            v.as_f64().is_none_or(|n| !n.is_finite() || !(0.0..=1.0).contains(&n))
+                        })
+                    {
+                        return err(format!(
+                            "ops[{idx}] curves.points[{j}] must contain two numbers in [0, 1]"
+                        ));
+                    }
+                }
+            }
+        }
+        "levels" => {
+            unit("black", 0.0, 1.0)?;
+            unit("white", 0.0, 1.0)?;
+            unit("gamma", 0.1, 10.0)?;
+        }
+        "hsl" => {
+            unit("hue", -1.0, 1.0)?;
+            unit("saturation", -1.0, 1.0)?;
+            unit("luminance", -1.0, 1.0)?;
+        }
+        "exposure" => unit("ev", -5.0, 5.0)?,
+        "vibrance" => unit("amount", -1.0, 1.0)?,
+        "noise_reduction" => {
+            unit("amount", 0.0, 1.0)?;
+            unit("radius", 0.0, 1.0)?;
+        }
+        "keystone" => {
+            unit("top", -1.0, 1.0)?;
+            unit("bottom", -1.0, 1.0)?;
+            unit("left", -1.0, 1.0)?;
+            unit("right", -1.0, 1.0)?;
+        }
+        "lens_correction" => {
+            match p.get("profile") {
+                Some(Value::String(xml)) if !xml.trim().is_empty() => {}
+                _ => return err(format!("ops[{idx}] lens_correction.profile must be Lensfun XML")),
+            }
+            for key in ["crop", "focal"] {
+                match num(p, key) {
+                    Some(v) if v.is_finite() && v > 0.0 => {}
+                    _ => return err(format!("ops[{idx}] lens_correction.{key} must be > 0")),
+                }
+            }
+            for key in ["aperture", "distance"] {
+                if p.contains_key(key) && !num(p, key).is_some_and(|v| v.is_finite() && v > 0.0) {
+                    return err(format!("ops[{idx}] lens_correction.{key} must be > 0"));
+                }
+            }
+            for key in ["distortion", "vignetting", "tca"] {
+                if p.get(key).is_some_and(|v| !v.is_boolean()) {
+                    return err(format!("ops[{idx}] lens_correction.{key} must be a boolean"));
+                }
+            }
+        }
         "border" | "drop_shadow" => {
             unit("amount", 0.0, 1.0)?;
             color_param(p, op_type, idx)?;
@@ -463,6 +541,24 @@ fn validate_extra_params(
         "temperature" => &["kelvin_shift"],
         "tint" => &["green_magenta", "amount", "color"],
         "warmify" | "soft_focus" | "vignette" => &["amount"],
+        "curves" => &["points"],
+        "levels" => &["black", "white", "gamma"],
+        "hsl" => &["hue", "saturation", "luminance"],
+        "exposure" => &["ev"],
+        "vibrance" => &["amount"],
+        "noise_reduction" => &["amount", "radius"],
+        "keystone" => &["top", "bottom", "left", "right"],
+        "lens_correction" => &[
+            "profile",
+            "lens",
+            "crop",
+            "focal",
+            "aperture",
+            "distance",
+            "distortion",
+            "vignetting",
+            "tca",
+        ],
         "border" | "drop_shadow" => &["amount", "color"],
         "film_grain" => &["amount", "seed"],
         "grayscale" => &["enabled"],

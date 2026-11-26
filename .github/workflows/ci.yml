@@ -48,14 +48,15 @@ jobs:
 
       # TASK-01-012: libde265 (HEIC/HEVC) + dav1d (AVIF/AV1) for the embedded
       # libheif build in fotobase-render. TASK-04-013: libraw for the RAW
-      # decode path in the same crate (pkg-config `libraw_r`). Bottles, so
+      # decode path in the same crate (pkg-config `libraw_r`). TASK-10-02-02:
+      # Lensfun library + database for the `lens_correction` op. Bottles, so
       # this is fast.
-      - name: Install HEIC/AVIF codec deps + LibRaw
+      - name: Install HEIC/AVIF codec deps + LibRaw + Lensfun
         id: codec-deps
         if: runner.os == 'macOS'
         run: |
-          brew install libde265 dav1d libraw
-          echo "key=$(brew list --versions libde265 dav1d libraw | tr ' /\n' '--_')" >> "$GITHUB_OUTPUT"
+          brew install libde265 dav1d libraw lensfun
+          echo "key=$(brew list --versions libde265 dav1d libraw lensfun | tr ' /\n' '--_')" >> "$GITHUB_OUTPUT"
 
       - name: Install Linux system deps (Tauri/WebKitGTK build deps)
         if: runner.os == 'Linux'
@@ -72,6 +73,8 @@ jobs:
         # libopenjp2-7-dev: the embedded libheif enables its OpenJPEG (JPEG 2000)
         # codec plugin, which links `-lopenjp2` — the ubuntu-24.04 runner image
         # ships only the runtime lib, not the dev symlink.
+        # liblensfun-dev: lens correction (TASK-10-02-02); pulls in the
+        # Lensfun database package.
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -88,7 +91,8 @@ jobs:
             libaom-dev \
             aom-tools \
             libraw-dev \
-            libopenjp2-7-dev
+            libopenjp2-7-dev \
+            liblensfun-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:

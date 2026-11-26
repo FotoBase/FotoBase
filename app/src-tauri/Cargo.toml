@@ -64,6 +64,8 @@ pmtiles = { version = "0.28", default-features = false, features = ["mmap-async-
 # Gzip decode of scheme-served tiles (module-level, no tokio dep needed).
 flate2 = "1"
 jiff = "1"
+# Lens correction (TASK-10-02-02): EXIF camera/lens lookup for Lensfun.
+fotobase-metadata = { path = "../../crates/metadata" }
 
 # Desktop-only plugins/crates (TASK-09-001): the Tauri updater and global
 # shortcuts have no mobile implementation (stores update mobile apps), and
@@ -104,6 +106,8 @@ sha2 = "0.11"
 # Print tests (TASK-08-005): read the submitted PDF back with an independent parser.
 lopdf = "0.47"
 tokio = { version = "1", features = ["rt", "macros"] }
+# Lens-profile tests (TASK-10-02-02) write EXIF into a fixture JPEG.
+kamadak-exif = "0.6"
 # Resource-cap tests (TASK-05-012): peak RSS via getrusage.
 [target.'cfg(unix)'.dev-dependencies]
 libc = "0.2"

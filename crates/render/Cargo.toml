@@ -11,12 +11,15 @@ description = "Decode, recipe ops, thumbnail pipeline"
 # is target-gated out until a vcpkg-based CI/packaging leg lands (recorded in
 # TASK-01-012), and on Android/iOS (TASK-09-001) — the dispatch table then
 # reports HEIC/AVIF as unsupported.
-default = ["heif", "raw", "jxl"]
+default = ["heif", "raw", "jxl", "lensfun"]
 heif = ["dep:libheif-rs"]
 # TASK-04-013: RAW decode via LibRaw (own FFI bindings in src/raw.rs). The
 # feature is target-gated off on Windows until a CI/packaging leg lands —
 # same pattern as `heif` above.
 raw = []
+# TASK-10-02-02: lens correction via the native Lensfun library + database
+# (own FFI bindings in src/lensfun.rs). Same platform gating as `raw`.
+lensfun = []
 # TASK-04-014: JPEG XL decode via jxl-oxide. Pure Rust, so the feature is
 # default-on on all three OSes (no platform gating, unlike heif/raw).
 jxl = ["dep:jxl-oxide"]
