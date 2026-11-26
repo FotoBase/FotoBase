@@ -10,6 +10,7 @@ mod datetime;
 mod folder_ini;
 mod folder_meta;
 mod gps;
+mod lens_exif;
 mod sidecar;
 
 pub use datetime::CaptureTime;
@@ -19,6 +20,7 @@ pub use folder_ini::{
 };
 pub use folder_meta::{FolderMeta, FolderMetaError, FOLDER_META_FILE};
 pub use gps::{parse_coordinate, GpsAxis, GpsParseError};
+pub use lens_exif::{read_lens_exif, LensExif};
 pub use sidecar::{
     backup_path, tmp_path, FaceRegion, FbNs, QuickXmlBackend, Sidecar, SidecarBackend,
     SidecarError, StackMembership, StackRole, FB_NS,

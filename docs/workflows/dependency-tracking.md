@@ -10,6 +10,7 @@ PLAN §10 names specific drift risks. This doc is the mechanism. Deliberately ma
 | --------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | exiv2                 | project health         | own bindings; metadata I/O behind a crate-internal trait; `kamadak-exif` read-only fallback           | new releases, security advisories, API breaks                     |
 | LibRaw                | raw decode drift       | embedded-JPEG-preview fallback                                                                        | new camera support, security releases                             |
+| Lensfun               | API break (0.3.95+), DB drift | own FFI over the 0.3.x C API, pinned `>= 0.3.2, < 0.3.95`; recipes store the resolved profile XML, so DB updates never change existing edits; Windows gated off like LibRaw | 0.4 release (API change), database updates (new lenses) |
 | libheif               | HEIC decode            | CI uses committed tiny samples, no libheif toolchain in CI (ADR-0009)                                 | security releases, HEIF spec changes                              |
 | Tauri / wry (WebView) | OS WebView drift       | perf smoke per release; canvas fallback covers worst case; WebView triage pinned in release checklist | security advisories, breaking updates                             |
 | WebKitGTK             | Linux perf regressions | webkitgtk perf protocol (00-012); DOM-vs-canvas decision (01-004)                                     | Ubuntu 24.04+ point releases moving the perf bars (floor per ADR-0014) |
@@ -24,7 +25,7 @@ PLAN §10 names specific drift risks. This doc is the mechanism. Deliberately ma
 ## Cadence
 
 - **Per release** (release checklist step 1): `cargo audit` (once CI exists), `cargo outdated` / `npm outdated` review, and a manual pass over the watch list for security advisories.
-- **Monthly or per-release, whichever first:** check new releases of exiv2, LibRaw, libheif, Tauri/wry, WebKitGTK (Ubuntu package tracker).
+- **Monthly or per-release, whichever first:** check new releases of exiv2, LibRaw, Lensfun, libheif, Tauri/wry, WebKitGTK (Ubuntu package tracker).
 - Record anything action-worthy: security fixes → patch release per ADR-0012; API breaks → a backlog task; licensing changes → ADR (a licensing change cannot be absorbed silently).
 
 ## Rule of thumb

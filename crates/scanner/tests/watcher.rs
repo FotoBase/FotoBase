@@ -97,13 +97,17 @@ fn row_count_for(fx: &Fixture, filename: &str) -> i64 {
 /// fires several events for it).
 #[test]
 fn rename_in_file_inserts_exactly_one_row() {
-    let fx = fixture(&[("a.jpg", 10)]);
+    let fx = fixture(&[("a.jpg", 10), ("new.jpg.tmp", 42)]);
 
     // Atomic save: write temp file, then rename over the final name.
-    write_jpg(&fx._lib.path().join("new.jpg.tmp"), 42);
+    // Prepare the temporary file before watching so the rename is the first
+    // event burst, even if the test thread is descheduled between operations.
     fs::rename(fx._lib.path().join("new.jpg.tmp"), fx._lib.path().join("new.jpg")).unwrap();
 
-    assert!(wait_for(|| fx.scans() >= 1, Duration::from_secs(5)), "watcher never triggered a scan");
+    assert!(
+        wait_for(|| row_count_for(&fx, "new.jpg") == 1, Duration::from_secs(5)),
+        "renamed file must appear in the catalog"
+    );
     assert_eq!(row_count_for(&fx, "new.jpg"), 1, "exactly one insert");
     assert_eq!(file_size(&fx, "new.jpg"), Some(42));
 
@@ -112,6 +116,22 @@ fn rename_in_file_inserts_exactly_one_row() {
     assert_eq!(fx.scans(), 1, "debounce must coalesce the event burst");
     assert_eq!(row_count_for(&fx, "new.jpg"), 1);
     assert_eq!(count_files(&fx), 2);
+}
+
+#[test]
+fn rename_after_an_earlier_scan_is_indexed() {
+    let fx = fixture(&[("a.jpg", 10)]);
+    let temp = fx._lib.path().join("new.jpg.tmp");
+    write_jpg(&temp, 42);
+    assert!(wait_for(|| fx.scans() >= 1, Duration::from_secs(5)));
+    assert_eq!(row_count_for(&fx, "new.jpg"), 0);
+
+    fs::rename(&temp, fx._lib.path().join("new.jpg")).unwrap();
+    assert!(
+        wait_for(|| row_count_for(&fx, "new.jpg") == 1, Duration::from_secs(5)),
+        "rename must be indexed after the earlier scan"
+    );
+    assert_eq!(file_size(&fx, "new.jpg"), Some(42));
 }
 
 /// TDD criterion: two rapid modifications coalesce into one rescan job.

@@ -7,13 +7,17 @@
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_TUNING, type TuningState } from "./tuning";
+import { addOverlay, defaultOverlay, removeOverlay, updateOverlay } from "./text-overlay";
 import {
   EMPTY_EDIT_STATE,
+  duplicateRecipeOp,
   editHistory,
   isEmptyState,
+  moveRecipeOp,
   opsFromEditState,
   pushEditState,
   recipeFromState,
+  removeRecipeOp,
   redo,
   stateFromRecipe,
   undo,
@@ -26,8 +30,115 @@ const untouched: EditState = {
 };
 
 describe("opsFromEditState", () => {
+  it("stacks a copy of an operation and keeps it after reopening", () => {
+    const state = { ...untouched, pro: { ...untouched.pro, exposure: 1 } };
+    const saved = recipeFromState(duplicateRecipeOp(state, 0));
+    expect(saved.ops).toEqual([
+      { type: "exposure", params: { ev: 1 } },
+      { type: "exposure", params: { ev: 1 } },
+    ]);
+    expect(recipeFromState(stateFromRecipe(saved))).toEqual(saved);
+  });
+
+  it("removes a selected stacked operation without removing its neighbors", () => {
+    const state = stateFromRecipe({ ops: [
+      { type: "exposure", params: { ev: 1 } },
+      { type: "bw", params: { amount: 0.5 } },
+      { type: "exposure", params: { ev: -0.5 } },
+    ] });
+    expect(recipeFromState(removeRecipeOp(state, 0)).ops).toEqual([
+      { type: "bw", params: { amount: 0.5 } },
+      { type: "exposure", params: { ev: -0.5 } },
+    ]);
+  });
+
+  it("reorders stacked operations and keeps their new order when sliders change", () => {
+    const state = stateFromRecipe({ ops: [
+      { type: "exposure", params: { ev: 1 } },
+      { type: "bw", params: { amount: 0.5 } },
+      { type: "exposure", params: { ev: -0.5 } },
+    ] });
+    const moved = moveRecipeOp(state, 2, 0);
+    expect(recipeFromState({ ...moved, pro: { ...moved.pro, exposure: 0.25 } }).ops).toEqual([
+      { type: "exposure", params: { ev: -0.5 } },
+      { type: "exposure", params: { ev: 0.25 } },
+      { type: "bw", params: { amount: 0.5 } },
+    ]);
+  });
+
+  it("preserves reordered non-Pro operations after reopening", () => {
+    const state = { ...untouched, effects: { bw: 1, sepia: 0.5 } };
+    const moved = moveRecipeOp(state, 1, 0);
+    const saved = recipeFromState(moved);
+    expect(recipeFromState(stateFromRecipe(saved))).toEqual(saved);
+  });
+
+  it("edits one text overlay without duplicating other stacked overlays", () => {
+    const state = {
+      ...untouched,
+      pro: { ...untouched.pro, exposure: 1 },
+      text: { overlays: [defaultOverlay("first"), defaultOverlay("second")] },
+    };
+    const restored = stateFromRecipe(recipeFromState(moveRecipeOp(state, 0, 1)));
+    const changed = { ...restored, text: updateOverlay(restored.text, 1, { text: "changed" }) };
+    expect(recipeFromState(changed).ops.filter((op) => op.type === "text").map((op) => op.params.text))
+      .toEqual(["first", "changed"]);
+  });
+
+  it("removes one stacked text overlay without deleting or duplicating the others", () => {
+    const state = {
+      ...untouched,
+      pro: { ...untouched.pro, exposure: 1 },
+      text: { overlays: [defaultOverlay("first"), defaultOverlay("second")] },
+    };
+    const restored = stateFromRecipe(recipeFromState(moveRecipeOp(state, 0, 1)));
+    const changed = { ...restored, text: removeOverlay(restored.text, 0) };
+    expect(recipeFromState(changed).ops.filter((op) => op.type === "text").map((op) => op.params.text))
+      .toEqual(["second"]);
+  });
+
+  it("adds a text overlay without moving existing operations", () => {
+    const state = {
+      ...untouched,
+      pro: { ...untouched.pro, exposure: 1 },
+      text: { overlays: [defaultOverlay("first"), defaultOverlay("second")] },
+    };
+    const restored = stateFromRecipe(recipeFromState(moveRecipeOp(state, 0, 1)));
+    const changed = { ...restored, text: addOverlay(restored.text, "third") };
+    const ops = recipeFromState(changed).ops;
+    expect(ops.map((op) => op.type)).toEqual(["text", "exposure", "text", "text"]);
+    expect(ops.filter((op) => op.type === "text").map((op) => op.params.text))
+      .toEqual(["first", "second", "third"]);
+  });
+
   it("an untouched state emits no ops", () => {
     expect(opsFromEditState(untouched)).toEqual([]);
+  });
+
+  it("folds every F2 Pro tab op into the same recipe engine", () => {
+    const state: EditState = {
+      ...untouched,
+      pro: {
+        curves: { enabled: true, points: [[0, 0], [0.5, 0.7], [1, 1]] },
+        levels: { black: 0.1, white: 0.9, gamma: 1.1 },
+        hsl: { hue: 0.2, saturation: 0.3, luminance: -0.1 },
+        exposure: 0.5,
+        vibrance: 0.4,
+        keystone: { top: 0.1, bottom: 0.0, left: 0.0, right: 0.0 },
+        lensCorrection: { profile: "<lensdatabase/>", lens: "Testlens", crop: 1, focal: 50 },
+        noiseReduction: { amount: 0.6, radius: 0.01 },
+      },
+    };
+    expect(opsFromEditState(state).map((op) => op.type)).toEqual([
+      "curves",
+      "levels",
+      "hsl",
+      "exposure",
+      "vibrance",
+      "keystone",
+      "lens_correction",
+      "noise_reduction",
+    ]);
   });
 
   it("folds every tab's ops in canonical order (crop first, effects last)", () => {
@@ -73,6 +184,64 @@ describe("recipeFromState", () => {
 });
 
 describe("stateFromRecipe", () => {
+  it("restores a stored Lensfun profile and re-emits it unchanged", () => {
+    const params = {
+      profile: "<lensdatabase><lens/></lensdatabase>",
+      lens: "Canon EF 50mm f/1.8 II",
+      crop: 1,
+      focal: 50,
+      aperture: 2.8,
+      distortion: true,
+      vignetting: false,
+      tca: true,
+    };
+    const state = stateFromRecipe({ ops: [{ type: "lens_correction", params }] });
+    expect(state.pro.lensCorrection).toEqual(params);
+    expect(state.extra).toEqual([]);
+    expect(recipeFromState(state).ops).toEqual([{ type: "lens_correction", params }]);
+    expect(recipeFromState({ ...state, pro: { ...state.pro, lensCorrection: null } }).ops)
+      .toEqual([]);
+  });
+
+  it("preserves stacked Pro operations and their order when another edit changes", () => {
+    const ops = [
+      { type: "exposure", params: { ev: 1, future: "keep" } },
+      { type: "bw", params: { amount: 0.5 } },
+      { type: "exposure", params: { ev: -0.5 } },
+    ];
+    const state = stateFromRecipe({ ops });
+    expect(recipeFromState(state).ops).toEqual(ops);
+    expect(recipeFromState({
+      ...state,
+      tuning: { ...state.tuning, fillLight: 0.4 },
+    }).ops).toEqual([
+      { type: "fill_light", params: { amount: 0.4 } },
+      ...ops,
+    ]);
+  });
+
+  it("edits the last stacked Pro operation without losing earlier operations or unknown parameters", () => {
+    const state = stateFromRecipe({ ops: [
+      { type: "exposure", params: { ev: 1 } },
+      { type: "bw", params: { amount: 0.5 } },
+      { type: "exposure", params: { ev: -0.5, future: "keep" } },
+    ] });
+    expect(recipeFromState({ ...state, pro: { ...state.pro, exposure: 0.25 } }).ops).toEqual([
+      { type: "exposure", params: { ev: 1 } },
+      { type: "bw", params: { amount: 0.5 } },
+      { type: "exposure", params: { ev: 0.25, future: "keep" } },
+    ]);
+  });
+
+  it("preserves unknown parameters when a Pro adjustment returns to neutral", () => {
+    const state = stateFromRecipe({ ops: [
+      { type: "exposure", params: { ev: 1, future: "keep" } },
+    ] });
+    expect(recipeFromState({ ...state, pro: { ...state.pro, exposure: 0 } }).ops).toEqual([
+      { type: "exposure", params: { ev: 0, future: "keep" } },
+    ]);
+  });
+
   it("round-trips through recipeFromState", () => {
     const state: EditState = {
       ...untouched,
@@ -142,7 +311,7 @@ describe("stateFromRecipe", () => {
     ]);
   });
 
-  it("owns glyph-renderer text: restored, re-emitted after effects, before frames (TASK-08-003)", () => {
+  it("owns glyph-renderer text without changing the saved operation order", () => {
     const text = {
       algo: 2,
       text: "Hi",
@@ -163,11 +332,10 @@ describe("stateFromRecipe", () => {
     });
     expect(restored.text.overlays).toHaveLength(1);
     expect(restored.extra).toEqual([]);
-    // Text lands on the photo, so frames (which grow the canvas) go last.
     expect(opsFromEditState(restored).map((op) => op.type)).toEqual([
-      "bw",
       "text",
       "border",
+      "bw",
     ]);
   });
 

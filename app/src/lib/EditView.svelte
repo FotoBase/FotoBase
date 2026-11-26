@@ -24,13 +24,18 @@
   import RetouchPanel from "./RetouchPanel.svelte";
   import TextPanel from "./TextPanel.svelte";
   import TuningPanel from "./TuningPanel.svelte";
+  import ProPanel from "./ProPanel.svelte";
   import {
     EDIT_TABS,
     EMPTY_EDIT_STATE as EMPTY,
+    duplicateRecipeOp,
     editHistory,
     isEmptyState,
+    moveRecipeOp,
+    opsFromEditState,
     pushEditState,
     recipeFromState,
+    removeRecipeOp,
     redo,
     stateFromRecipe,
     undo,
@@ -115,6 +120,24 @@
     renderError = null;
     const next: EditState = { ...state, ...partial };
     history = pushEditState(history, next);
+    scheduleRender();
+  }
+
+  function reorderRecipe(from: number, to: number): void {
+    history = pushEditState(history, moveRecipeOp(state, from, to));
+    panelEpoch++;
+    scheduleRender();
+  }
+
+  function duplicateRecipe(index: number): void {
+    history = pushEditState(history, duplicateRecipeOp(state, index));
+    panelEpoch++;
+    scheduleRender();
+  }
+
+  function removeRecipe(index: number): void {
+    history = pushEditState(history, removeRecipeOp(state, index));
+    panelEpoch++;
     scheduleRender();
   }
 
@@ -496,6 +519,20 @@
           previewSrc={baseUri ?? ""}
           initial={state.tuning}
           onchange={(tuning) => mergeTab({ tuning })}
+        />
+      {:else if tab === "pro"}
+        <ProPanel
+          previewSrc={baseUri ?? ""}
+          initial={state.pro}
+          ops={opsFromEditState(state)}
+          onreorder={reorderRecipe}
+          onduplicate={duplicateRecipe}
+          onremove={removeRecipe}
+          detectLens={() => {
+            if (current === null) return Promise.reject(t("edit.pro.lensNoPhoto"));
+            return invoke<Record<string, unknown>>("lens_profile", { fileId: current.id });
+          }}
+          onchange={(pro) => mergeTab({ pro })}
         />
       {:else}
         <EffectsPanel

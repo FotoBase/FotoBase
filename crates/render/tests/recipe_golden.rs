@@ -14,11 +14,13 @@
 
 use std::path::{Path, PathBuf};
 
-use fotobase_core::apply::apply_recipe;
 use fotobase_core::buffer::LinearImage;
 use fotobase_core::recipe::Recipe;
 use image::ImageEncoder;
 use serde_json::json;
+
+// The production engine: core ops plus the Lensfun backend.
+use fotobase_render::apply_recipe;
 
 const FIXTURE_DIR: &str = "tests/fixtures/recipe-golden";
 const PREVIEW_W: u32 = 128;
@@ -33,6 +35,19 @@ const FULL_SCALE: u32 = 4;
 const TOLERANCES: &[(&str, f64)] = &[
     ("auto_color", 1.0),
     ("auto_contrast", 1.0),
+    ("curves", 1.0),
+    ("levels", 1.0),
+    ("hsl", 1.0),
+    ("exposure", 1.0),
+    ("vibrance", 1.0),
+    ("keystone", 2.0),
+    // Lensfun's x86 build takes SSE fast paths (approximate reciprocals);
+    // arm64 runs scalar code. Measured gap on this profile: ≤ 0.054 px
+    // (mean 0.005) at both resolutions. Across the fixture's sharpest edge
+    // (0.85 channel step) that is ≤ 0.85·255·0.054 ≈ 11.8, +1 for 8-bit
+    // quantization.
+    ("lens_correction", 13.0),
+    ("noise_reduction", 2.0),
     ("auto_rotate", 2.0),
     ("border", 2.0),
     ("brightness", 1.0),
@@ -250,6 +265,41 @@ fn cases() -> Vec<GoldenCase> {
             tol: by_op("tint_color"),
         },
         GoldenCase {
+            name: "curves",
+            recipe: op("curves", json!({ "points": [[0.0, 0.0], [0.5, 0.7], [1.0, 1.0]] })),
+            tol: by_op("curves"),
+        },
+        GoldenCase {
+            name: "levels",
+            recipe: op("levels", json!({ "black": 0.1, "white": 0.9, "gamma": 1.1 })),
+            tol: by_op("levels"),
+        },
+        GoldenCase {
+            name: "hsl",
+            recipe: op("hsl", json!({ "hue": 0.2, "saturation": 0.3, "luminance": -0.1 })),
+            tol: by_op("hsl"),
+        },
+        GoldenCase {
+            name: "exposure",
+            recipe: op("exposure", json!({ "ev": 0.5 })),
+            tol: by_op("exposure"),
+        },
+        GoldenCase {
+            name: "vibrance",
+            recipe: op("vibrance", json!({ "amount": 0.4 })),
+            tol: by_op("vibrance"),
+        },
+        GoldenCase {
+            name: "keystone",
+            recipe: op("keystone", json!({ "top": 0.1, "bottom": 0.0, "left": 0.0, "right": 0.0 })),
+            tol: by_op("keystone"),
+        },
+        GoldenCase {
+            name: "noise_reduction",
+            recipe: op("noise_reduction", json!({ "amount": 0.6, "radius": 0.01 })),
+            tol: by_op("noise_reduction"),
+        },
+        GoldenCase {
             name: "vignette",
             recipe: op("vignette", json!({ "amount": 0.7 })),
             tol: by_op("vignette"),
@@ -399,9 +449,33 @@ fn cases() -> Vec<GoldenCase> {
             tol: by_op("undo_all"),
         },
     ];
+    // TASK-10-02-02: Lensfun correction from a stored profile (synthetic
+    // calibration, so the golden never depends on the installed database).
+    // Windows builds have no Lensfun yet (same gating as LibRaw).
+    #[cfg(all(feature = "lensfun", fb_native_codecs))]
+    cases.push(GoldenCase {
+        name: "lens_correction",
+        recipe: op(
+            "lens_correction",
+            json!({ "profile": LENS_PROFILE, "lens": "Testlens 50mm f/2",
+            "crop": 1.0, "focal": 50.0, "aperture": 4.0, "distance": 1000.0,
+            "distortion": true, "vignetting": true, "tca": true }),
+        ),
+        tol: by_op("lens_correction"),
+    });
     cases.sort_by_key(|c| c.name);
     cases
 }
+
+#[cfg(all(feature = "lensfun", fb_native_codecs))]
+const LENS_PROFILE: &str = r#"<lensdatabase version="1"><lens>
+  <maker>Testlens</maker><model>Testlens 50mm f/2</model><mount>Testmount</mount><cropfactor>1</cropfactor>
+  <calibration>
+    <distortion model="ptlens" focal="50" a="0.01" b="-0.04" c="0.02"/>
+    <tca model="poly3" focal="50" vr="1.0008" vb="0.9993"/>
+    <vignetting model="pa" focal="50" aperture="4" distance="1000" k1="-0.4" k2="0.1" k3="0"/>
+  </calibration>
+</lens></lensdatabase>"#;
 
 /// Per-pixel comparison result.
 struct Report {

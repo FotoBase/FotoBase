@@ -60,6 +60,7 @@ jobs:
             libaom-dev \
             aom-tools \
             libraw-dev \
+            liblensfun-dev \
             webkitgtk-webdriver \
             gdb \
             xvfb \
@@ -77,6 +78,7 @@ jobs:
             libaom-dev \
             aom-tools \
             libraw-dev \
+            liblensfun-dev \
             webkitgtk-webdriver \
             gdb \
             xvfb; }

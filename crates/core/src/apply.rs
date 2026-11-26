@@ -9,13 +9,42 @@ use serde_json::Value;
 use crate::buffer::LinearImage;
 use crate::recipe::{Op, Recipe};
 
-/// Fold a recipe's ops left-to-right over a linear-light image.
+/// Ops whose pixels come from a native library outside this crate (today:
+/// `lens_correction` via Lensfun in `fotobase-render`). The backend must be
+/// a pure function of the image and the op params, like every built-in op.
+pub trait OpBackend {
+    /// `None` when this backend does not handle the op.
+    fn apply(&self, img: &LinearImage, op: &Op) -> Option<LinearImage>;
+}
+
+struct NoBackend;
+
+impl OpBackend for NoBackend {
+    fn apply(&self, _img: &LinearImage, _op: &Op) -> Option<LinearImage> {
+        None
+    }
+}
+
+/// Fold a recipe's ops left-to-right over a linear-light image. Backend ops
+/// (`lens_correction`) are skipped with a warning; render through
+/// `fotobase_render::apply_recipe` to get them.
 pub fn apply_recipe(input: &LinearImage, recipe: &Recipe) -> LinearImage {
+    apply_recipe_with(input, recipe, &NoBackend)
+}
+
+/// [`apply_recipe`] with a backend for the ops that need native libraries.
+pub fn apply_recipe_with(
+    input: &LinearImage,
+    recipe: &Recipe,
+    backend: &dyn OpBackend,
+) -> LinearImage {
     let mut img = input.clone();
     for op in &recipe.ops {
         // `undo_all` clears the accumulated ops: restart from the original.
         if op.op_type == "undo_all" {
             img = input.clone();
+        } else if let Some(out) = backend.apply(&img, op) {
+            img = out;
         } else {
             img = apply_op(&img, op);
         }
@@ -66,6 +95,22 @@ fn apply_op(img: &LinearImage, op: &Op) -> LinearImage {
         },
         "soft_focus" => soft_focus(img, fnum(op, "amount", 0.5)),
         "vignette" => vignette(img, fnum(op, "amount", 0.5)),
+        "curves" => curves(img, op),
+        "levels" => levels(img, op),
+        "hsl" => hsl(img, op),
+        "exposure" => per_pixel(img, |px| {
+            let ev = fnum(op, "ev", 0.0) as f32;
+            px.map(|v| clamp01(v * 2.0_f32.powf(ev)))
+        }),
+        "vibrance" => vibrance(img, fnum(op, "amount", 0.0)),
+        "keystone" => keystone(img, op),
+        "lens_correction" => {
+            tracing::warn!("lens_correction skipped: no Lensfun backend in this render path");
+            img.clone()
+        }
+        "noise_reduction" => {
+            noise_reduction(img, fnum(op, "amount", 0.5), fnum(op, "radius", 0.01))
+        }
         "border" => border(img, op),
         "drop_shadow" => drop_shadow(img, op),
         // amount 0 is a no-op: skip the per-pixel pass so the buffer is
@@ -125,6 +170,172 @@ fn clamp01(v: f32) -> f32 {
 
 fn luminance(px: [f32; 3]) -> f32 {
     0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2]
+}
+
+fn curves(img: &LinearImage, op: &Op) -> LinearImage {
+    let mut points: Vec<(f64, f64)> = param(op, "points")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let p = item.as_array()?;
+                    Some((p.first()?.as_f64()?, p.get(1)?.as_f64()?))
+                })
+                .collect()
+        })
+        .unwrap_or_else(|| vec![(0.0, 0.0), (1.0, 1.0)]);
+    points.sort_by(|a, b| a.0.total_cmp(&b.0));
+    if points.len() < 2 {
+        points = vec![(0.0, 0.0), (1.0, 1.0)];
+    }
+    per_pixel(img, |px| {
+        px.map(|v| {
+            let x = f64::from(v);
+            let y = if x <= points[0].0 {
+                points[0].1
+            } else if x >= points.last().unwrap().0 {
+                points.last().unwrap().1
+            } else {
+                let mut y = points[0].1;
+                for pair in points.windows(2) {
+                    let (x0, y0) = pair[0];
+                    let (x1, y1) = pair[1];
+                    if x <= x1 {
+                        let t = ((x - x0) / (x1 - x0).max(1e-9)).clamp(0.0, 1.0);
+                        y = y0 + (y1 - y0) * t;
+                        break;
+                    }
+                }
+                y
+            };
+            clamp01(y as f32)
+        })
+    })
+}
+
+fn levels(img: &LinearImage, op: &Op) -> LinearImage {
+    let black = fnum(op, "black", 0.0).clamp(0.0, 1.0) as f32;
+    let white = fnum(op, "white", 1.0).clamp(0.0, 1.0) as f32;
+    let gamma = fnum(op, "gamma", 1.0).clamp(0.1, 10.0) as f32;
+    let span = (white - black).max(1e-4);
+    per_pixel(img, |px| {
+        px.map(|v| {
+            let stretched = ((v - black) / span).clamp(0.0, 1.0);
+            clamp01(stretched.powf(1.0 / gamma))
+        })
+    })
+}
+
+fn rgb_to_hsl(px: [f32; 3]) -> [f32; 3] {
+    let max = px[0].max(px[1]).max(px[2]);
+    let min = px[0].min(px[1]).min(px[2]);
+    let l = (max + min) * 0.5;
+    let d = max - min;
+    if d <= 1e-6 {
+        return [0.0, 0.0, l];
+    }
+    let mut h = if max == px[0] {
+        (px[1] - px[2]) / d
+    } else if max == px[1] {
+        (px[2] - px[0]) / d + 2.0
+    } else {
+        (px[0] - px[1]) / d + 4.0
+    };
+    h /= 6.0;
+    if h < 0.0 {
+        h += 1.0;
+    }
+    let s = d / (1.0 - (2.0 * l - 1.0).abs()).max(1e-6);
+    [h, s.clamp(0.0, 1.0), l]
+}
+
+fn hsl_to_rgb(hsl: [f32; 3]) -> [f32; 3] {
+    let (h, s, l) = (hsl[0], hsl[1], hsl[2]);
+    if s <= 1e-6 {
+        return [l; 3];
+    }
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let hp = h * 6.0;
+    let x = c * (1.0 - (hp.rem_euclid(2.0) - 1.0).abs());
+    let (r1, g1, b1) = if hp < 1.0 {
+        (c, x, 0.0)
+    } else if hp < 2.0 {
+        (x, c, 0.0)
+    } else if hp < 3.0 {
+        (0.0, c, x)
+    } else if hp < 4.0 {
+        (0.0, x, c)
+    } else if hp < 5.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+    let m = l - c * 0.5;
+    [r1 + m, g1 + m, b1 + m].map(clamp01)
+}
+
+fn hsl(img: &LinearImage, op: &Op) -> LinearImage {
+    let hue = fnum(op, "hue", 0.0) as f32;
+    let saturation = fnum(op, "saturation", 0.0) as f32;
+    let luminance = fnum(op, "luminance", 0.0) as f32;
+    per_pixel(img, |px| {
+        let mut hsl = rgb_to_hsl(px);
+        hsl[0] = (hsl[0] + hue).rem_euclid(1.0);
+        hsl[1] = (hsl[1] * (1.0 + saturation)).clamp(0.0, 1.0);
+        hsl[2] = (hsl[2] + luminance).clamp(0.0, 1.0);
+        hsl_to_rgb(hsl)
+    })
+}
+
+fn vibrance(img: &LinearImage, amount: f64) -> LinearImage {
+    let amount = amount as f32;
+    per_pixel(img, |px| {
+        let l = luminance(px);
+        let max = px[0].max(px[1]).max(px[2]);
+        let min = px[0].min(px[1]).min(px[2]);
+        let chroma = (max - min).clamp(0.0, 1.0);
+        let strength = amount * (1.0 - chroma);
+        let s = 1.0 + strength;
+        [clamp01(l + (px[0] - l) * s), clamp01(l + (px[1] - l) * s), clamp01(l + (px[2] - l) * s)]
+    })
+}
+
+fn keystone(img: &LinearImage, op: &Op) -> LinearImage {
+    let top = fnum(op, "top", 0.0);
+    let bottom = fnum(op, "bottom", 0.0);
+    let left = fnum(op, "left", 0.0);
+    let right = fnum(op, "right", 0.0);
+    if img.width == 0
+        || img.height == 0
+        || (top == 0.0 && bottom == 0.0 && left == 0.0 && right == 0.0)
+    {
+        return img.clone();
+    }
+    LinearImage::from_fn(img.width, img.height, |x, y| {
+        let u = (f64::from(x) + 0.5) / f64::from(img.width);
+        let v = (f64::from(y) + 0.5) / f64::from(img.height);
+        let horizontal_scale = 1.0 + 0.5 * (top * (1.0 - v) + bottom * v);
+        let vertical_scale = 1.0 + 0.5 * (left * (1.0 - u) + right * u);
+        bilinear(img, (u - 0.5) / horizontal_scale + 0.5, (v - 0.5) / vertical_scale + 0.5)
+    })
+}
+
+fn noise_reduction(img: &LinearImage, amount: f64, radius: f64) -> LinearImage {
+    let amount = amount as f32;
+    let radius = radius.clamp(0.0, 1.0);
+    if amount <= 0.0 || radius == 0.0 || img.width == 0 || img.height == 0 {
+        return img.clone();
+    }
+    let radius_px = (radius * f64::from(img.width.min(img.height))).round().max(1.0) as usize;
+    let mut tmp = vec![0.0; img.data.len()];
+    let mut out = img.clone();
+    box_pass::<3>(&img.data, &mut tmp, img.width as usize, img.height as usize, radius_px, true);
+    box_pass::<3>(&tmp, &mut out.data, img.width as usize, img.height as usize, radius_px, false);
+    for (blurred, original) in out.data.iter_mut().zip(&img.data) {
+        *blurred = clamp01(*original + (*blurred - *original) * amount);
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------

@@ -71,14 +71,14 @@ describe("mobile touch browsing", () => {
   it("lays out portrait and landscape grids, opens by tap, swipes and pinches", async () => {
     await browser.setWindowSize(844, 900);
     await browser.waitUntil(async () =>
-      (await $(".grid-row").getAttribute("style"))?.includes("repeat(5,"),
+      (await $(".grid-inner > .grid-row:first-child").getAttribute("style"))?.includes("repeat(5,"),
     );
     await browser.setWindowSize(844, 390);
     await browser.waitUntil(async () => (await $('[data-testid="grid-scroll"]').getSize()).height >= 160);
 
     await browser.setWindowSize(390, 844);
     await browser.waitUntil(async () =>
-      (await $(".grid-row").getAttribute("style"))?.includes("repeat(2,"),
+      (await $(".grid-inner > .grid-row:first-child").getAttribute("style"))?.includes("repeat(2,"),
     );
 
     await browser.execute(() => {

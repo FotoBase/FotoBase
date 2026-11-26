@@ -62,6 +62,10 @@ pub mod export;
 /// System-font lookup for the recipe `text` op (TASK-08-003).
 pub mod fonts;
 pub mod icc;
+/// Lensfun FFI (TASK-10-02-02): EXIF → lens profile, and the native
+/// backend of the `lens_correction` recipe op.
+#[cfg(all(feature = "lensfun", fb_native_codecs))]
+pub mod lensfun;
 /// Near-duplicate perceptual hashing (TASK-04-019).
 pub mod phash;
 /// Print layouts, fit modes and page rasterization (TASK-08-004).
@@ -70,6 +74,46 @@ pub mod print;
 /// library, per the task spec ("own bindings", "isolated crate boundary").
 #[cfg(all(feature = "raw", fb_native_codecs))]
 pub mod raw;
+
+/// What EXIF says about a shot, as far as lens correction cares.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LensQuery {
+    pub camera_maker: String,
+    pub camera_model: String,
+    pub lens_maker: Option<String>,
+    pub lens_model: Option<String>,
+    /// Focal length in mm.
+    pub focal: Option<f64>,
+    /// f-number.
+    pub aperture: Option<f64>,
+    /// Focus distance in meters.
+    pub distance: Option<f64>,
+}
+
+/// Resolve `lens_correction` recipe params for a shot from the installed
+/// Lensfun database. Builds without Lensfun (Windows, mobile) say so.
+pub fn lens_profile(query: &LensQuery) -> Result<serde_json::Value, String> {
+    #[cfg(all(feature = "lensfun", fb_native_codecs))]
+    return lensfun::LensDb::system().and_then(|db| db.profile(query)).map_err(|e| e.0);
+    #[cfg(not(all(feature = "lensfun", fb_native_codecs)))]
+    {
+        let _ = query;
+        Err("lens correction needs Lensfun, which this build does not include".into())
+    }
+}
+
+/// The production recipe engine: `fotobase_core`'s pure ops plus the
+/// native-library ops (`lens_correction` via Lensfun). Every preview,
+/// export and print render goes through here (PLAN §3 rule 5).
+pub fn apply_recipe(
+    input: &fotobase_core::buffer::LinearImage,
+    recipe: &fotobase_core::recipe::Recipe,
+) -> fotobase_core::buffer::LinearImage {
+    #[cfg(all(feature = "lensfun", fb_native_codecs))]
+    return fotobase_core::apply::apply_recipe_with(input, recipe, &lensfun::LensfunBackend);
+    #[cfg(not(all(feature = "lensfun", fb_native_codecs)))]
+    fotobase_core::apply::apply_recipe(input, recipe)
+}
 
 pub use color::{
     rgb_profile_bytes, srgb_profile_bytes, thumb_profile_tag, transform_rgb, ColorError,
@@ -642,7 +686,7 @@ pub fn recipe_preview(
         height: src_h,
         data: rgb.iter().map(|b| f32::from(*b) / 255.0).collect(),
     };
-    let out = fotobase_core::apply::apply_recipe(&linear, &recipe);
+    let out = crate::apply_recipe(&linear, &recipe);
     let srgb: Vec<u8> =
         out.data.iter().map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8).collect();
     let (dst_w, dst_h) = fit(out.width, out.height, max_edge);

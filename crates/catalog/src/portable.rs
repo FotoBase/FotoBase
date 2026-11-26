@@ -61,6 +61,14 @@ pub const V1_OP_TYPES: &[&str] = &[
     "border",
     "drop_shadow",
     "undo_all",
+    "curves",
+    "levels",
+    "hsl",
+    "exposure",
+    "vibrance",
+    "keystone",
+    "lens_correction",
+    "noise_reduction",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

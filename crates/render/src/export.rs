@@ -2,7 +2,7 @@
 //! P2b, §9 Render fidelity).
 //!
 //! One engine, two resolutions: the export path runs the *same* shared
-//! recipe engine (`fotobase_core::apply::apply_recipe`) at full resolution
+//! recipe engine (`crate::apply_recipe`) at full resolution
 //! that the preview path (TASK-04-010) runs at screen resolution. The only
 //! differences are the output size and the encode — never a separate op
 //! implementation.
@@ -140,7 +140,7 @@ pub fn export_image(
         (src_w, src_h, apply_streamed(&rgb, src_w, src_h, &recipe))
     } else {
         let linear = crate::rgb_to_linear(&rgb, src_w, src_h);
-        let out = fotobase_core::apply::apply_recipe(&linear, &recipe);
+        let out = crate::apply_recipe(&linear, &recipe);
         (out.width, out.height, to_srgb8(&out.data))
     };
 
@@ -234,7 +234,7 @@ fn apply_streamed(rgb: &[u8], w: u32, h: u32, recipe: &fotobase_core::recipe::Re
     while y < h {
         let rows = TILE_ROWS.min(h - y);
         let tile = crate::tile_linear(rgb, w, y, rows);
-        let edited = fotobase_core::apply::apply_recipe(&tile, recipe);
+        let edited = crate::apply_recipe(&tile, recipe);
         out.extend(to_srgb8(&edited.data));
         y += rows;
     }
@@ -291,7 +291,7 @@ pub fn export_peak_bytes(
         while y < src_h {
             let rows = rows_per_tile.min(src_h - y);
             let tile = crate::tile_linear(&rgb, src_w, y, rows);
-            let out = fotobase_core::apply::apply_recipe(&tile, &recipe);
+            let out = crate::apply_recipe(&tile, &recipe);
             // Tile input (f32×3) + engine output (f32×3) + one out-row of RGB8.
             peak = peak.max(tile.data.len() * 4 + out.data.len() * 4 + out.width as usize * 3);
             y += rows;
@@ -300,7 +300,7 @@ pub fn export_peak_bytes(
         // Whole-image fallback: the peak is the whole-image buffer, reported
         // honestly so the budget test can assert on it.
         let linear = crate::rgb_to_linear(&rgb, src_w, src_h);
-        let out = fotobase_core::apply::apply_recipe(&linear, &recipe);
+        let out = crate::apply_recipe(&linear, &recipe);
         peak = peak.max(linear.data.len() * 4 + out.data.len() * 4);
     }
     let _ = opts;

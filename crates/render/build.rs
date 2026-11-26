@@ -23,13 +23,18 @@ fn main() {
         println!("cargo:rustc-cfg=fb_native_codecs");
     }
 
+    if !native {
+        return;
+    }
+    println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
+    if env::var("CARGO_FEATURE_LENSFUN").is_ok() {
+        link_lensfun();
+    }
     // LibRaw link setup is only needed when the raw feature is compiled in.
-    let feature_on = env::var("CARGO_FEATURE_RAW").is_ok();
-    if !feature_on || !native {
+    if env::var("CARGO_FEATURE_RAW").is_err() {
         return;
     }
 
-    println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
     if let Some(out) = run("pkg-config", &["--libs", "--cflags", "libraw_r"]) {
         emit_pkg_config_output(&out);
         return;
@@ -51,6 +56,18 @@ fn main() {
         "the `raw` feature needs LibRaw: install it with pkg-config (brew install libraw / \
          apt install libraw-dev) or build a static copy into ~/opt/libraw"
     );
+}
+
+/// Lensfun (LGPL-3.0, TASK-10-02-02): the 0.3.x C API bound in
+/// `src/lensfun.rs`. 0.3.95+ changed the API, so the range is pinned.
+fn link_lensfun() {
+    match run("pkg-config", &["--libs", "lensfun >= 0.3.2", "lensfun < 0.3.95"]) {
+        Some(out) => emit_pkg_config_output(&out),
+        None => panic!(
+            "the `lensfun` feature needs Lensfun 0.3.x: brew install lensfun / \
+             apt install liblensfun-dev"
+        ),
+    }
 }
 
 fn run(cmd: &str, args: &[&str]) -> Option<String> {

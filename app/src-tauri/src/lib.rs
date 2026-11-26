@@ -1382,6 +1382,27 @@ async fn auto_level_estimate(
     }
 }
 
+/// Resolve `lens_correction` params for one photo (TASK-10-02-02): its EXIF
+/// camera/lens picks the profile in the Lensfun database. Nothing is
+/// written; the Pro tab stores the result as a recipe op. An unknown lens
+/// or missing EXIF is an error the UI shows — never a guessed profile.
+#[tauri::command]
+async fn lens_profile(
+    state: tauri::State<'_, AppState>,
+    file_id: i64,
+) -> Result<serde_json::Value, String> {
+    let path = with_catalog(&state, |cat| {
+        edit::path_for(cat, file_id).ok_or_else(|| {
+            fotobase_catalog::CatalogError::Corrupted(format!("file {file_id} not found"))
+        })
+    })?;
+    tauri::async_runtime::spawn_blocking(move || {
+        edit::lens_profile_for_path(std::path::Path::new(&path))
+    })
+    .await
+    .map_err(|e| format!("lens profile lookup: {e}"))?
+}
+
 /// Folders whose folder-ini migration offer is still unanswered
 /// (TASK-03-022). A scan records the offer; nothing is migrated until the
 /// user accepts.
@@ -5002,6 +5023,7 @@ pub fn run() {
             ping,
             neutral_balance,
             get_recipe,
+            lens_profile,
             set_recipe,
             save_photo,
             save_as_photo,

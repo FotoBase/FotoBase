@@ -62,10 +62,18 @@ An open, versioned format. Any tool can read and apply a Fotobase recipe from th
 | `drop_shadow` | `amount` [0..1] (0.5), `color` (`#rrggbb` background, default `#ffffff`) | photo on a margin canvas with a soft shadow (60% opacity) offset toward the bottom-right; margin = `amount` × 10% of the shorter side. **Grows the canvas** |
 | `film_grain` | `amount` [0..1], `seed` (integer, default 0) | deterministic per-pixel noise; pure function of (x, y, seed), so the same op always yields the same pixels |
 | `undo_all` | — | clears all ops (equivalent to empty `ops[]`; kept for menu semantics) |
+| `curves` | `points: [[x, y]...]` (identity) | Pro tab (TASK-10-02-02): piecewise-linear tone curve, points in [0..1] sorted by `x`, applied to each channel |
+| `levels` | `black` [0..1] (0), `white` [0..1] (1), `gamma` [0.1..10] (1) | input black/white points, then `out = in^(1/gamma)` |
+| `hsl` | `hue`, `saturation`, `luminance` [-1..1] (0) | hue rotation (fraction of a turn), relative saturation, absolute lightness shift |
+| `exposure` | `ev` [-5..5] (0) | multiplies linear light by 2^`ev` |
+| `vibrance` | `amount` [-1..1] (0) | saturation change weighted toward low-chroma pixels |
+| `keystone` | `top`, `bottom` (horizontal) and `left`, `right` (vertical) [-1..1] (0) | perspective fix: `top`/`bottom` scale rows by 1 + amount/2 at that edge, `left`/`right` scale columns; bilinear resampling |
+| `lens_correction` | `profile` (required), `crop` (required), `focal` (required), `aperture`, `distance` (1000), `distortion`, `vignetting`, `tca` (all `true`), `lens` | Lensfun correction (TASK-10-02-02). `profile` is the matching Lensfun database entry serialized as Lensfun XML (`<lensdatabase>`), resolved from the photo's EXIF camera + lens when the op is added, so renders never depend on the installed database version; `crop` = camera crop factor, `focal` mm, `aperture` f-number, `distance` m (vignetting is only corrected when `aperture` is present); `lens` is a display name. Pixels: Lensfun's `lfModifier` — vignetting (color stage), then distortion + TCA in one resampling pass, auto-scaled so no empty border shows. Lensfun's x86 SSE paths and its scalar code differ by up to ~0.05 px, so renders agree across CPU architectures within that, not bit-exactly |
+| `noise_reduction` | `amount` [0..1] (0.5), `radius` [0..1] (0.01) | blend toward a box blur whose radius is a fraction of the **shorter side** |
 
 Frame ops (`border`, `drop_shadow`) change the output dimensions, like `crop` and `rotate`; write them after every photo-content op so grain, vignette, etc. act on the photo and not on the frame. Thickness is rounded to whole pixels per resolution, so preview and export canvases may differ by a pixel per side.
 
-Future ops (curves, HSL, perspective, lens correction — F2 Pro tab) will bump the spec version or add op types additively; readers skip unknown types (§2).
+The F2 Pro-tab ops (`curves` … `noise_reduction`) are additive v1 types: older readers skip them (§2). A Pro op may appear more than once; each instance applies in array order.
 
 ## 4. Versioning & migrations
 
