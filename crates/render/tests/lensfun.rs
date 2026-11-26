@@ -8,6 +8,7 @@ use fotobase_core::buffer::LinearImage;
 use fotobase_core::recipe::Recipe;
 use fotobase_render::lensfun::{LensDb, LensQuery};
 use serde_json::{json, Value};
+use std::sync::{Arc, Barrier};
 
 const TEST_DB: &str = r#"<lensdatabase version="1">
   <camera><maker>Testcam</maker><model>Testcam One</model><mount>Testmount</mount><cropfactor>1</cropfactor></camera>
@@ -159,4 +160,25 @@ fn corrected_pixels_stay_in_the_linear_light_range() {
     let bright = LinearImage::from_fn(32, 32, |_, _| [0.95; 3]);
     let out = render(&bright, &params);
     assert!(out.data.iter().all(|v| (0.0..=1.0).contains(v)), "vignetting overshoot leaked");
+}
+
+#[test]
+fn concurrent_profile_resolution_and_rendering_are_safe() {
+    assert!(LensDb::from_xml("<invalid/>").is_err());
+    let start = Arc::new(Barrier::new(8));
+    std::thread::scope(|scope| {
+        for _ in 0..8 {
+            let start = Arc::clone(&start);
+            scope.spawn(move || {
+                start.wait();
+                for _ in 0..50 {
+                    let db = LensDb::from_xml(TEST_DB).unwrap();
+                    let params = db.profile(&query("Testcam One", "Testlens 50mm f/2")).unwrap();
+                    let image = LinearImage::from_fn(8, 8, |_, _| [0.5; 3]);
+                    let output = render(&image, &params);
+                    assert!(output.data.iter().all(|v| (0.0..=1.0).contains(v)));
+                }
+            });
+        }
+    });
 }

@@ -23,6 +23,7 @@
 
 use std::ffi::{c_char, c_float, c_int, c_void, CStr, CString};
 use std::ptr;
+use std::sync::{Mutex, MutexGuard};
 
 use fotobase_core::apply::OpBackend;
 use fotobase_core::buffer::LinearImage;
@@ -141,11 +142,24 @@ fn fail<T>(msg: impl Into<String>) -> Result<T, LensError> {
 
 pub use crate::LensQuery;
 
+// Lensfun 0.3.x shares unsynchronized lens regexes and changes LC_NUMERIC
+// while loading, searching and saving databases. Destruction also frees the
+// shared regexes, so all of these operations must use the same lock.
+static DATABASE_LOCK: Mutex<()> = Mutex::new(());
+
+fn database_lock() -> MutexGuard<'static, ()> {
+    DATABASE_LOCK.lock().unwrap_or_else(|poisoned| {
+        tracing::error!("Lensfun database lock was poisoned");
+        poisoned.into_inner()
+    })
+}
+
 /// An owned Lensfun database.
 pub struct LensDb(*mut LfDatabase);
 
 impl Drop for LensDb {
     fn drop(&mut self) {
+        let _guard = database_lock();
         unsafe { lf_db_destroy(self.0) }
     }
 }
@@ -154,7 +168,11 @@ impl LensDb {
     /// The database installed with the Lensfun library.
     pub fn system() -> Result<Self, LensError> {
         let db = Self(unsafe { lf_db_new() });
-        if unsafe { lf_db_load(db.0) } != LF_NO_ERROR {
+        let rc = {
+            let _guard = database_lock();
+            unsafe { lf_db_load(db.0) }
+        };
+        if rc != LF_NO_ERROR {
             return fail("the Lensfun database is not installed");
         }
         Ok(db)
@@ -164,7 +182,10 @@ impl LensDb {
     pub fn from_xml(xml: &str) -> Result<Self, LensError> {
         let db = Self(unsafe { lf_db_new() });
         let context = c"fotobase recipe";
-        let rc = unsafe { lf_db_load_data(db.0, context.as_ptr(), xml.as_ptr().cast(), xml.len()) };
+        let rc = {
+            let _guard = database_lock();
+            unsafe { lf_db_load_data(db.0, context.as_ptr(), xml.as_ptr().cast(), xml.len()) }
+        };
         if rc != LF_NO_ERROR {
             return fail("lens profile is not valid Lensfun XML");
         }
@@ -175,6 +196,7 @@ impl LensDb {
     /// lenses and missing EXIF are errors: a wrong profile would distort the
     /// photo, so nothing is guessed.
     pub fn profile(&self, q: &LensQuery) -> Result<Value, LensError> {
+        let _guard = database_lock();
         let Some(lens_model) = q.lens_model.as_deref().filter(|m| !m.trim().is_empty()) else {
             return fail("the photo's EXIF has no lens model");
         };
