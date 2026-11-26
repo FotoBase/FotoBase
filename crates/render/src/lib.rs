@@ -61,6 +61,9 @@ pub mod color;
 pub mod export;
 /// System-font lookup for the recipe `text` op (TASK-08-003).
 pub mod fonts;
+/// WGPU GPU pipeline for the per-pixel recipe ops (TASK-10-02-03).
+#[cfg(feature = "gpu")]
+pub mod gpu;
 pub mod icc;
 /// Lensfun FFI (TASK-10-02-02): EXIF → lens profile, and the native
 /// backend of the `lens_correction` recipe op.
@@ -103,16 +106,66 @@ pub fn lens_profile(query: &LensQuery) -> Result<serde_json::Value, String> {
 }
 
 /// The production recipe engine: `fotobase_core`'s pure ops plus the
-/// native-library ops (`lens_correction` via Lensfun). Every preview,
-/// export and print render goes through here (PLAN §3 rule 5).
+/// native-library ops (`lens_correction` via Lensfun) and, when a GPU
+/// adapter is available, the wgpu per-pixel ops (TASK-10-02-03). Every
+/// preview, export and print render goes through here (PLAN §3 rule 5).
 pub fn apply_recipe(
     input: &fotobase_core::buffer::LinearImage,
     recipe: &fotobase_core::recipe::Recipe,
 ) -> fotobase_core::buffer::LinearImage {
     #[cfg(all(feature = "lensfun", fb_native_codecs))]
-    return fotobase_core::apply::apply_recipe_with(input, recipe, &lensfun::LensfunBackend);
+    {
+        let lensfun = lensfun::LensfunBackend;
+        #[cfg(feature = "gpu")]
+        if let Some(gpu) = gpu_backend() {
+            return fotobase_core::apply::apply_recipe_with(
+                input,
+                recipe,
+                &ChainBackend { first: gpu, second: &lensfun },
+            );
+        }
+        #[cfg(not(feature = "gpu"))]
+        return fotobase_core::apply::apply_recipe_with(input, recipe, &lensfun);
+        // gpu feature on but no adapter: fall through to the CPU/Lensfun path
+        #[cfg(feature = "gpu")]
+        return fotobase_core::apply::apply_recipe_with(input, recipe, &lensfun);
+    }
     #[cfg(not(all(feature = "lensfun", fb_native_codecs)))]
-    fotobase_core::apply::apply_recipe(input, recipe)
+    {
+        #[cfg(feature = "gpu")]
+        if let Some(gpu) = gpu_backend() {
+            // apply_recipe_with falls back to the pure CPU engine for any op
+            // the GPU declines, so the GPU backend alone is a complete chain.
+            return fotobase_core::apply::apply_recipe_with(input, recipe, gpu);
+        }
+        fotobase_core::apply::apply_recipe(input, recipe)
+    }
+}
+
+#[cfg(feature = "gpu")]
+fn gpu_backend() -> Option<&'static gpu::GpuBackend> {
+    use std::sync::OnceLock;
+    static GPU_BACKEND: OnceLock<Option<gpu::GpuBackend>> = OnceLock::new();
+    GPU_BACKEND.get_or_init(gpu::GpuBackend::new).as_ref()
+}
+
+/// Tries `first` (the GPU backend), then `second` (Lensfun), then lets the
+/// pure CPU engine handle the op.
+#[cfg(feature = "gpu")]
+struct ChainBackend<'a> {
+    first: &'a dyn fotobase_core::apply::OpBackend,
+    second: &'a dyn fotobase_core::apply::OpBackend,
+}
+
+#[cfg(feature = "gpu")]
+impl fotobase_core::apply::OpBackend for ChainBackend<'_> {
+    fn apply(
+        &self,
+        img: &fotobase_core::buffer::LinearImage,
+        op: &fotobase_core::recipe::Op,
+    ) -> Option<fotobase_core::buffer::LinearImage> {
+        self.first.apply(img, op).or_else(|| self.second.apply(img, op))
+    }
 }
 
 pub use color::{

@@ -11,7 +11,11 @@ description = "Decode, recipe ops, thumbnail pipeline"
 # is target-gated out until a vcpkg-based CI/packaging leg lands (recorded in
 # TASK-01-012), and on Android/iOS (TASK-09-001) — the dispatch table then
 # reports HEIC/AVIF as unsupported.
-default = ["heif", "raw", "jxl", "lensfun"]
+default = ["heif", "raw", "jxl", "lensfun", "gpu"]
+# TASK-10-02-03: the wgpu GPU pipeline for per-pixel recipe ops. Default-on;
+# the GPU is still selected per device at runtime (no adapter → CPU path),
+# so headless CI without a rasterizer builds and runs the CPU reference.
+gpu = ["dep:wgpu", "dep:pollster"]
 heif = ["dep:libheif-rs"]
 # TASK-04-013: RAW decode via LibRaw (own FFI bindings in src/raw.rs). The
 # feature is target-gated off on Windows until a CI/packaging leg lands —
@@ -53,6 +57,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # TASK-08-005: PDF sink of the print layout engine (one page raster per sheet).
 pdf-writer = "0.15.0"
+# TASK-10-02-03: GPU recipe pipeline (per-pixel ops as WGSL compute shaders).
+wgpu = { version = "25", optional = true }
+# Blocks the wgpu adapter/device requests in the synchronous render path.
+pollster = { version = "0.4", optional = true }
 
 # libheif-rs builds an embedded libheif (static) on non-Windows targets, so
 # decode needs no system libheif — only the codec plugins it links against

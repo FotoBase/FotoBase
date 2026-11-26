@@ -561,6 +561,37 @@ fn every_recipe_op_matches_its_goldens() {
     }
 }
 
+/// TASK-10-02-03: run every committed recipe case through the GPU backend
+/// and compare it with the CPU reference at preview and full resolution.
+/// Ops without a GPU implementation must fall back to CPU via `OpBackend`.
+#[test]
+#[cfg(feature = "gpu")]
+fn gpu_matches_cpu_for_every_recipe_golden_case() {
+    let Some(gpu) = fotobase_render::gpu::GpuBackend::new() else {
+        eprintln!("no wgpu adapter — skipping GPU/CPU comparison");
+        return;
+    };
+    let preview = load_fixture();
+    let full = upscale(&preview, FULL_SCALE);
+    for case in cases() {
+        let (recipe, _) = Recipe::parse(&case.recipe.to_string())
+            .unwrap_or_else(|e| panic!("{} recipe must parse: {e}", case.name));
+        for (input, label) in [(&preview, "preview"), (&full, "full")] {
+            let cpu = fotobase_core::apply::apply_recipe(input, &recipe);
+            let gpu_out = fotobase_core::apply::apply_recipe_with(input, &recipe, &gpu);
+            let report = compare(&gpu_out, &cpu);
+            assert!(
+                report.max_delta <= case.tol,
+                "{} [{label}] GPU diverged from CPU: max per-pixel delta {:.0} > tol {:.0} (RMS {:.3})",
+                case.name,
+                report.max_delta,
+                case.tol,
+                report.rms
+            );
+        }
+    }
+}
+
 /// TASK-08-001 feature acceptance: preview matches export. Each effect is
 /// rendered at preview and full resolution; the full render is downscaled
 /// back (×4 box average) and must agree with the preview render within a

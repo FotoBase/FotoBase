@@ -1,6 +1,6 @@
 # task: port recipe ops to wgpu gpu pipeline
 
-**Feature:** [FEAT-10-02-f2-advanced-editor](FEAT-10-02-f2-advanced-editor.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** planned (deferred)
+**Feature:** [FEAT-10-02-f2-advanced-editor](FEAT-10-02-f2-advanced-editor.md) · **Epic:** [EPIC-10 — Future features](../EPIC-10.md) · **Status:** in progress (2026-11-26)
 
 ## Description
 Port recipe ops to `wgpu` shaders for real-time full-resolution editing, with the same shaders on all platforms (PLAN §7 F2 item 3). Depends on the EPIC-04 recipe op set (task 02 grows it).
@@ -17,4 +17,4 @@ Port recipe ops to `wgpu` shaders for real-time full-resolution editing, with th
 - integration: render the golden-image fixture set through both CPU and GPU paths; assert per-op tolerance compliance in CI.
 
 ## Acceptance criteria
-- [ ] F2-003: GPU pipeline produces output matching the CPU path (or documented tolerance) across golden fixtures, enabling real-time full-res editing.
+- [x] F2-003: GPU pipeline produces output matching the CPU path (or documented tolerance) across golden fixtures, enabling real-time full-res editing.
