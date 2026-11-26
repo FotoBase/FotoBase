@@ -151,13 +151,13 @@ fn gpu_backend() -> Option<&'static gpu::GpuBackend> {
 
 /// Tries `first` (the GPU backend), then `second` (Lensfun), then lets the
 /// pure CPU engine handle the op.
-#[cfg(feature = "gpu")]
+#[cfg(all(feature = "gpu", feature = "lensfun", fb_native_codecs))]
 struct ChainBackend<'a> {
     first: &'a dyn fotobase_core::apply::OpBackend,
     second: &'a dyn fotobase_core::apply::OpBackend,
 }
 
-#[cfg(feature = "gpu")]
+#[cfg(all(feature = "gpu", feature = "lensfun", fb_native_codecs))]
 impl fotobase_core::apply::OpBackend for ChainBackend<'_> {
     fn apply(
         &self,
