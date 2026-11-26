@@ -29,7 +29,7 @@
         "grayscale", "bw", "sharpen", "film_grain", "auto_rotate",
         "warmify", "soft_focus", "vignette", "border", "drop_shadow", "undo_all",
         "curves", "levels", "hsl", "exposure", "vibrance", "keystone",
-        "lens_correction", "noise_reduction"
+        "lens_correction", "noise_reduction", "ai_erase", "ai_denoise"
       ]
     }
   }

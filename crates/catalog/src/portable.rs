@@ -69,6 +69,8 @@ pub const V1_OP_TYPES: &[&str] = &[
     "keystone",
     "lens_correction",
     "noise_reduction",
+    "ai_erase",
+    "ai_denoise",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

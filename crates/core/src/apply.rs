@@ -60,11 +60,133 @@ fn fnum(op: &Op, key: &str, default: f64) -> f64 {
     param(op, key).and_then(Value::as_f64).unwrap_or(default)
 }
 
+/// Public read of a numeric op param for the backend adapters
+/// (`fotobase-render::ai`); keeps the params-as-JSON convention in one place.
+pub fn op_fnum(op: &Op, key: &str, default: f64) -> f64 {
+    fnum(op, key, default)
+}
+
 fn fbool(op: &Op, key: &str, default: bool) -> bool {
     param(op, key).and_then(Value::as_bool).unwrap_or(default)
 }
 
 fn apply_op(img: &LinearImage, op: &Op) -> LinearImage {
+    let out = raw_apply_op(img, op);
+    // TASK-10-02-04: a `mask` region limits a tuning op to the polygon
+    // (AI-selected or painted) it names; outside the mask the image is
+    // untouched. Only the maskable op types honor it, so geometry ops and
+    // frames are never silently clipped.
+    match mask_points(op) {
+        Some(points) if MASKABLE_OPS.contains(&op.op_type.as_str()) => {
+            blend_masked(img, &out, points, fnum(op, "feather", 0.02))
+        }
+        _ => out,
+    }
+}
+
+/// Op types that accept a `mask` region param (spec §3, TASK-10-02-04).
+const MASKABLE_OPS: &[&str] = &[
+    "fill_light",
+    "highlight_recovery",
+    "shadow_recovery",
+    "sepia",
+    "warm_colors",
+    "cool_colors",
+    "saturation",
+    "brightness",
+    "temperature",
+    "tint",
+    "curves",
+    "levels",
+    "hsl",
+    "exposure",
+    "vibrance",
+    "noise_reduction",
+];
+
+fn mask_points(op: &Op) -> Option<&Vec<Value>> {
+    op.params.as_ref().and_then(|p| p.get("mask")).and_then(Value::as_array)
+}
+
+/// Blend `edited` into `base` inside the polygon `points` (normalized
+/// fractions of width/height), feathered by `feather` (fraction of the
+/// shorter side). The polygon interior is 1, the feathered edge ramps to 0.
+fn blend_masked(
+    base: &LinearImage,
+    edited: &LinearImage,
+    points: &[Value],
+    feather: f64,
+) -> LinearImage {
+    let mask = polygon_mask(base.width, base.height, points, feather);
+    let mut out = base.clone();
+    for ((dst, src), m) in
+        out.data.as_chunks_mut::<3>().0.iter_mut().zip(edited.data.as_chunks::<3>().0).zip(&mask)
+    {
+        if *m >= 1.0 {
+            *dst = *src;
+        } else if *m > 0.0 {
+            *dst = [
+                dst[0] + (src[0] - dst[0]) * *m,
+                dst[1] + (src[1] - dst[1]) * *m,
+                dst[2] + (src[2] - dst[2]) * *m,
+            ];
+        }
+    }
+    out
+}
+
+/// Rasterize the polygon `points` into a soft per-pixel mask: interior 1,
+/// feathered ramp of `feather` (fraction of the shorter side) at the edge.
+/// Public so the AI editing backend (`fotobase-render::ai`) rasterizes the
+/// same regions the engine blends with — one mask definition, two consumers.
+pub fn polygon_mask(width: u32, height: u32, points: &[Value], feather: f64) -> Vec<f32> {
+    let (w, h) = (width as usize, height as usize);
+    let (wf, hf) = (width as f32, height as f32);
+    let mut mask = vec![0.0f32; w * h];
+    let poly: Vec<(f32, f32)> = points
+        .iter()
+        .filter_map(|p| {
+            let arr = p.as_array()?;
+            Some((arr.first()?.as_f64()? as f32, arr.get(1)?.as_f64()? as f32))
+        })
+        .collect();
+    if poly.len() < 2 {
+        return mask;
+    }
+    // Even-odd scanline fill, in pixel centers.
+    for (row, chunk) in mask.chunks_mut(w).enumerate() {
+        let fy = (row as f32 + 0.5) / hf;
+        let mut xs: Vec<f32> = Vec::new();
+        for i in 0..poly.len() {
+            let (x0, y0) = poly[i];
+            let (x1, y1) = poly[(i + 1) % poly.len()];
+            if (y0 <= fy) != (y1 <= fy) {
+                xs.push(x0 + (fy - y0) / (y1 - y0) * (x1 - x0));
+            }
+        }
+        xs.sort_by(|a, b| a.total_cmp(b));
+        for pair in xs.chunks(2) {
+            if let [xa, xb] = pair {
+                let (xa, xb) = (
+                    (*xa * wf).floor().max(0.0) as usize,
+                    (*xb * wf).ceil().min(w as f32) as usize,
+                );
+                for slot in &mut chunk[xa..xb.min(w)] {
+                    *slot = 1.0;
+                }
+            }
+        }
+    }
+    // Feather: approximate Gaussian over the binary mask, radius scales
+    // with the fraction of the shorter side (same convention as `retouch`).
+    if feather > 0.0 {
+        let radius = ((feather * f64::from(wf.min(hf))) / 6.0).round().max(1.0) as usize;
+        blur_approx_gaussian::<1>(&mut mask, w, h, radius);
+    }
+    mask
+}
+
+fn raw_apply_op(img: &LinearImage, op: &Op) -> LinearImage {
     match op.op_type.as_str() {
         "crop" => crop(img, op),
         "straighten" => straighten(img, op),
@@ -106,6 +228,18 @@ fn apply_op(img: &LinearImage, op: &Op) -> LinearImage {
         "keystone" => keystone(img, op),
         "lens_correction" => {
             tracing::warn!("lens_correction skipped: no Lensfun backend in this render path");
+            img.clone()
+        }
+        // TASK-10-02-04: AI editing ops need the model runtimes, which live
+        // behind the `OpBackend` seam (like `lens_correction`). Without a
+        // backend they are skipped with a warning, never an error (§2
+        // skip-and-warn conformance).
+        "ai_erase" => {
+            tracing::warn!("ai_erase skipped: no AI backend in this render path");
+            img.clone()
+        }
+        "ai_denoise" => {
+            tracing::warn!("ai_denoise skipped: no AI backend in this render path");
             img.clone()
         }
         "noise_reduction" => {
@@ -1567,5 +1701,83 @@ mod tests {
         let src = img();
         let out = apply_op(&src, &op("film_grain", json!({ "amount": 0.0 })));
         assert_eq!(out.data, src.data, "amount 0 must not change the buffer");
+    }
+
+    // TASK-10-02-04: a `mask` region limits a tuning op to the polygon it
+    // names — inside the mask the op applies in full, outside it the image
+    // is bit-identical to the input.
+    #[test]
+    fn masked_exposure_applies_only_inside_the_polygon() {
+        let src = img();
+        // Full-image exposure for reference.
+        let full = apply_op(&src, &op("exposure", json!({ "ev": 1.0 })));
+        // Same exposure masked to a square around (2, 2) on the 4×4 grid.
+        let masked = apply_op(
+            &src,
+            &op(
+                "exposure",
+                json!({ "ev": 1.0, "feather": 0.0,
+                        "mask": [[0.3, 0.3], [0.7, 0.3], [0.7, 0.7], [0.3, 0.7]] }),
+            ),
+        );
+        for y in 0..4 {
+            for x in 0..4 {
+                let (a, f, s) = (masked.get(x, y), full.get(x, y), src.get(x, y));
+                if (1..=2).contains(&x) && (1..=2).contains(&y) {
+                    assert_eq!(a, f, "interior pixel must get the full adjustment");
+                } else {
+                    assert_eq!(a, s, "pixel ({x}, {y}) outside the mask must be untouched");
+                }
+            }
+        }
+    }
+
+    // A mask on an op type that is not maskable must be ignored (no silent
+    // clipping of geometry ops), and an invalid mask is a parse error.
+    #[test]
+    fn mask_on_non_maskable_op_is_ignored_and_invalid_mask_fails_parse() {
+        let src = img();
+        let cropped =
+            apply_op(&src, &op("crop", json!({ "x": 0.0, "y": 0.0, "w": 0.5, "h": 0.5 })));
+        let with_mask = apply_op(
+            &src,
+            &op(
+                "crop",
+                json!({ "x": 0.0, "y": 0.0, "w": 0.5, "h": 0.5, "mask": [[0.0, 0.0], [1.0, 1.0]] }),
+            ),
+        );
+        assert_eq!(cropped.width, with_mask.width);
+        assert_eq!(cropped.data, with_mask.data);
+
+        let e = crate::recipe::parse(
+            r#"{"spec":"fotobase.recipe","version":1,"ops":[
+                 {"type":"ai_erase","params":{"mask":[[0.5, 2.0]]}}]}"#,
+        )
+        .expect_err("out-of-range mask point must fail");
+        assert!(e.0.contains("mask"), "unexpected error: {}", e.0);
+        let e = crate::recipe::parse(
+            r#"{"spec":"fotobase.recipe","version":1,"ops":[
+                 {"type":"ai_erase","params":{"feather":0.1}}]}"#,
+        )
+        .expect_err("ai_erase without a mask must fail");
+        assert!(e.0.contains("mask"), "unexpected error: {}", e.0);
+    }
+
+    // The AI ops parse and validate; without an AI backend they are skipped
+    // with a warning (skip-and-warn conformance, spec §2), leaving the
+    // image unchanged.
+    #[test]
+    fn ai_ops_skip_without_backend() {
+        let src = img();
+        let out = apply_op(
+            &src,
+            &op(
+                "ai_erase",
+                json!({ "mask": [[0.25, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]] }),
+            ),
+        );
+        assert_eq!(out.data, src.data, "ai_erase without a backend must be a no-op");
+        let out = apply_op(&src, &op("ai_denoise", json!({ "amount": 0.5 })));
+        assert_eq!(out.data, src.data, "ai_denoise without a backend must be a no-op");
     }
 }

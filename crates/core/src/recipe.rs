@@ -55,6 +55,8 @@ pub const V1_OP_TYPES: &[&str] = &[
     "keystone",
     "lens_correction",
     "noise_reduction",
+    "ai_erase",
+    "ai_denoise",
 ];
 
 /// A parsed, validated edit recipe.
@@ -222,6 +224,33 @@ fn require_range(
     }
 }
 
+/// A `mask` region is a non-empty polygon: `[[x, y]...]`, normalized
+/// fractions of width/height in [0, 1] (TASK-10-02-04: masks — AI-selected
+/// or painted — are recipe-op regions).
+fn require_mask(op_type: &str, params: &Map<String, Value>, idx: usize) -> Result<(), RecipeError> {
+    let Some(points) = params.get("mask").and_then(Value::as_array) else {
+        return err(format!("ops[{idx}] {op_type}.mask must be an array of [x, y] points"));
+    };
+    if points.is_empty() {
+        return err(format!("ops[{idx}] {op_type}.mask must contain at least one point"));
+    }
+    for (j, point) in points.iter().enumerate() {
+        let point = point
+            .as_array()
+            .ok_or_else(|| RecipeError(format!("ops[{idx}] {op_type}.mask[{j}] must be [x, y]")))?;
+        if point.len() != 2
+            || point
+                .iter()
+                .any(|v| v.as_f64().is_none_or(|n| !n.is_finite() || !(0.0..=1.0).contains(&n)))
+        {
+            return err(format!(
+                "ops[{idx}] {op_type}.mask[{j}] must contain two numbers in [0, 1]"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Optional `color` param of the effect/frame ops: `"#rrggbb"` (or `#rgb`).
 fn color_param(p: &Map<String, Value>, op_type: &str, idx: usize) -> Result<(), RecipeError> {
     match p.get("color") {
@@ -303,6 +332,11 @@ fn validate_params(op_type: &str, params: &Value, idx: usize) -> Result<(), Reci
             unit("amount", 0.0, 1.0)?;
             unit("radius", 0.0, 1.0)?;
         }
+        "ai_erase" => {
+            require_mask(op_type, p, idx)?;
+            unit("feather", 0.0, 1.0)?;
+        }
+        "ai_denoise" => unit("amount", 0.0, 1.0)?,
         "keystone" => {
             unit("top", -1.0, 1.0)?;
             unit("bottom", -1.0, 1.0)?;
@@ -536,17 +570,22 @@ fn validate_extra_params(
         "crop" => &["x", "y", "w", "h"],
         "straighten" => &["angle", "auto_fill"],
         "auto_rotate" => &["angle_deg"],
+        // TASK-10-02-04: the maskable tuning ops may carry a `mask` region
+        // (AI-selected or painted polygon) that limits the adjustment.
         "fill_light" | "highlight_recovery" | "shadow_recovery" | "sepia" | "warm_colors"
-        | "cool_colors" | "saturation" | "brightness" | "sharpen" | "bw" => &["amount"],
-        "temperature" => &["kelvin_shift"],
-        "tint" => &["green_magenta", "amount", "color"],
+        | "cool_colors" | "saturation" | "brightness" | "sharpen" | "bw" => &["amount", "mask"],
+        "temperature" => &["kelvin_shift", "mask"],
+        "tint" => &["green_magenta", "amount", "color", "mask"],
         "warmify" | "soft_focus" | "vignette" => &["amount"],
-        "curves" => &["points"],
-        "levels" => &["black", "white", "gamma"],
-        "hsl" => &["hue", "saturation", "luminance"],
-        "exposure" => &["ev"],
-        "vibrance" => &["amount"],
-        "noise_reduction" => &["amount", "radius"],
+        "curves" => &["points", "mask"],
+        "levels" => &["black", "white", "gamma", "mask"],
+        "hsl" => &["hue", "saturation", "luminance", "mask"],
+        "exposure" => &["ev", "mask"],
+        "vibrance" => &["amount", "mask"],
+        "noise_reduction" => &["amount", "radius", "mask"],
+        // TASK-10-02-04: AI editing ops.
+        "ai_erase" => &["mask", "feather"],
+        "ai_denoise" => &["amount"],
         "keystone" => &["top", "bottom", "left", "right"],
         "lens_correction" => &[
             "profile",

@@ -11,6 +11,7 @@
 //! - No telemetry: the crate performs no network calls except the explicit
 //!   model download the user approved.
 
+pub mod edit;
 pub mod manifest;
 pub mod runtime;
 
@@ -29,6 +30,7 @@ pub use clip::{
     clip_preprocess, clip_tokenize, ClipError, ClipRuntime, ClipTextRuntime, CLIP_EMBEDDING_DIM,
     CLIP_INPUT,
 };
+pub use edit::{DenoiseRuntime, InpaintRuntime, SegmentationRuntime};
 pub use horizon::{estimate_horizon, HorizonEstimate, MIN_CONFIDENCE};
 pub use keywords::{extract_keywords, KeywordHit, Vocabulary, VOCABULARY_JSON};
 pub use manifest::{ManifestEntry, ModelError, ModelRegistry};

@@ -473,6 +473,12 @@ impl OpBackend for GpuBackend {
 /// is not a per-pixel op (caller falls back to the CPU path).
 fn shader_op(op: &Op) -> Option<Params> {
     use serde_json::Value;
+    // TASK-10-02-04: masked (region-limited) variants run on the CPU path,
+    // which owns the polygon rasterizer + feathered blending. The GPU would
+    // apply the op globally, so it declines the op and falls back.
+    if op.params.as_ref().is_some_and(|p| p.contains_key("mask")) {
+        return None;
+    }
     let scalars =
         |op_id: u32, p: [f32; 10]| Some(Params { op: op_id, scalars: p, points: Vec::new() });
     let one =

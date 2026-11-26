@@ -38,5 +38,45 @@
     "url": "https://huggingface.co/Marqo/onnx-open_clip-ViT-B-32/resolve/main/onnx32-open_clip-ViT-B-32-laion2b_e16-visual.onnx",
     "sha256": "a65757c1eea849fa4ef138718edd05bbee95bdf0056ea7b571701eecbedab791",
     "size_bytes": 351529890
+  },
+  {
+    "name": "efficientsam_ti_encoder.onnx",
+    "license": "Apache-2.0",
+    "license_url": "https://huggingface.co/yunyangx/EfficientSAM",
+    "url": "https://huggingface.co/yunyangx/EfficientSAM/resolve/main/efficientsam_ti_encoder.onnx",
+    "sha256": "84ed466ffcc5c1f8d08409bc34a23bb364ab2c15e402cb12d4335a42be0e0951",
+    "size_bytes": 24799761
+  },
+  {
+    "name": "efficientsam_ti_decoder.onnx",
+    "license": "Apache-2.0",
+    "license_url": "https://huggingface.co/yunyangx/EfficientSAM",
+    "url": "https://huggingface.co/yunyangx/EfficientSAM/resolve/main/efficientsam_ti_decoder.onnx",
+    "sha256": "a62f8fa5ea080447c0689418d69e58f1e83e0b7adf9c142e2bd9bcc8045c0b11",
+    "size_bytes": 16565728
+  },
+  {
+    "name": "lama_fp32.onnx",
+    "license": "Apache-2.0",
+    "license_url": "https://huggingface.co/Carve/LaMa-ONNX",
+    "url": "https://huggingface.co/Carve/LaMa-ONNX/resolve/main/lama_fp32.onnx",
+    "sha256": "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6",
+    "size_bytes": 208044816
+  },
+  {
+    "name": "scunet_color_real_psnr.onnx",
+    "license": "Apache-2.0",
+    "license_url": "https://huggingface.co/Heliosoph/scunet-onnx",
+    "url": "https://huggingface.co/Heliosoph/scunet-onnx/resolve/main/scunet_color_real_psnr.onnx",
+    "sha256": "231be201ab413dbc999d7951caa9844846b93a12a40a41e037d6b5888ed4e88c",
+    "size_bytes": 3798678
+  },
+  {
+    "name": "scunet_color_real_psnr.onnx.data",
+    "license": "Apache-2.0",
+    "license_url": "https://huggingface.co/Heliosoph/scunet-onnx",
+    "url": "https://huggingface.co/Heliosoph/scunet-onnx/resolve/main/scunet_color_real_psnr.onnx.data",
+    "sha256": "98825ea1210b641c71e5f052f582c70c49fd44b35387ebe2c034268c17df3feb",
+    "size_bytes": 73138176
   }
 ]
